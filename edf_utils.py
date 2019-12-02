@@ -11,6 +11,7 @@ import pyedflib #pip install https://github.com/skjerns/pyedflib/archive/custom_
 from tqdm import tqdm
 
 
+
 def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
     """
     Reading EDF+ data with pyedflib.
@@ -101,7 +102,7 @@ def read_edf_header(edf_file):
     """
     Reads the header and signal headers of an EDF file
     
-    :returns: summary (dict)
+    :returns: header of the edf file (dict)
     """
     with pyedflib.EdfReader(edf_file) as f:
         summary = f.getHeader()
@@ -116,7 +117,7 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None):
     """
     Remove channels from an edf file using pyedflib.
     Save the file as edf_target. 
-    For safety reasons, no source file can be overwritten.
+    For safety reasons, no source files can be overwritten.
     
     :param edf_source: The source edf file
     :param edf_target: Where to save the file. 
