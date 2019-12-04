@@ -99,7 +99,9 @@ for i, file in enumerate(tqdm(files)):
         ch = signal_header[0]['label']
         ch = ch.replace(':M', ':A')
         if ch in remove: continue
-        if ch in ch_mapping or ch in ch_mapping.values():
+        if ch in ch_mapping.values():
+            pass
+        elif ch in ch_mapping :
             print('{} to {}'.format(ch, ch_mapping[ch]))
             ch = ch_mapping[ch]
             signal_header[0]['label']=ch
