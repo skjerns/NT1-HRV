@@ -12,7 +12,7 @@ import tqdm as tqdm
 import numpy as np
 import ospath
 import re
-import edf_utils
+import sleep_utils
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
@@ -208,7 +208,7 @@ class Patient():
         if not ospath.splitext(edf_file)[1] in ['.edf', '.bdf']:
             raise NotImplementedError('Only EDF/BDF/BDF+ files are supported')
 
-        header = edf_utils.read_edf_header(edf_file)
+        header = sleep_utils.read_edf_header(edf_file)
         channels = [ch.upper() for ch in header['channels']]
         if isinstance(channel, int): 
             ch_idx = channel
@@ -222,7 +222,7 @@ class Patient():
         self.loaded_channel = channels[ch_idx]
         self.sfreq = header['SignalHeaders'][ch_idx]['sample_rate']
         
-        data, _, _ = edf_utils.read_edf(edf_file, digital=False, ch_nrs=ch_idx, verbose=False)
+        data, _, _ = sleep_utils.read_edf(edf_file, digital=False, ch_nrs=ch_idx, verbose=False)
         data = data.squeeze()
         
         self.data = data
@@ -248,9 +248,10 @@ class Patient():
         """
         self.hypno_file = hypno_file
         sfreq = self.sfreq
-        exp_seconds = None if len(self.raw)>1 else len(self.raw)//sfreq
-        hypno = tools.read_hypno(hypno_file, epochlen=1, 
-                                 epochlen_infile=epochlen_infile, 
+        exp_seconds = None if self.data.size<=1 else len(self.data)//sfreq
+        print(self.data.size>1 )
+        print(exp_seconds)
+        hypno = sleep_utils.read_hypnogram(hypno_file, epochlen_infile=epochlen_infile, 
                                  exp_seconds=exp_seconds)
         log.debug('loaded hypnogram {}'.format(hypno_file))
         self.raw_hypno = hypno
