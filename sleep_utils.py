@@ -10,6 +10,7 @@ import numpy as np
 import pyedflib #pip install https://github.com/skjerns/pyedflib/archive/custom_version.zip
 from tqdm import tqdm
 from datetime import datetime
+import h5py
 
 def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto', exp_seconds=None):
     """
@@ -343,3 +344,48 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None):
     write_edf(edf_target, signals, signal_headers, header, digital=True)
     return edf_target
 
+
+
+def h5py2dict(fname):
+    hdf5 = h5py.File(fname, 'r')
+    def unpack(hdf5, depth=0):
+        if depth==99:raise Exception
+        if isinstance(hdf5, (h5py._hl.group.Group)):
+            d = {}
+            for key in hdf5:
+                elem   = hdf5[key]
+                d[key] = unpack(elem, depth=depth+1)
+            return d
+        elif isinstance(hdf5, h5py._hl.dataset.Dataset):
+            if not 'MATLAB_class' in hdf5.attrs: return None
+            mtype = hdf5.attrs['MATLAB_class'].decode()
+            npdtypes = [x for x in np.__dict__ if isinstance(np.__dict__[x],type)]
+            if mtype in npdtypes:
+                dtype = np.__dict__[mtype]
+                arr = np.array(hdf5, dtype=dtype).T
+                return arr.squeeze() if arr.size==1 else arr
+            if mtype=='char': return ''.join([chr(x) for x in hdf5])
+            if mtype=='logical': 
+                arr = np.array(hdf5, dtype=bool)
+                return arr.squeeze() if arr.size==1 else arr
+            if mtype=='canonical empty': return 'None'
+            if mtype=='cell':
+                cell = []
+                for ref in hdf5:
+                    for r in ref:
+                        entry = unpack(refs[r])
+                        cell.append(entry)
+                return cell
+            print('Unknown data type ', mtype)
+            return 'Unknown type {}'.format(mtype)
+        
+    if '#refs#' in hdf5:
+        refs = hdf5['#refs#']
+        
+    d = {}
+    for var in hdf5:
+        if var=='#refs#':continue
+        d[var] = unpack(hdf5[var])
+    hdf5.close()
+    return d
+   

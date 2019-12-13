@@ -222,10 +222,13 @@ class Patient():
         self.loaded_channel = channels[ch_idx]
         self.sfreq = header['SignalHeaders'][ch_idx]['sample_rate']
         
-        data, _, _ = sleep_utils.read_edf(edf_file, digital=False, ch_nrs=ch_idx, verbose=False)
+        data, _, header = sleep_utils.read_edf(edf_file, digital=False, ch_nrs=ch_idx, verbose=False)
         data = data.squeeze()
         
         self.data = data
+        self.header = header
+        self.startdate = header['startdate']
+        self.starttime = (self.startdate.hour * 60 + self.startdate.minute) * 60 + self.startdate.second
                     
         self.preprocessed = False
       
