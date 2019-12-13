@@ -342,3 +342,4 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None):
     
     write_edf(edf_target, signals, signal_headers, header, digital=True)
     return edf_target
+
