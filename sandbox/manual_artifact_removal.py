@@ -30,7 +30,7 @@ class ECGPlotter():
     def __init__(self, data, sfreq, rrs, art, pos=0, interval=30, nrows=4, ncols=4):
         self.data = data
         self.rrs = rrs.squeeze()
-        self.art = art
+        self.art = art.squeeze()
         self.sfreq = sfreq
         self.pos = pos
         self.interval = interval
@@ -60,6 +60,7 @@ class ECGPlotter():
         return rr, yy
     
     def update(self):
+        stimer.start('update')
         pos = self.pos
         data = self.data
         sfreq = self.sfreq
@@ -67,18 +68,21 @@ class ECGPlotter():
         for i in range(self.total):
             plotdata = data[(pos+i)*interval*sfreq:(pos+i+1)*interval*sfreq]
             ax  = self.axs[i]
-            ax.set_facecolor((1,1,1,1))            
             ax.clear()
+            ax.set_facecolor((1,1,1,1))            
             if art[pos+i]>5: ax.set_facecolor((1.0, 0.47, 0.42))
             rr, yy = self.get_rrs(i, plotdata)
             ax.plot(plotdata)
             ax.scatter(rr, yy , marker='x', color='r', linewidth=0.75, alpha=0.8)
+            ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(art[pos+i][0]),fontsize=8)
+            
         titel = '{}/{}'.format(pos//self.total, len(data)//sfreq//interval//self.total)
         plt.suptitle(titel)
         self.draw()
+        stimer.stop('update')
+
     
     def press_go(self, event):
-        stimer.start()
         print(event.key)
         if event.key in ('enter', 'right'):
             self.pos += self.total
@@ -86,7 +90,6 @@ class ECGPlotter():
             if self.pos>0:
                 self.pos -= self.total if self.pos>=self.total else self.pos
         self.update()
-        stimer.stop()
         
         
     def toggle_select(self, event):
@@ -97,7 +100,7 @@ class ECGPlotter():
             ax.set_facecolor((1.0, 0.47, 0.42))
         else:
             ax.set_facecolor((1,1,1,1))
-        stimer.start()
+        stimer.start('select')
         if(str(event.button)=='MouseButton.LEFT'):
             plt.pause(0.001)
         elif (str(event.button)=='MouseButton.RIGHT'):
@@ -110,7 +113,7 @@ class ECGPlotter():
             self.fig.canvas.blit(ax.bbox)
         else:
             print(event.button)
-        stimer.stop()
+        stimer.stop('select')
     
 rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
 art = mat['Res']['HRV']['TimeVar']['Artifacts']
