@@ -27,9 +27,10 @@ ncols = 4
    
 class ECGPlotter():
     
-    def __init__(self, data, sfreq, rrs, pos=0, interval=30, nrows=4, ncols=4):
+    def __init__(self, data, sfreq, rrs, art, pos=0, interval=30, nrows=4, ncols=4):
         self.data = data
         self.rrs = rrs.squeeze()
+        self.art = art
         self.sfreq = sfreq
         self.pos = pos
         self.interval = interval
@@ -68,6 +69,7 @@ class ECGPlotter():
             ax  = self.axs[i]
             ax.set_facecolor((1,1,1,1))            
             ax.clear()
+            if art[pos+i]>5: ax.set_facecolor((1.0, 0.47, 0.42))
             rr, yy = self.get_rrs(i, plotdata)
             ax.plot(plotdata)
             ax.scatter(rr, yy , marker='x', color='r', linewidth=0.75, alpha=0.8)
@@ -111,8 +113,10 @@ class ECGPlotter():
         stimer.stop()
     
 rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
+art = mat['Res']['HRV']['TimeVar']['Artifacts']
 
-self = ECGPlotter(data, p.sfreq, rrs)
+
+self = ECGPlotter(data, p.sfreq, rrs, art)
 ax = self.axs[0]
 plt.show()
 
