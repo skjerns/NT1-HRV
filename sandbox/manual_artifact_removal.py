@@ -30,7 +30,7 @@ class ECGPlotter():
     def __init__(self, data, sfreq, rrs, art, pos=0, interval=30, nrows=4, ncols=4):
         self.data = data
         self.rrs = rrs.squeeze()
-        self.art = art.squeeze()
+        self.art = np.nan_to_num(art.squeeze(), nan=99.0)
         self.sfreq = sfreq
         self.pos = pos
         self.interval = interval
@@ -69,12 +69,13 @@ class ECGPlotter():
             plotdata = data[(pos+i)*interval*sfreq:(pos+i+1)*interval*sfreq]
             ax  = self.axs[i]
             ax.clear()
-            ax.set_facecolor((1,1,1,1))            
-            if art[pos+i]>5: ax.set_facecolor((1.0, 0.47, 0.42))
+            ax.set_facecolor((1,1,1,1))   
+            print(i,self.art[pos+i])
+            if self.art[pos+i]>5: ax.set_facecolor((1. , 0.8, 0.4, 0.5))
             rr, yy = self.get_rrs(i, plotdata)
             ax.plot(plotdata)
             ax.scatter(rr, yy , marker='x', color='r', linewidth=0.75, alpha=0.8)
-            ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(art[pos+i][0]),fontsize=8)
+            ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(self.art[pos+i]),fontsize=8)
             
         titel = '{}/{}'.format(pos//self.total, len(data)//sfreq//interval//self.total)
         plt.suptitle(titel)

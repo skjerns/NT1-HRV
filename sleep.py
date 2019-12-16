@@ -94,7 +94,6 @@ class SleepSet():
         return self
     
     
-
     
 class Patient():
     """
