@@ -6,14 +6,14 @@ Created on Fri Dec 13 11:28:49 2019
 """
 import stimer
 import numpy as np
-import scipy
+import config
 import matplotlib.pyplot as plt
 import sleep
 import sleep_utils
 
 
-file = 'Z:/NT1-HRV/control/A9318.edf'
-matfile  = 'C:/Users/Simon/dropbox/nt1-hrv-share/A9318_hrv.mat'
+file = config.data + 'control/A9318.edf'
+matfile  = config.share + 'A9318_hrv.mat'
 p = sleep.Patient(file, channel='ECG I')
 mat = sleep_utils.h5py2dict(matfile)
 data = p.data
@@ -43,6 +43,8 @@ class ECGPlotter():
         self.axs = [item for sublist in self.axs for item in sublist]
         self._y = self.fig.canvas.mpl_connect("button_press_event", self.toggle_select)
         self._x = self.fig.canvas.mpl_connect("key_press_event", self.press_go)
+        self.c_okay = (1, 1, 1, 1)
+        self.c_art = (1, 0.8, 0.4, 0.5)
         
         self.background = self.fig.canvas.copy_from_bbox(self.axs[0].bbox)
         self.update()
@@ -70,11 +72,10 @@ class ECGPlotter():
             ax  = self.axs[i]
             ax.clear()
             ax.set_facecolor((1,1,1,1))   
-            print(i,self.art[pos+i])
-            if self.art[pos+i]>5: ax.set_facecolor((1. , 0.8, 0.4, 0.5))
+            if self.art[pos+i]>5: ax.set_facecolor(self.c_art)
             rr, yy = self.get_rrs(i, plotdata)
             ax.plot(plotdata)
-            ax.scatter(rr, yy , marker='x', color='r', linewidth=0.75, alpha=0.8)
+            ax.scatter(rr, yy , marker='x', color='r', linewidth=0.75, alpha=0.7)
             ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(self.art[pos+i]),fontsize=8)
             
         titel = '{}/{}'.format(pos//self.total, len(data)//sfreq//interval//self.total)
@@ -84,7 +85,6 @@ class ECGPlotter():
 
     
     def press_go(self, event):
-        print(event.key)
         if event.key in ('enter', 'right'):
             self.pos += self.total
         if event.key=='left':
@@ -96,11 +96,10 @@ class ECGPlotter():
     def toggle_select(self, event):
         idx = self.axs.index(event.inaxes)
         ax = self.axs[idx]
-        print ("event in ax {}".format(idx))
-        if ax.get_facecolor()==(1,1,1,1):
-            ax.set_facecolor((1.0, 0.47, 0.42))
+        if ax.get_facecolor()==self.c_okay:
+            ax.set_facecolor(self.c_art)
         else:
-            ax.set_facecolor((1,1,1,1))
+            ax.set_facecolor(self.c_okay)
         stimer.start('select')
         if(str(event.button)=='MouseButton.LEFT'):
             plt.pause(0.001)
@@ -113,9 +112,10 @@ class ECGPlotter():
             self.fig.canvas.restore_region(self.background)
             self.fig.canvas.blit(ax.bbox)
         else:
-            print(event.button)
+            print('unknown key', event.button)
         stimer.stop('select')
     
+rrs_orig = mat['Res']['HRV']['Data']['T_RRorig'] - p.starttime
 rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
 art = mat['Res']['HRV']['TimeVar']['Artifacts']
 
