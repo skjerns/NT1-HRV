@@ -74,8 +74,8 @@ class ECGPlotter():
             ax.set_facecolor((1,1,1,1))   
             if self.art[pos+i]>5: ax.set_facecolor(self.c_art)
             rr, yy = self.get_rrs(i, plotdata)
-            ax.plot(plotdata)
-            ax.scatter(rr, yy , marker='x', color='r', linewidth=0.75, alpha=0.7)
+            ax.plot(plotdata, linewidth=0.5)
+            ax.scatter(rr, yy , marker='x', color='r', linewidth=0.5, alpha=0.7)
             ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(self.art[pos+i]),fontsize=8)
             
         titel = '{}/{}'.format(pos//self.total, len(data)//sfreq//interval//self.total)
