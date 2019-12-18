@@ -1,1 +1,1 @@
-python artefact_viewer.py 
+python artefact_viewer.py -ncols 4 -nrows 4 -pos 0

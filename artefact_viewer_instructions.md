@@ -51,11 +51,12 @@ Generally: Don't be too strict, if there is any doubt whether there is an
 		   another persons job will be to double check and be strict.
 
 
-# Viewer controls
+### Viewer controls
 
 The viewer is easy and intuitive to use. To make analysis faster,
 there are several signals loaded at once (standard batch of 16 epochs).
-This number can also be set with command line parameters (ncols, nrows).
+This number can also be set with command line parameters (`ncols`, `nrows`)
+if you prefer to see more or less signals at once.
 
 The following buttons can be pressed:
 
