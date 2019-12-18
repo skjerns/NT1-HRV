@@ -3,11 +3,12 @@
 This viewer is meant as an easy tool to annotate ECG artefact epochs
 with the help of Kubios Premium, an HRV analysis tool.
 The viewer needs two files:
-	1. An EDF with a channel names "ECG I"
-	2. A .mat file created by Kubios that contains the detected RR peaks
-	   This .mat file needs to be called %EDFFILE%_hrv.mat
 
-You can start the viewer with the command `python artefact_viewer` or  on Windows
+1. An EDF with a channel named "ECG I"
+2. A .mat file created by Kubios that contains the detected RR peaks. 
+This .mat file needs to be called %EDFFILE%_hrv.mat
+
+You can start the viewer with the command `python artefact_viewer.py` or  on Windows
 withthe batch file `start_viewer.bat`.
 The viewer will then automatically ask you which file you want to choose
 and will automatically infer the .mat filename, else ask you to provide one.
