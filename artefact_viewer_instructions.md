@@ -7,7 +7,8 @@ The viewer needs two files:
 	2. A .mat file created by Kubios that contains the detected RR peaks
 	   This .mat file needs to be called %EDFFILE%_hrv.mat
 
-You can start the viewer with the command `python artefact_viewer`.
+You can start the viewer with the command `python artefact_viewer` or  on Windows
+withthe batch file `start_viewer.bat`.
 The viewer will then automatically ask you which file you want to choose
 and will automatically infer the .mat filename, else ask you to provide one.
 
@@ -16,6 +17,7 @@ Otherwise the viewer can also be started with parameters
 `python artefact_viewer.py -PARAMETERS`
 
 optional arguments:
+```
   -h, --help            show this help message and exit
   -edf EDF_FILE, --edf_file EDF_FILE
                         A link to an edf-file. The channel ECG I needs to be
@@ -26,6 +28,7 @@ optional arguments:
   -nrows NROWS          Number of rows to display in the viewer
   -ncols NCOLS          Number of columns to display in the viewer
   -pos POS              At which position (epoch) to start the viewer
+```
   
   
 ### Artefact annotation guidelines
