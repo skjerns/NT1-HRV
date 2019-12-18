@@ -26,7 +26,7 @@ class ECGPlotter():
         data = data[:len(data)-len(data)%(self.sfreq*self.interval)]
         data = data.reshape([-1 ,self.sfreq*self.interval//2])
         flat = np.mean(np.logical_and(data<2,data>-2),-1)
-        flat = flat>0.05
+        flat = flat>0.03
         flat.resize(self.artefacts.shape)
         self.flat=flat
         self.artefacts[flat]=True
