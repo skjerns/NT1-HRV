@@ -12,7 +12,6 @@ Usage eg:
 @author: skjerns
 """
 import ospath
-import numpy as np
 import getpass
 import platform
 
@@ -39,11 +38,13 @@ if username == 'nd269' and host=='ess-donatra':
     data = 'Z:/NT1-HRV/'
     share = 'C:/Users/nd269/Dropbox/nt1-hrv-share/'
     documents = 'C:/Users/nd269/Dropbox/nt1-hrv-documents'
-elif username == 'Simon':
-    data = ''
+elif username == 'simon' and host=='desktop-tdifgpi':
+    data = 'Z:/NT1-HRV/'
+    share = 'C:/Users/simon/Dropbox/nt1-hrv-share/'
+    documents = 'C:/Users/simon/Dropbox/nt1-hrv-documents'
 else:
-    'Username {} on host{}({}) has no configuration.\n' + \
-    'please set configuration in config.py'
+    print('Username {} on host{}({}) has no configuration.\n'.format(username,host,system) + \
+    'please set configuration in config.py')
     
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # USER SPECIFIC CONFIGURATION

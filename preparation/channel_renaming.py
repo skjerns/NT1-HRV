@@ -11,7 +11,7 @@ import sys
 sys.path.append("..")
 from tqdm import tqdm
 import ospath
-import edf_utils
+import sleep_utils
 
 remove = ['C3', 'C4', 'EOGl', 'EOGr', 'M1', 'M2', 'A1', 'A2', 'EOGV', 'Fz', 'Oz',
           'Plethysmogram', 'Pleth', 'Akku', 'Numeric Aux10', 'O1', 'O2', 'FlowPAP', 
@@ -82,19 +82,16 @@ output = 'z:/renamed'
 files = ospath.list_files(datafolder, exts='edf', subfolders=True)
 
 # We rename the channels to have the same names in all recordings
-
-names = []
-new_names = []
-for i, file in enumerate(tqdm(files)):
-    header = edf_utils.read_edf_header(file)
+def rename(file):
+    header = sleep_utils.read_edf_header(file)
     channels = header['channels']
     new_file = ospath.join(output, ospath.basename(file))
-    if ospath.exists(new_file): continue
+    if ospath.exists(new_file): return
 
     signal_headers = []
     signals = []
     for ch_nr in tqdm(range(len(channels))):
-        signal, signal_header, _ = edf_utils.read_edf(file, digital=True, 
+        signal, signal_header, _ = sleep_utils.read_edf(file, digital=True, 
                                                     ch_nrs=ch_nr, verbose=False)
         ch = signal_header[0]['label']
         ch = ch.replace(':M', ':A')
@@ -110,4 +107,7 @@ for i, file in enumerate(tqdm(files)):
         signal_headers.append(signal_header[0])
         signals.append(signal.squeeze())
 
-    edf_utils.write_edf(new_file, signals, signal_headers, header,digital=True)
+    sleep_utils.write_edf(new_file, signals, signal_headers, header,digital=True)
+    
+for i, file in enumerate(tqdm(files)):
+    rename(file)
