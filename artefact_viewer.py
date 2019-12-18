@@ -6,28 +6,31 @@ Created on Fri Dec 13 11:28:49 2019
 """
 import os
 import misc
+import matplotlib
 import stimer
 import numpy as np
-import config
 import matplotlib.pyplot as plt
 import mat73 # pip install mat73
 import sleep
 import argparse
-
-edf_file = config.data + 'control/A9318.edf'
-mat_file  = config.share + 'A9318_hrv.mat'
-
-interval = 30  # intervals per window in seconds 
-pos = 0
-nrows = 4
-ncols = 4
 import logging
+
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
 #%%
    
 class ECGPlotter():
     
+    def detect_flatline(self):
+        data = self.data.copy().squeeze()
+        data = data[:len(data)-len(data)%(self.sfreq*self.interval)]
+        data = data.reshape([-1 ,self.sfreq*self.interval//2])
+        flat = np.mean(np.logical_and(data<2,data>-2),-1)
+        flat = flat>0.05
+        flat.resize(self.artefacts.shape)
+        self.flat=flat
+        self.artefacts[flat]=True
+        return True
     
     def _load(self, edf_file, mat_file=None):
         if mat_file is None:
@@ -42,7 +45,7 @@ class ECGPlotter():
         data = p.data
         sfreq = p.sfreq    
         
-        mat = mat73.loadmat(mat_file)
+        mat = mat73.loadmat(mat_file, verbose=False)
         rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
         art = mat['Res']['HRV']['TimeVar']['Artifacts']
         
@@ -51,6 +54,7 @@ class ECGPlotter():
         if os.path.exists(artefacts_file):
             artefacts = np.load(artefacts_file)
         else:
+            art = np.nan_to_num(art, nan=99)
             artefacts = np.repeat(art>self.threshold, repeats=2, axis=0).T
             
         self.kubios_art = np.nan_to_num(art.squeeze(), nan=99.0)
@@ -79,7 +83,7 @@ class ECGPlotter():
         self.total = nrows*ncols
         
         self._load(edf_file=edf_file, mat_file=mat_file)
-        
+        self.detect_flatline()
         # set up the plot, connect the button presses
         self.axs = []
         self.fig, self.axs = plt.subplots(nrows, ncols)
@@ -91,6 +95,11 @@ class ECGPlotter():
         self.background = self.fig.canvas.copy_from_bbox(self.axs[0].bbox)
         self.update()
         
+        # sanity check
+        epochs = len(self.data)/self.sfreq/30
+        if epochs!=self.artefacts.shape[0]:
+            print('WARNING: {} epochs, but {} kubios annotations?'.format(
+                  epochs, self.artefacts.shape[0]))
         
     def save(self):
         np.save(self.artefacts_file, self.artefacts)
@@ -100,16 +109,15 @@ class ECGPlotter():
         self.fig.canvas.draw() 
         
     def get_rrs(self, plot_nr, plotdata):
-        sec = (self.pos+plot_nr)*interval
+        sec = (self.pos+plot_nr)*self.interval
         idx_start = np.searchsorted(self.rrs, sec)
-        idx_stop  = np.searchsorted(self.rrs, sec+interval)
+        idx_stop  = np.searchsorted(self.rrs, sec+self.interval)
         rr = self.rrs[idx_start:idx_stop]*self.sfreq
         yy = self.data[rr.astype(int)]
         rr = rr-sec*self.sfreq
         return rr, yy
     
     def update(self):
-        stimer.start('update')
         pos = self.pos
         data = self.data
         sfreq = self.sfreq
@@ -125,21 +133,20 @@ class ECGPlotter():
             ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(
                     self.kubios_art[pos+i]),fontsize=8)            
             xmin, middle, xmax = self._get_xlims(ax)
+            ax.axvline(middle, color='gray', linewidth=0.65)     
             if self.artefacts[pos+i][0]:
                 ax.axvspan(xmin, middle, facecolor=self.c_art, zorder=-100)
             if self.artefacts[pos+i][1]:
                 ax.axvspan(middle, xmax, facecolor=self.c_art, zorder=-100)
             ax.set_xlim([xmin, xmax])
-        stimer.start('draw')
         self.draw()
-        stimer.stop('draw')
-
             
-        titel = '{}/{}'.format(pos//self.total, 
+        title = '{}/{}'.format(pos//self.total, 
                                len(data)//sfreq//interval//self.total)
-        plt.suptitle(titel)
+        print('loading batch {}'.format(title))
+
+        plt.suptitle(title)
         self.draw()
-        stimer.stop('update')
 
 
     def _get_xlims(self, ax):
@@ -157,13 +164,18 @@ class ECGPlotter():
     
     
     def key_press(self, event):
-        if event.key in ('enter', 'right'):
+        if event.key=='escape':
+            self.save()
+            plt.close('all')
+            quit()
+        elif event.key in ('enter', 'right'):
             self.pos += self.total
-        if event.key=='left':
+        elif event.key=='left':
             if self.pos>0:
                 self.pos -= self.total if self.pos>=self.total else self.pos
+        else:
+            print('unknown key {}'.format(event.key))
         self.update()
-        self.save()
         
         
     def toggle_artefact(self, part, idx):
@@ -185,17 +197,19 @@ class ECGPlotter():
                        facecolor=self.c_art, zorder=-100)
             self.artefacts[idx+self.pos][i] = True
         ax.set_xlim(xmin,xmax)
+        self.save()
 
         
     def mouse_toggle_select(self, event):
+        if event.inaxes is None:
+            'Please click inside a plot'
+            return
         idx = self.axs.index(event.inaxes)
         ax = self.axs[idx]          
-        stimer.start('select')
         if(str(event.button)=='MouseButton.LEFT'):
             self.toggle_artefact('both', idx)
         elif (str(event.button)=='MouseButton.RIGHT'):
             xin, middle, xmax = self._get_xlims(ax)
-            
             if event.xdata>xmax//2:
                 self.toggle_artefact('right', idx)
             else:
@@ -208,7 +222,6 @@ class ECGPlotter():
         else:
             print('unknown key', event.button)
         plt.pause(0.001)
-        stimer.stop('select')
     
 
 if __name__=='__main__':
@@ -218,16 +231,27 @@ if __name__=='__main__':
     parser.add_argument('-mat', '--mat_file', type=str,
                          help='A link to an mat-file created by Kubios.'
                               'It contains the RRs and the artefact annotation')
+    parser.add_argument('-nrows', type=int, default=4,
+                         help='Number of rows to display in the viewer')
+    parser.add_argument('-ncols', type=int, default=4,
+                         help='Number of columns to display in the viewer')
+    parser.add_argument('-pos', type=int, default=0,
+                         help='At which position (epoch) to start the viewer')
     args = parser.parse_args()
     edf_file = args.edf_file
     mat_file = args.mat_file
-    
+    nrows = args.nrows
+    ncols = args.ncols
+    pos = args.pos
+    edf_file='Z:/NT1-HRV/control/A9318.edf'
+
     if edf_file is None:
         edf_file = misc.choose_file(exts=['edf', 'npy'], 
                                     title='Choose a EDF to display')
     print('loading {}'.format(edf_file))
     
-    self = ECGPlotter(edf_file=edf_file, mat_file=mat_file)
     
-
+    self = ECGPlotter(edf_file=edf_file, mat_file=mat_file, pos=pos,
+                      nrows=nrows, ncols=ncols)
+    plt.show(block=True)
 

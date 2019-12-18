@@ -19,6 +19,7 @@ def choose_file(default_dir=None,exts='txt', title='Choose file'):
     """
     root = Tk()
     root.iconify()
+    root.update()
     if isinstance(exts, str): exts = [exts]
     name = askopenfilename(initialdir=None,
                            parent=root,
