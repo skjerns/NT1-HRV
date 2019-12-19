@@ -9,9 +9,10 @@ The viewer needs two files:
 This .mat file needs to be called %EDFFILE%_hrv.mat
 
 You can start the viewer with the command `python artefact_viewer.py` or  on Windows
-withthe batch file `start_viewer.bat`.
-The viewer will then automatically ask you which file you want to choose
-and will automatically infer the .mat filename, else ask you to provide one.
+withthe batch file `start_viewer.bat`. Alternatively you can also click directly on the 
+EDF files saved at `c:/nt1-hrv/control` and `c:/nt1-hrv/NT1`
+The viewer will then automatically ask you which file you want to choose or load the selected one.
+It will automatically infer the .mat filename, else ask you to provide one.
 
 Otherwise the viewer can also be started with parameters
 
@@ -54,6 +55,7 @@ Generally: Don't be too strict, if there is any doubt whether there is an
 		   artefact or not, annotate an artefact. Your task is to be loose,
 		   another persons job will be to double check and be strict.
 
+Please have a look at the folder c:/nt1-hrv/examples to see what is an artefact and what not.
 
 ### Viewer controls
 

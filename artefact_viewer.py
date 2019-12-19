@@ -6,8 +6,6 @@ Created on Fri Dec 13 11:28:49 2019
 """
 import os
 import misc
-import matplotlib
-import stimer
 import numpy as np
 import matplotlib.pyplot as plt
 import mat73 # pip install mat73
