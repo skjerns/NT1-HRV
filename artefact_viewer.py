@@ -241,7 +241,6 @@ if __name__=='__main__':
     nrows = args.nrows
     ncols = args.ncols
     pos = args.pos
-    edf_file='Z:/NT1-HRV/control/A9318.edf'
 
     if edf_file is None:
         edf_file = misc.choose_file(exts=['edf', 'npy'], 
