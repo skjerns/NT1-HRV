@@ -29,7 +29,7 @@ optional arguments:
                         the RRs and the artefact annotation
   -nrows NROWS          Number of rows to display in the viewer
   -ncols NCOLS          Number of columns to display in the viewer
-  -pos POS              At which position (epoch) to start the viewer
+  -page POS              At which position (epoch) to start the viewer
 ```
   
   
