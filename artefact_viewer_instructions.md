@@ -29,7 +29,7 @@ optional arguments:
                         the RRs and the artefact annotation
   -nrows NROWS          Number of rows to display in the viewer
   -ncols NCOLS          Number of columns to display in the viewer
-  -pos POS              At which position (epoch) to start the viewer
+  -page POS              At which position (epoch) to start the viewer
 ```
   
   
@@ -68,9 +68,10 @@ The following buttons can be pressed:
 
 	Left mouse:  Mark whole epoch as artefact/no artefact
 	Right mouse: Mark half epoch as artefact/no artefact
-	Enter/right: load next batch of signals
+	Light:       load next batch of signals
 	Left:        load previous batch of signals
-	Escape:      close the viewer
+	Enter:       Jump to page X
+	Escape:      save and close the viewer
 	
 The results of the annotation will be saved to `%EDFFILE%.npy`.
 This file will be updated and loaded automatically so you in case
