@@ -17,7 +17,14 @@ mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
 #%%
    
+
+
 class ECGPlotter():
+    
+    def _handle_close(self,evt):
+        self.save()
+        plt.close('all')
+        return
     
     def detect_flatline(self):
         data = self.data.copy().squeeze()
@@ -52,17 +59,17 @@ class ECGPlotter():
 
         artefacts_file = edf_file[:-4] + '.npy'  
         if os.path.exists(artefacts_file):
-            artefacts = np.load(artefacts_file)
+            self.artefacts = np.load(artefacts_file)
         else:
             art = np.nan_to_num(art, nan=99)
-            artefacts = np.repeat(art>self.threshold, repeats=2, axis=0).T
+            self.artefacts = np.repeat(art>self.threshold, repeats=2, axis=0).T
+            self.detect_flatline()
             
         self.kubios_art = np.nan_to_num(art.squeeze(), nan=99.0)
         self.mat = mat
         self.rrs = rrs.squeeze()
         self.data = data
         self.sfreq = sfreq
-        self.artefacts = artefacts
         
         self.file = edf_file
         self.mat_file = mat_file
@@ -84,14 +91,13 @@ class ECGPlotter():
         self.gridsize = nrows*ncols
         
         self._load(edf_file=edf_file, mat_file=mat_file)
-        self.detect_flatline()
         # set up the plot, connect the button presses
         self.axs = []
         self.fig, self.axs = plt.subplots(nrows, ncols)
         self.axs = [item for sublist in self.axs for item in sublist]
         _ = self.fig.canvas.mpl_connect("button_press_event", self.mouse_toggle_select)
         _ = self.fig.canvas.mpl_connect("key_press_event", self.key_press)
-
+        _ = self.fig.canvas.mpl_connect('close_event', self._handle_close)
         self.background = self.fig.canvas.copy_from_bbox(self.axs[0].bbox)
         self.update()
         
@@ -181,11 +187,9 @@ class ECGPlotter():
                   'escape\tsave progress and quit\n'\
                   '\nmouse button\tmark as artefact\n\n'\
         
-        gridsize = self.gridsize
         if event.key=='escape':
             self.save()
             plt.close('all')
-            # exit()
             return
         elif event.key =='enter':
             page = misc.input_box('Please select new page position', dtype=int, 
