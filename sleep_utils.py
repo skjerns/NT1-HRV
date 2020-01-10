@@ -185,10 +185,11 @@ def write_hypnogram(hypno, filename, seconds_per_annotation=30,
 
 def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
     """
-    Reading EDF+ data with pyedflib.
+    Reading EDF+/BDF data with pyedflib.
 
     Will load the edf and return the signals, the headers of the signals 
-    and the header of the EDF
+    and the header of the EDF. If all signals have the same sample frequency
+    will return a numpy array, else a list with the individual signals
         
     :param edf_file: link to an edf file
     :param ch_nrs: The numbers of channels to read (optional)
@@ -298,6 +299,7 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None):
                     'to_keep' will overwrite any droppings proposed by to_drop
     :param to_drop: A list of channel names or indices (int) that should be dropped.
                     Strings will be interpreted as channel names.
+    :returns: the target filename with the dropped channels
     """
     # convert to list if necessary
     if isinstance(to_keep, (int, str)): to_keep = [to_keep]
@@ -338,9 +340,10 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None):
     else:
         raise ValueError
         
-    signals, signal_headers, header = read_edf(edf_source, ch_nrs=load_channels, digital=True)
+    signals, signal_headers, header = read_edf(edf_source, 
+                                               ch_nrs=load_channels, 
+                                               digital=True)
     
     write_edf(edf_target, signals, signal_headers, header, digital=True)
     return edf_target
-
 

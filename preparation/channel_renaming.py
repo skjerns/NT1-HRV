@@ -6,7 +6,7 @@ Created on Mon Dec  2 14:05:33 2019
 Use this file to rename channel to a common channel name
 
 """
-
+import os
 import sys
 sys.path.append("..")
 from tqdm import tqdm
@@ -82,32 +82,34 @@ output = 'z:/renamed'
 files = ospath.list_files(datafolder, exts='edf', subfolders=True)
 
 # We rename the channels to have the same names in all recordings
-def rename(file):
-    header = sleep_utils.read_edf_header(file)
+def rename_channels(edf_file, mapping, new_file=None):
+    """
+    A convenience function to rename channels in an EDF file.
+    
+    :param edf_file: an string pointing to an edf file
+    :param mapping:  a dictionary with channel mappings as key:value
+    :param new_file: the new filename
+    """
+    header = sleep_utils.read_edf_header(edf_file)
     channels = header['channels']
-    new_file = ospath.join(output, ospath.basename(file))
-    if ospath.exists(new_file): return
+    if new_file is None:
+        file, ext = os.path.splitext(edf_file)
+        new_file = file + '_renamed' + ext
 
     signal_headers = []
     signals = []
     for ch_nr in tqdm(range(len(channels))):
-        signal, signal_header, _ = sleep_utils.read_edf(file, digital=True, 
-                                                    ch_nrs=ch_nr, verbose=False)
+        signal, signal_header, _ = read_edf(file, digital=True, 
+                                            ch_nrs=ch_nr, verbose=False)
         ch = signal_header[0]['label']
-        ch = ch.replace(':M', ':A')
-        if ch in remove: continue
-        if ch in ch_mapping.values():
-            pass
-        elif ch in ch_mapping :
+        if ch in ch_mapping :
             print('{} to {}'.format(ch, ch_mapping[ch]))
             ch = ch_mapping[ch]
             signal_header[0]['label']=ch
         else:
-            print('no mapping for {}'.format(ch))
+            print('no mapping for {}, leave as it is'.format(ch))
         signal_headers.append(signal_header[0])
         signals.append(signal.squeeze())
 
-    sleep_utils.write_edf(new_file, signals, signal_headers, header,digital=True)
+    write_edf(new_file, signals, signal_headers, header,digital=True)
     
-for i, file in enumerate(tqdm(files)):
-    rename(file)

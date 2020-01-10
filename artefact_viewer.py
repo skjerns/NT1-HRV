@@ -43,10 +43,12 @@ class ECGPlotter():
         data = p.data
         sfreq = p.sfreq    
         
-        mat = mat73.loadmat(mat_file, verbose=False)
-        rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
-        art = mat['Res']['HRV']['TimeVar']['Artifacts']
-        
+        try:
+            mat = mat73.loadmat(mat_file, verbose=False)
+            rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
+            art = mat['Res']['HRV']['TimeVar']['Artifacts']
+        except:
+            logging.error('Mat file not found.')            
 
         artefacts_file = edf_file[:-4] + '.npy'  
         if os.path.exists(artefacts_file):
@@ -65,20 +67,21 @@ class ECGPlotter():
         self.file = edf_file
         self.mat_file = mat_file
         self.artefacts_file = artefacts_file
+        self.max_page = len(data)//sfreq//self.interval//self.gridsize
         
         self.save()
 
     
-    def __init__(self, edf_file, mat_file=None, pos=0, 
+    def __init__(self, edf_file, mat_file=None, page=0, 
                  interval=30, nrows=4, ncols=4):
         self.c_okay = (1, 1, 1, 1)       # background coloring of accepted
         self.c_art = (1, 0.8, 0.4, 0.5)  # background coloring of artefact
         self.threshold = 5
-        self.pos = pos
+        self.page = page
         self.interval = interval
         self.nrows = nrows
         self.ncols = ncols
-        self.total = nrows*ncols
+        self.gridsize = nrows*ncols
         
         self._load(edf_file=edf_file, mat_file=mat_file)
         self.detect_flatline()
@@ -89,9 +92,10 @@ class ECGPlotter():
         _ = self.fig.canvas.mpl_connect("button_press_event", self.mouse_toggle_select)
         _ = self.fig.canvas.mpl_connect("key_press_event", self.key_press)
 
-        
         self.background = self.fig.canvas.copy_from_bbox(self.axs[0].bbox)
         self.update()
+        
+        
         
         # sanity check
         epochs = len(self.data)/self.sfreq/30
@@ -107,21 +111,28 @@ class ECGPlotter():
         self.fig.canvas.draw() 
         
     def get_rrs(self, plot_nr, plotdata):
-        sec = (self.pos+plot_nr)*self.interval
+        sec = (self.page*self.gridsize+plot_nr)*self.interval
         idx_start = np.searchsorted(self.rrs, sec)
         idx_stop  = np.searchsorted(self.rrs, sec+self.interval)
-        rr = self.rrs[idx_start:idx_stop]*self.sfreq
-        yy = self.data[rr.astype(int)]
+        rr = (self.rrs[idx_start:idx_stop]*self.sfreq)
+        yy = self.data[rr.round().astype(int)]
         rr = rr-sec*self.sfreq
         return rr, yy
     
     def update(self):
-        pos = self.pos
+        gridsize = self.gridsize
+        page = self.page
         data = self.data
         sfreq = self.sfreq
         interval = self.interval
-        for i in range(self.total):
-            plotdata = data[(pos+i)*interval*sfreq:(pos+i+1)*interval*sfreq]
+        # plt.clf()
+        for i in range(self.gridsize):
+            if page*gridsize+i>=len(self.artefacts):
+                ax  = self.axs[i]
+                ax.clear()
+                continue
+            plotdata = data[(page*gridsize+i)*interval*sfreq:
+                            (page*gridsize+i+1)*interval*sfreq]
             ax  = self.axs[i]
             ax.clear()
             ax.set_facecolor((1,1,1,1))   
@@ -129,18 +140,18 @@ class ECGPlotter():
             ax.plot(plotdata, linewidth=0.5)
             ax.scatter(rr, yy , marker='x', color='r', linewidth=0.5,alpha=0.7)
             ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(
-                    self.kubios_art[pos+i]),fontsize=8)            
+                    self.kubios_art[page*gridsize+i]),fontsize=8)            
             xmin, middle, xmax = self._get_xlims(ax)
             ax.axvline(middle, color='gray', linewidth=0.65)     
-            if self.artefacts[pos+i][0]:
+            if self.artefacts[page*gridsize+i][0]:
                 ax.axvspan(xmin, middle, facecolor=self.c_art, zorder=-100)
-            if self.artefacts[pos+i][1]:
+            if self.artefacts[page*gridsize+i][1]:
                 ax.axvspan(middle, xmax, facecolor=self.c_art, zorder=-100)
             ax.set_xlim([xmin, xmax])
         self.draw()
             
-        title = '{}/{}'.format(pos//self.total, 
-                               len(data)//sfreq//interval//self.total)
+        title = '{}\n{}/{}'.format(os.path.basename(self.file), 
+                                  page, self.max_page)
         print('loading batch {}'.format(title))
 
         plt.suptitle(title)
@@ -162,17 +173,38 @@ class ECGPlotter():
     
     
     def key_press(self, event):
+        
+        
+        helpstr = 'right\tnext page\n'\
+                  'left\tprevious page\n'\
+                  'enter\tjump to page X\n'\
+                  'escape\tsave progress and quit\n'\
+                  '\nmouse button\tmark as artefact\n\n'\
+        
+        gridsize = self.gridsize
         if event.key=='escape':
             self.save()
             plt.close('all')
-            quit()
-        elif event.key in ('enter', 'right'):
-            self.pos += self.total
+            # exit()
+            return
+        elif event.key =='enter':
+            page = misc.input_box('Please select new page position', dtype=int, 
+                                 initialvalue=self.page, minvalue=0, 
+                                 maxvalue=self.max_page)
+            if page:
+                print('jumping to {}'.format(page))
+                self.page = page
+        elif event.key in ('right'):
+            self.page += 1
         elif event.key=='left':
-            if self.pos>0:
-                self.pos -= self.total if self.pos>=self.total else self.pos
+                self.page -= 1
         else:
+            print(helpstr)
             print('unknown key {}'.format(event.key))
+        if self.page<0:
+            self.page=self.max_page
+        elif self.page>=self.max_page:
+            self.page=0
         self.update()
         
         
@@ -185,15 +217,15 @@ class ECGPlotter():
         if part=='right':  i = 1
         ax = self.axs[idx]
         xmin, middle, xmax = self._get_xlims(ax)
-        art = self.artefacts[idx+self.pos][i]
+        art = self.artefacts[idx+self.page*self.gridsize][i]
         if art:
             ax.axvspan(middle if i else xmin, xmax if i else middle, 
                        facecolor=self.c_okay, zorder=-100)
-            self.artefacts[idx+self.pos][i] = False
+            self.artefacts[idx+self.page*self.gridsize][i] = False
         else:
             ax.axvspan(middle if i else xmin, xmax if i else middle, 
                        facecolor=self.c_art, zorder=-100)
-            self.artefacts[idx+self.pos][i] = True
+            self.artefacts[idx+self.page*self.gridsize][i] = True
         ax.set_xlim(xmin,xmax)
         self.save()
 
@@ -233,14 +265,14 @@ if __name__=='__main__':
                          help='Number of rows to display in the viewer')
     parser.add_argument('-ncols', type=int, default=4,
                          help='Number of columns to display in the viewer')
-    parser.add_argument('-pos', type=int, default=0,
-                         help='At which position (epoch) to start the viewer')
+    parser.add_argument('-page', type=int, default=0,
+                         help='At which page (epoch*gridsize) to start the viewer')
     args = parser.parse_args()
     edf_file = args.edf_file
     mat_file = args.mat_file
     nrows = args.nrows
     ncols = args.ncols
-    pos = args.pos
+    page = args.page
 
     if edf_file is None:
         edf_file = misc.choose_file(exts=['edf', 'npy'], 
@@ -248,7 +280,7 @@ if __name__=='__main__':
     print('loading {}'.format(edf_file))
     
     
-    self = ECGPlotter(edf_file=edf_file, mat_file=mat_file, pos=pos,
+    self = ECGPlotter(edf_file=edf_file, mat_file=mat_file, page=page,
                       nrows=nrows, ncols=ncols)
     plt.show(block=True)
 
