@@ -49,6 +49,8 @@ class ECGPlotter():
         p = sleep.Patient(edf_file, channel='ECG I')
         data = p.data
         sfreq = p.sfreq    
+        self.data = data
+        self.sfreq = sfreq
         
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
@@ -68,8 +70,7 @@ class ECGPlotter():
         self.kubios_art = np.nan_to_num(art.squeeze(), nan=99.0)
         self.mat = mat
         self.rrs = rrs.squeeze()
-        self.data = data
-        self.sfreq = sfreq
+
         
         self.file = edf_file
         self.mat_file = mat_file

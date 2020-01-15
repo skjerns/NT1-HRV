@@ -11,6 +11,7 @@ Usage eg:
     
 @author: skjerns
 """
+import os
 import ospath
 import getpass
 import platform
@@ -33,15 +34,21 @@ class AttrDict(dict):
 username = getpass.getuser().lower()  # your login name
 host     = platform.node().lower()    # the name of this computer
 system   = platform.system().lower()  # linux, windows or mac.
+home = os.path.expanduser('~')
+
 
 if username == 'nd269' and host=='ess-donatra':
     data = 'Z:/NT1-HRV/'
-    share = 'C:/Users/nd269/Dropbox/nt1-hrv-share/'
-    documents = 'C:/Users/nd269/Dropbox/nt1-hrv-documents'
+    share = ospath.join(home,'Dropbox/nt1-hrv-share/')
+    documents = ospath.join(home,'/Dropbox/nt1-hrv-documents')
+    
 elif username == 'simon' and host=='desktop-tdifgpi':
     data = 'Z:/NT1-HRV/'
-    share = 'C:/Users/simon/Dropbox/nt1-hrv-share/'
-    documents = 'C:/Users/simon/Dropbox/nt1-hrv-documents'
+    nt1_1 = 'F:/01_Polysomnographien/02_Daten Hephata-Klinik Treysa (33 Patienten mit NT1)/01_Daten'
+    nt1_2 = ''
+    share = ospath.join(home,'Dropbox/nt1-hrv-share/')
+    documents = ospath.join(home,'Dropbox/nt1-hrv-documents')
+    
 else:
     print('Username {} on host{}({}) has no configuration.\n'.format(username,host,system) + \
     'please set configuration in config.py')
@@ -50,4 +57,4 @@ else:
 # USER SPECIFIC CONFIGURATION
 ###############################
     
-root_dir = ospath.abspath(ospath.dirname(__file__)) if '__file__' in vars() else ''
+root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''
