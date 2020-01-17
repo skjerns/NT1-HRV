@@ -14,7 +14,7 @@ import argparse
 import logging
 
 mpl_logger = logging.getLogger('matplotlib')
-mpl_logger.setLevel(logging.WARNING)
+mpl_logger.setLevel(logging.INFO)
 #%%
    
 
@@ -27,11 +27,12 @@ class ECGPlotter():
         return
     
     def detect_flatline(self):
+        logging.info('Detecting Artefacts')
         data = self.data.copy().squeeze()
         data = data[:len(data)-len(data)%(self.sfreq*self.interval)]
         data = data.reshape([-1 ,self.sfreq*self.interval//2])
         flat = np.mean(np.logical_and(data<2,data>-2),-1)
-        flat = flat>0.03
+        flat = flat>0.1
         flat.resize(self.artefacts.shape)
         self.flat=flat
         self.artefacts[flat]=True
@@ -255,7 +256,7 @@ class ECGPlotter():
             self.fig.canvas.restore_region(self.background)
             self.fig.canvas.blit(ax.bbox)
         else:
-            print('unknown key', event.button)
+            print('unknown button', event.button)
         plt.pause(0.001)
     
 

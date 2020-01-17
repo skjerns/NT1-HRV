@@ -339,7 +339,8 @@ def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
     return  signals, signal_headers, header
 
 
-def write_edf(edf_file, signals, signal_headers, header, digital=False):
+def write_edf(edf_file, signals, signal_headers, header, digital=False,
+              correct=False):
     """
     Write signals to an edf_file. Header can be generated on the fly.
     
@@ -363,22 +364,25 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False):
     n_channels = len(signals)
     
     # check min and max values
-    if digital==True:
+    if digital==True and correct:
         for sig, sigh in zip(signals,signal_headers):
             dmin, dmax = sigh['digital_min'], sigh['digital_max']
             pmin, pmax = sigh['physical_min'], sigh['physical_max']
-            if dmin>dmax: 
-                logging.warning('dmin>dmax, {}>{}, will correct'.format(dmin,dmax))
-                dmin, dmax = dmax, dmin
-            if pmin>pmax: 
-                logging.warning('pmin>pmax, {}>{}, will correct'.format(pmin,pmax))
-                pmin, pmax = pmax, pmin
-
+            ch_name=sigh['label']
+            # if dmin>dmax: 
+            #     logging.warning('{}: dmin>dmax, {}>{}, will correct'.format(\
+            #                     ch_name, dmin, dmax))
+            #     dmin, dmax = dmax, dmin
+            #     sig *= -1
+            # if pmin>pmax: 
+            #     logging.warning('{}: pmin>pmax, {}>{}, will correct'.format(\
+            #                      ch_name, pmin, pmax))
+            #     pmin, pmax = pmax, pmin
+            #     sig *= -1
             dsmin, dsmax = round(sig.min()), round(sig.max())
             psmin = dig2phys(dsmin, dmin, dmax, pmin, pmax)
             psmax = dig2phys(dsmax, dmin, dmax, pmin, pmax)
             min_dist = np.abs(dig2phys(1, dmin, dmax, pmin, pmax))
-            ch_name=sigh['label']
             if dsmin<dmin:
                 logging.warning('{}:Digital signal minimum is {}'\
                                 ', but value range is {}, will correct'.format\
@@ -404,7 +408,7 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False):
         f.setSignalHeaders(signal_headers)
         f.setHeader(header)
         f.writeSamples(signals, digital=digital)
-
+    del f
     return os.path.isfile(edf_file) 
 
 
@@ -434,9 +438,9 @@ def read_edf_header(edf_file):
     assert os.path.isfile(edf_file), 'file {} does not exist'.format(edf_file)
     with pyedflib.EdfReader(edf_file) as f:
         summary = f.getHeader()
-        summary['Duration'] = f.getFileDuration
         summary['SignalHeaders'] = f.getSignalHeaders()
         summary['channels'] = f.getSignalLabels()
+        summary['Duration'] = f.getFileDuration()
     del f
     return summary
 
@@ -524,7 +528,8 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
 
     for i, sigs in enumerate(zip(signals1, signals2)):
         s1, s2 = sigs
-        if i==7:break
+        s1 = np.abs(s1)
+        s2 = np.abs(s2)
         assert np.allclose(s1, s2), 'Error, digital values of {}'\
             ' and {} for ch {}: {} are not the same'.format(
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
@@ -537,7 +542,6 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
     prog.update()
 
     for i, sigs in enumerate(zip(signals1, signals2)):
-        print(signal_headers1[i]['digital_max'],signal_headers2[i]['digital_max'])
         s1, s2 = sigs
         # compare absolutes in case of inverted signals
         s1 = np.abs(s1)
@@ -552,6 +556,25 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
                 signal_headers2[i]['label'], close)
     return True
 
+
+
+def change_polarity(edf_file, channels, new_file=None):
+    if new_file is None: 
+        new_file = os.path.splitext(edf_file)[0] + '_inv.edf'
+    
+    if isinstance(channels, str): channels=[channels]
+    channels = [c.lower() for c in channels]
+
+    signals, signal_headers, header = read_edf(edf_file, digital=True)
+    for i,sig in enumerate(signals):
+        shead = signal_headers[i]
+        label = signal_headers[i]['label'].lower()
+        if label in channels:
+            print('inverting {}'.format(label))
+            shead['physical_min']*=-1
+            shead['physical_max']*=-1
+    write_edf(new_file, signals, signal_headers, header, digital=True)
+    compare_edf(edf_file, new_file)
 
 
 def anonymize_edf(edf_file, new_file=None, verify=False,
@@ -610,7 +633,7 @@ def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=True):
     for signal, signal_header in tqdm(zip(signals, signal_headers)):
         ch = signal_header['label']
         if ch in mapping:
-            print('{} to {}'.format(ch, mapping[ch]))
+            # print('{} to {}'.format(ch, mapping[ch]))
             ch = mapping[ch]
             signal_header['label'] = ch
         elif ch in mapping.values():
@@ -621,7 +644,8 @@ def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=True):
         new_signals.append(signal)
             
     write_edf(new_file, signals, signal_headers, header,digital=True)
-    compare_edf(edf_file, new_file)
+    if verify:
+        compare_edf(edf_file, new_file)
     
     
     

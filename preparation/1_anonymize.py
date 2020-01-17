@@ -43,9 +43,6 @@ if __name__ == '__main__':
         new_name = 'NT_' + codify(filename)
         new_name2 = 'NT1{:0>2}'.format(i+1)
         
-        hrv = ospath.join(nt1_datafolder, new_name2 + '_hrv.mat')
-        hrv_new = ospath.join(nt1_datafolder, new_name + '_hrv.mat')
-        shutil.copy(hrv, hrv_new)
         new_file = ospath.join(nt1_datafolder, new_name + '.edf')
         
         old_names.append(ospath.basename(file))
@@ -78,4 +75,4 @@ if __name__ == '__main__':
     
     d = {'Original Name': old_names, 'Previous Name':new_names2, 'New Name':new_names}
     df = pd.DataFrame(d)
-    df.to_csv(csv_mapping)
+    df.to_csv(csv_mapping, sep=';')
