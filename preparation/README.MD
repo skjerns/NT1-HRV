@@ -14,6 +14,22 @@ Use the script `1_anonymize_rename.py`
 
 Files will be stored at the 'data' location of the `config.py`
 
+The new filenames will be calculated as following:
+
+```
+1. take lower case original filename and create adler32 hash with zlib.adler32()
+2a. in case the hash contains a literal, convert to ASCII int and insert as string (but it shouldnt)
+2. put resulting number in numpy seed, draw random float
+3. multiply float with 1e8 and convert to int
+4. new filename will be resulting int[:3] + '_' + int[3:] + .edf (_ for readability)
+
+hash = zlib.adler32(filename.lower())
+np.random.seed(hash)
+rnd = np.random.rand()
+number = int(rnd*1e8)
+filename = str(number)[:3] + '_' + str(number)[3:] + '.edf'
+```
+
 
 #### 2. Rename channels
 Channel names vary depending on the recording system.
