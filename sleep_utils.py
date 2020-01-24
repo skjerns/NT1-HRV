@@ -5,6 +5,7 @@ Created on Thu Nov 21 20:19:26 2019
 @author: skjerns
 """
 import os
+import gc
 import warnings
 import ospath #pip install https://github.com/skjerns/skjerns-utils
 import numpy as np
@@ -551,6 +552,7 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
             ' and {} for ch {}: {} are not the same: {:.3f}'.format(
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
                 signal_headers2[i]['label'], close)
+    gc.collect()
     return True
 
 

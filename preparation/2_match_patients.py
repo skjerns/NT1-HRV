@@ -67,8 +67,8 @@ if __name__ == '__main__':
         if len(match)!=0:
             csv_string += '\n+-{} age difference, {} matchings\n'.format(i, len(match))
             for patient, control in match.items():
-                patient_mapping = mappings.get(patient, 'NOTFOUND')
-                control_mapping = mappings.get(control, 'NOTFOUND')
+                patient_mapping = mappings[patient]
+                control_mapping = mappings[control]
                 csv_string += '{};{};{};{}\n'.format(patient, patient_mapping, control, control_mapping)
     matching_csv = ospath.join(documents, 'matching.csv')
     with open(matching_csv, 'w') as f:

@@ -6,6 +6,7 @@ Created on Wed Nov 13 16:24:17 2019
 This script removes all patient related information from an edf
 and copies them to a new location, for n
 """
+import hashlib
 import sys
 sys.path.append("..") # append to get access to upper level modules
 from tqdm import tqdm
@@ -42,7 +43,11 @@ def codify(filename):
     hashed file number back to de-identify this filename
     """
     filename = filename.lower()
-    hashing = zlib.adler32(filename.encode('utf-8'))
+    m = hashlib.md5()
+    m.update(filename.encode('utf-8'))
+    hashing = m.hexdigest()
+    hashing = int(''.join([str(ord(c)) for c in hashing]))
+    hashing = hashing%(2**32-1) # max seed number for numpy
     np.random.seed(hashing)
     rnd = '{:.8f}'.format(np.random.rand())[2:]
     string = str(rnd)[:3] + '_' +  str(rnd)[3:]

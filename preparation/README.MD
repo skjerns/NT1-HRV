@@ -17,16 +17,17 @@ Files will be stored at the 'data' location of the `config.py`
 The new filenames will be calculated as following:
 
 ```
-1. take lower case original filename and create adler32 hash with zlib.adler32()
-2a. in case the hash contains a literal, convert to ASCII int and insert as string (but it shouldnt)
-2. put resulting number in numpy seed, draw random float
-3. multiply float with 1e8 and convert to int
+1. take lower case original filename and create an md5 hash
+2. convert all characters to their ASCII ordinal and concatenate
+2. make modulo 2**32-1 (max int) and put resulting number in numpy seed, draw random float
+3. print first 8 digits of float
 4. new filename will be resulting int[:3] + '_' + int[3:] + .edf (_ for readability)
 
-hash = zlib.adler32(filename.lower())
+hash = md5(filename.lower())
+hash_int = int(join''.([str(ord(i)) for i in hash)])%(2**32-1)
 np.random.seed(hash)
 rnd = np.random.rand()
-number = int(rnd*1e8)
+number = '{:.8f}'.format(rnd)[2:]
 filename = str(number)[:3] + '_' + str(number)[3:] + '.edf'
 ```
 
