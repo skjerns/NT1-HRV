@@ -60,14 +60,11 @@ def anonymize_and_streamline(dataset_folder, target_folder, skipexist=True):
     old_names = []
     new_names = []
     for i, old_file in enumerate(tqdm(files)):
-        if 'A9971' in old_file:continue
-
         old_name = ospath.splitext(ospath.basename(old_file))[0]
         new_name = codify(old_name)
         new_file = ospath.join(target_folder, new_name + '.edf')
         old_names.append(old_name)
         new_names.append(new_name)  
-        print(old_file)
 
         if ospath.exists(new_file) and skipexist: 
             print ('New file extists already {}'.format(new_file))
