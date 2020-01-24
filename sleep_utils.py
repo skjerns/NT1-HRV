@@ -13,7 +13,7 @@ from tqdm import tqdm
 from datetime import datetime
 import dateparser
 import logging
-
+from joblib import Parallel, delayed
 def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto', exp_seconds=None):
     """
     reads a hypnogram file as created by VisBrain or as CSV type 
@@ -331,9 +331,7 @@ def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
         if all_sfreq_same:
             dtype = np.int if digital else np.float
             signals = np.array(signals, dtype=dtype)
-        elif verbose:
-            warnings.warn('Not all sampling frequencies are the same ({}). '\
-                          .format(sfreqs))    
+    del f
     assert len(signals)==len(signal_headers), 'Something went wrong, lengths'\
                                          ' of headers is not length of signals'
     return  signals, signal_headers, header
@@ -369,16 +367,16 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
             dmin, dmax = sigh['digital_min'], sigh['digital_max']
             pmin, pmax = sigh['physical_min'], sigh['physical_max']
             ch_name=sigh['label']
-            # if dmin>dmax: 
-            #     logging.warning('{}: dmin>dmax, {}>{}, will correct'.format(\
-            #                     ch_name, dmin, dmax))
-            #     dmin, dmax = dmax, dmin
-            #     sig *= -1
-            # if pmin>pmax: 
-            #     logging.warning('{}: pmin>pmax, {}>{}, will correct'.format(\
-            #                      ch_name, pmin, pmax))
-            #     pmin, pmax = pmax, pmin
-            #     sig *= -1
+            if dmin>dmax: 
+                 logging.warning('{}: dmin>dmax, {}>{}, will correct'.format(\
+                                 ch_name, dmin, dmax))
+                 dmin, dmax = dmax, dmin
+                 sig *= -1
+            if pmin>pmax: 
+                 logging.warning('{}: pmin>pmax, {}>{}, will correct'.format(\
+                                  ch_name, pmin, pmax))
+                 pmin, pmax = pmax, pmin
+                 sig *= -1
             dsmin, dsmax = round(sig.min()), round(sig.max())
             psmin = dig2phys(dsmin, dmin, dmax, pmin, pmax)
             psmax = dig2phys(dsmax, dmin, dmax, pmin, pmax)
@@ -519,12 +517,17 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
     Loads two edf files and checks whether the values contained in 
     them are the same. Does not check the header data
     """
-    prog = tqdm(total=4, desc='verifying')
-    print('verifying data')
-    signals1, signal_headers1, _ =  read_edf(edf_file1, digital=True, verbose=False)
-    prog.update()
-    signals2, signal_headers2, _ =  read_edf(edf_file2, digital=True, verbose=False)
-    prog.update()
+    if verbose: print('verifying data')
+    files = [(edf_file1, True), (edf_file2, True), 
+             (edf_file1, False), (edf_file2, False)]
+    results = Parallel(n_jobs=4, backend='loky')(delayed(read_edf)\
+             (file, digital=digital, verbose=False) for file, \
+             digital in tqdm(files, disable=not verbose))  
+
+    signals1, signal_headers1, _ =  results[0]
+    signals2, signal_headers2, _ =  results[1]
+    signals3, signal_headers3, _ =  results[0]
+    signals4, signal_headers4, _ =  results[1]
 
     for i, sigs in enumerate(zip(signals1, signals2)):
         s1, s2 = sigs
@@ -535,19 +538,13 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
                 signal_headers2[i]['label'])
 
-    signals1, signal_headers1, _ =  read_edf(edf_file1, digital=False, verbose=False)
-    prog.update()
-
-    signals2, signal_headers2, _ =  read_edf(edf_file2, digital=False, verbose=False)
-    prog.update()
-
-    for i, sigs in enumerate(zip(signals1, signals2)):
+    for i, sigs in enumerate(zip(signals3, signals4)):
         s1, s2 = sigs
         # compare absolutes in case of inverted signals
         s1 = np.abs(s1)
         s2 = np.abs(s2)
-        dmin, dmax = signal_headers2[i]['digital_min'], signal_headers2[i]['digital_max']
-        pmin, pmax = signal_headers2[i]['physical_min'], signal_headers2[i]['physical_max']
+        dmin, dmax = signal_headers3[i]['digital_min'], signal_headers3[i]['digital_max']
+        pmin, pmax = signal_headers3[i]['physical_min'], signal_headers3[i]['physical_max']
         min_dist = np.abs(dig2phys(1, dmin, dmax, pmin, pmax))
         close =  np.mean(np.isclose(s1, s2, atol=min_dist))
         assert close>0.99, 'Error, physical values of {}'\
@@ -555,7 +552,6 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
                 signal_headers2[i]['label'], close)
     return True
-
 
 
 def change_polarity(edf_file, channels, new_file=None):
@@ -607,14 +603,14 @@ def anonymize_edf(edf_file, new_file=None, verify=False,
     signals, signal_headers, _ = read_edf(edf_file, digital=True, 
                                              verbose=True)
 
-    write_edf(new_file, signals, signal_headers, header, digital=True)
+    write_edf(new_file, signals, signal_headers, header, digital=True, correct=True)
     
     if verify:
         compare_edf(new_file, edf_file)
     return 
 
 
-def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=True):
+def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=False):
     """
     A convenience function to rename channels in an EDF file.
     
@@ -630,7 +626,7 @@ def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=True):
     new_signals = []
     
     signals, signal_headers, header = read_edf(edf_file, digital=True, verbose=False)
-    for signal, signal_header in tqdm(zip(signals, signal_headers)):
+    for signal, signal_header in zip(signals, signal_headers):
         ch = signal_header['label']
         if ch in mapping:
             # print('{} to {}'.format(ch, mapping[ch]))
@@ -643,11 +639,14 @@ def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=True):
         new_signal_headers.append(signal_header)
         new_signals.append(signal)
             
-    write_edf(new_file, signals, signal_headers, header,digital=True)
+    write_edf(new_file, signals, signal_headers, header, digital=True)
     if verify:
         compare_edf(edf_file, new_file)
     
     
     
-    
+
+
+
+
     

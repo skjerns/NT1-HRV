@@ -12,67 +12,111 @@ from tqdm import tqdm
 import config as cfg# here user specific configuration is saved
 import ospath
 import sleep_utils
-import dateparser
-import datetime
 import shutil
 import pandas as pd
+import zlib
+import numpy as np
 
 
-# we take the files from nt1_1 and nt1_2, new data folders need to be added 
-# here. For now, only NT1 patiens are treated here.
-nt1_datafolder = ospath.join(cfg.data ,'NT1')
-nt1_1 = 'Z:/02_Daten Hephata-Klinik Treysa (33 Patienten mit NT1)/01_Daten'#cfg.nt1_1
-documents = cfg.documents
-files = ospath.list_files(nt1_1, exts='edf')
+#######################
+# Settings for datasets
+#######################
+
+target_folder = cfg.data  # leads to where the final data is stored
+datasets = cfg.datasets   # contains a dictionary with a mapping of datasetname:location leading to datasets
+documents = cfg.documents # contains the path to the nt1-hrv-documents folder in the dropbox
+
+#######################
+# Settings for Channel 
+# Renaming
+#######################
+ch_mapping = cfg.channel_mapping
+
+#%%#############
+## Actual code
+###############
 
 def codify(filename): 
-    number = sum([ord(c) for c in filename])
-    string = str(sum([ord(c)%2 for c in filename])) + str(sum([int(x) for x in str(len(filename))]))
-    return string + '_' + str(number)
+    """
+    given a filename, will create a equal distributed
+    hashed file number back to de-identify this filename
+    """
+    filename = filename.lower()
+    hashing = zlib.adler32(filename.encode('utf-8'))
+    np.random.seed(hashing)
+    rnd = '{:.8f}'.format(np.random.rand())[2:]
+    string = str(rnd)[:3] + '_' +  str(rnd)[3:]
+    return string
 
-
-if __name__ == '__main__':
+def anonymize_and_streamline(dataset_folder, target_folder, skipexist=True):
+    """
+    This function loads the edfs of a folder and
+    1. removes their birthdate and patient name
+    2. renames the channels to standardized channel names
+    3. saves the files in another folder with a non-identifyable 
+    4. verifies that the new files have the same content as the old
+    """
+    files = ospath.list_files(dataset_folder, exts='edf', subfolders=True)
     old_names = []
     new_names = []
-    new_names2 = []
-    for i,file in enumerate(tqdm(files)):
-        # we use a coding system to create (hopefully) unique new file names
-        # that do not depend on a index. this makes it easier to
-        # lateron add/remove files without mixing up the indices
-        filename = ospath.splitext(ospath.basename(file))[0]
-        new_name = 'NT_' + codify(filename)
-        new_name2 = 'NT1{:0>2}'.format(i+1)
-        
-        new_file = ospath.join(nt1_datafolder, new_name + '.edf')
-        
-        old_names.append(ospath.basename(file))
-        new_names.append(ospath.basename(new_file))
-        new_names2.append(new_name2)
-        
-        if ospath.exists(new_file): 
-            print ('New file extists already {}'.format(new_file))
-            continue
-        # assert not ospath.exists(new_file), 'New file extists already {}'.format(new_file)
-        header = sleep_utils.read_edf_header(file)
+    for i, old_file in enumerate(tqdm(files)):
+        if 'A9971' in old_file:continue
 
-        birthdate = header['birthdate']
-        if birthdate!='':
-            birthdate = dateparser.parse(birthdate)
-            birthdate = datetime.datetime(year=birthdate.year, month=birthdate.month, day=1)
-        
-        # patient name will be removed and replaced
-        # birthdate will be replaced with a non-identifiable version
-        to_remove  = ['patientname','birthdate']
-        new_values = ['xxx', birthdate]
-        sleep_utils.anonymize_edf(file, new_file, verify=True)
-        
-        old_names.append(ospath.basename(file))
-        new_names.append(ospath.basename(new_file))
-        new_names2.append(new_name2)
+        old_name = ospath.splitext(ospath.basename(old_file))[0]
+        new_name = codify(old_name)
+        new_file = ospath.join(target_folder, new_name + '.edf')
+        old_names.append(old_name)
+        new_names.append(new_name)  
+        print(old_file)
+
+        if ospath.exists(new_file) and skipexist: 
+            print ('New file extists already {}'.format(new_file))
+            pass
+        elif ospath.exists(new_file):
+            raise Exception('{} exists. no overwrite'.format(new_file))
+        else:
+        # anonymize
+            signals, signal_headers, header = sleep_utils.read_edf(old_file, 
+                                                                   digital=True,
+                                                                   verbose=False)
+            header['birthdate'] = ''
+            header['patientname'] = 'xxx'
+            
+            for shead in signal_headers:
+                ch = shead['label']
+                if ch in ch_mapping:
+                    ch = ch_mapping[ch]
+                    shead['label'] = ch
+            
     
-    csv_mapping = ospath.join(documents, 'mapping_{}.csv'.format(\
-                    ospath.basename(ospath.dirname(nt1_datafolder))))
+            sleep_utils.write_edf(new_file, signals, signal_headers, header, 
+                                  digital=True, correct=True)
+            sleep_utils.compare_edf(old_file, new_file, verbose=False)
+        
+        # also copy additional file information ie hypnograms and kubios files
+        old_dir = ospath.dirname(old_file)
+        add_files = ospath.list_files(old_dir, exts=['txt', 'dat', 'mat'])
+        copy_as_well = [file for file in add_files if old_name[:-2] in file]
+        for add_file in copy_as_well: 
+            ext = ospath.splitext(add_file)[-1]
+            new_additional_file = ospath.join(target_folder, new_name + ext)
+            try:
+                shutil.copy(add_file, new_additional_file)
+            except Exception as e:
+                print(e)
+            
+    return old_names, new_names
+        
+if __name__ == '__main__':
+    for name in datasets:
+        old_names, new_names = anonymize_and_streamline(datasets[name], target_folder=target_folder)
+        csv_file = ospath.join(documents, 'mapping_{}.csv'.format(name))
+        csv = pd.DataFrame(zip(old_names, new_names))
+        csv.to_csv(csv_file, header=None, index=False, sep=';')
+        
+        
+        
+        
+        
+        
     
-    d = {'Original Name': old_names, 'Previous Name':new_names2, 'New Name':new_names}
-    df = pd.DataFrame(d)
-    df.to_csv(csv_mapping, sep=';')
