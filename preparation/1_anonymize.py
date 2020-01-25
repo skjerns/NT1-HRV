@@ -53,7 +53,7 @@ def codify(filename):
     string = str(rnd)[:3] + '_' +  str(rnd)[3:]
     return string
 
-def anonymize_and_streamline(dataset_folder, target_folder, skipexist=True):
+def anonymize_and_streamline(dataset_folder, target_folder):
     """
     This function loads the edfs of a folder and
     1. removes their birthdate and patient name
@@ -67,15 +67,16 @@ def anonymize_and_streamline(dataset_folder, target_folder, skipexist=True):
     for i, old_file in enumerate(tqdm(files)):
         old_name = ospath.splitext(ospath.basename(old_file))[0]
         new_name = codify(old_name)
+        if new_name in new_names:
+            other_old = old_name[new_names.index(new_name)]
+            raise Exception('Hash collision, file is already in database. '\
+                            '{},{}->{}'.format(other_old, old_name, new_name))
         new_file = ospath.join(target_folder, new_name + '.edf')
         old_names.append(old_name)
         new_names.append(new_name)  
 
-        if ospath.exists(new_file) and skipexist: 
+        if ospath.exists(new_file): 
             print ('New file extists already {}'.format(new_file))
-            pass
-        elif ospath.exists(new_file):
-            raise Exception('{} exists. no overwrite'.format(new_file))
         else:
         # anonymize
             signals, signal_headers, header = sleep_utils.read_edf(old_file, 
