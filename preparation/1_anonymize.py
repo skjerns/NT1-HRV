@@ -53,7 +53,7 @@ def codify(filename):
     string = str(rnd)[:3] + '_' +  str(rnd)[3:]
     return string
 
-def anonymize_and_streamline(dataset_folder, target_folder):
+def anonymize_and_streamline(dataset_folder, target_folder, threads=True):
     """
     This function loads the edfs of a folder and
     1. removes their birthdate and patient name
