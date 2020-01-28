@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 import misc
 from joblib import delayed, Parallel
-
+import stimer
 
 #######################
 # Settings for datasets
@@ -54,7 +54,7 @@ def codify(filename):
     string = str(rnd)[:3] + '_' +  str(rnd)[3:]
     return string
 
-def anonymize_and_streamline(dataset_folder, target_folder):
+def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     """
     This function loads the edfs of a folder and
     1. removes their birthdate and patient name
@@ -97,11 +97,10 @@ def anonymize_and_streamline(dataset_folder, target_folder):
                     ch = ch_mapping[ch]
                     shead['label'] = ch
             
-    
             sleep_utils.write_edf(new_file, signals, signal_headers, header, 
                                   digital=True, correct=True)
-            sleep_utils.compare_edf(old_file, new_file, verbose=False)
-        
+            sleep_utils.compare_edf(old_file, new_file, verbose=False, threading=False)
+            
         # also copy additional file information ie hypnograms and kubios files
         old_dir = ospath.dirname(old_file)
         add_files = ospath.list_files(old_dir, exts=['txt', 'dat', 'mat'])
@@ -109,6 +108,7 @@ def anonymize_and_streamline(dataset_folder, target_folder):
         for add_file in copy_as_well: 
             ext = ospath.splitext(add_file)[-1]
             new_additional_file = ospath.join(target_folder, new_name + ext)
+            if ospath.exists(new_additional_file):continue
             try:
                 shutil.copy(add_file, new_additional_file)
             except Exception as e:
@@ -117,17 +117,15 @@ def anonymize_and_streamline(dataset_folder, target_folder):
     return old_names, new_names
         
 if __name__ == '__main__':
-    
-    results = Parallel(n_jobs=2, backend='threading')\
+    print('running in parallel. if you don\'t see output, start with python.exe')
+    results = Parallel(n_jobs=4, backend='loky')\
     (delayed(anonymize_and_streamline)(dataset, target_folder=target_folder) for dataset in datasets.values())
     i=0
     for old_names, new_names in results:
         csv_file = ospath.join(documents, 'mapping_{}.csv'.format(list(datasets.keys())[i]))
         csv = pd.DataFrame(zip(old_names, new_names))
         csv.to_csv(csv_file, header=None, index=False, sep=';')
-        results = Parallel(cfg.multiprocessing)
         i+=1
-        
         
         
         

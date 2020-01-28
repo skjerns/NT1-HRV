@@ -10,11 +10,18 @@ import warnings
 import ospath #pip install https://github.com/skjerns/skjerns-utils
 import numpy as np
 import pyedflib #pip install https://github.com/skjerns/pyedflib/archive/custom_version.zip
+import time
 from tqdm import tqdm
 from datetime import datetime
 import dateparser
 import logging
 from joblib import Parallel, delayed
+import matplotlib.pyplot as plt
+from lspopt import spectrogram_lspopt
+import matplotlib
+
+
+
 def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto', exp_seconds=None):
     """
     reads a hypnogram file as created by VisBrain or as CSV type 
@@ -273,7 +280,8 @@ def make_signal_headers(list_of_labels, dimension='uV', sample_rate=256,
     return signal_headers
 
 
-def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
+def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True,
+             dtype=None):
     """
     Reading EDF+/BDF data with pyedflib.
     Will load the edf and return the signals, the headers of the signals 
@@ -283,6 +291,7 @@ def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
     :param edf_file: link to an edf file
     :param ch_nrs: The numbers of channels to read (optional)
     :param ch_names: The names of channels to read (optional)
+    :param dtype: The dtype of the signals. If dtype=None, smallest possible dtype will be selected
     :returns: signals, signal_headers, header
     """      
     assert os.path.exists(edf_file), 'file {} does not exist'.format(edf_file)
@@ -324,6 +333,14 @@ def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
         for i,c in enumerate(tqdm(ch_nrs, desc='Reading Channels', 
                                   disable=not verbose)):
             signal = f.readSignal(c, digital=digital)
+            smax = max(np.abs(np.min(signal)), np.max(signal))
+            if digital: 
+                if   smax<=128: dtype = np.int8
+                elif smax<=32768:dtype = np.int16
+                else: dtype = np.int32
+            else:
+                dtype = np.int32
+            signal = np.array(signal, dtype=dtype)
             signals.append(signal)
 
         # we can only return a np.array if all signals have the same samplefreq           
@@ -516,22 +533,21 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None,
     write_edf(edf_target, signals, signal_headers, header, digital=True)
     return edf_target
 
-def compare_edf(edf_file1, edf_file2, verbose=True):
+def compare_edf(edf_file1, edf_file2, verbose=True, threading=True):
     """
     Loads two edf files and checks whether the values contained in 
     them are the same. Does not check the header data
     """
     if verbose: print('verifying data')
-    files = [(edf_file1, True), (edf_file2, True), 
-             (edf_file1, False), (edf_file2, False)]
-    results = Parallel(n_jobs=4, backend='loky')(delayed(read_edf)\
+    files = [(edf_file1, True), (edf_file2, True)]
+    # di
+    backend = 'loky' if threading else 'sequential'
+    results = Parallel(n_jobs=2, backend=backend)(delayed(read_edf)\
              (file, digital=digital, verbose=False) for file, \
              digital in tqdm(files, disable=not verbose))  
 
     signals1, signal_headers1, _ =  results[0]
     signals2, signal_headers2, _ =  results[1]
-    signals3, signal_headers3, _ =  results[0]
-    signals4, signal_headers4, _ =  results[1]
 
     for i, sigs in enumerate(zip(signals1, signals2)):
         s1, s2 = sigs
@@ -541,21 +557,35 @@ def compare_edf(edf_file1, edf_file2, verbose=True):
             ' and {} for ch {}: {} are not the same'.format(
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
                 signal_headers2[i]['label'])
+        gc.collect()
 
-    for i, sigs in enumerate(zip(signals3, signals4)):
+    dmin1, dmax1 = signal_headers1[i]['digital_min'], signal_headers1[i]['digital_max']
+    pmin1, pmax1 = signal_headers1[i]['physical_min'], signal_headers1[i]['physical_max']
+    dmin2, dmax2 = signal_headers2[i]['digital_min'], signal_headers2[i]['digital_max']
+    pmin2, pmax2 = signal_headers2[i]['physical_min'], signal_headers2[i]['physical_max']
+
+    for i, sigs in enumerate(zip(signals1, signals2)):
         s1, s2 = sigs
+     
+        # convert to physical values, no need to load all data again
+        s1 = dig2phys(s1, dmin1, dmax1, pmin1, pmax1)
+        s2 = dig2phys(s2, dmin2, dmax2, pmin2, pmax2)
+        
+        # now we can remove the signals from the list to save memory
+        signals1[i] = None
+        signals2[i] = None
+        
         # compare absolutes in case of inverted signals
         s1 = np.abs(s1)
         s2 = np.abs(s2)
-        dmin, dmax = signal_headers3[i]['digital_min'], signal_headers3[i]['digital_max']
-        pmin, pmax = signal_headers3[i]['physical_min'], signal_headers3[i]['physical_max']
-        min_dist = np.abs(dig2phys(1, dmin, dmax, pmin, pmax))
+        
+        min_dist = np.abs(dig2phys(1, dmin1, dmax1, pmin1, pmax1))
         close =  np.mean(np.isclose(s1, s2, atol=min_dist))
         assert close>0.99, 'Error, physical values of {}'\
             ' and {} for ch {}: {} are not the same: {:.3f}'.format(
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
                 signal_headers2[i]['label'], close)
-    gc.collect()
+        gc.collect()
     return True
 
 
@@ -650,7 +680,187 @@ def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=False)
     
     
     
+def specgram_multitaper(data, sfreq, sperseg=30, perc_overlap=1/3,
+                        lfreq=0, ufreq=40, show_plot=True, ax=None):
+    """
+    Display EEG spectogram using a multitaper from 0-30 Hz
 
+    :param data: the data to visualize, should be of rank 1
+    :param sfreq: the sampling frequency of the data
+    :param sperseg: number of seconds to use per FFT
+    :param noverlap: percentage of overlap between segments
+    :param lfreq: Lower frequency to display
+    :param ufreq: Upper frequency to display
+    :param show_plot: If false, only the mesh is returned, but not Figure opened
+    :param ax: An axis where to plot. Else will create a new Figure
+    :returns: the resulting mesh as it would be plotted
+    """
+    
+    if ax is None:
+        plt.figure()
+        ax=plt.subplot(1,1,1)
+        
+    assert isinstance(show_plot, bool), 'show_plot must be boolean'
+    nperseg = int(round(sperseg * sfreq))
+    overlap = int(round(perc_overlap * nperseg))
+
+    f_range = [lfreq, ufreq]
+
+    freq, xy, mesh = spectrogram_lspopt(data, sfreq, nperseg=nperseg,
+                                       noverlap=overlap, c_parameter=20.)
+    if mesh.ndim==3: mesh = mesh.squeeze().T
+    mesh = 20 * np.log10(mesh+0.0000001)
+    idx_notfinite = np.isfinite(mesh)==False
+    mesh[idx_notfinite] = np.min(mesh[~idx_notfinite])
+
+    f_range[1] = np.abs(freq - ufreq).argmin()
+    sls = slice(f_range[0], f_range[1] + 1)
+    freq = freq[sls]
+
+    mesh = mesh[sls, :]
+    mesh = mesh - mesh.min()
+    mesh = mesh / mesh.max()
+    if show_plot:
+        ax.imshow(np.flipud(mesh), aspect='auto')
+        formatter = matplotlib.ticker.FuncFormatter(lambda s, x: time.strftime('%H:%M', time.gmtime(int(s*(sperseg-overlap/sfreq)))))
+        ax.xaxis.set_major_formatter(formatter)
+        if xy[-1]<3600*7: # 7 hours is half hourly
+            tick_distance = max(np.argmax(xy>sperseg*60),5) #plot per half hour
+        else: # more than 7 hours hourly ticks
+            tick_distance = np.argmax(xy>sperseg*60)*2 #plot per half hour
+        two_hz_pos = np.argmax(freq>1.99999999)
+        ytick_pos = np.arange(0, len(freq), two_hz_pos)
+        ax.set_xticks(np.arange(0, mesh.shape[1], tick_distance))
+        ax.set_yticks(ytick_pos)
+        ax.set_yticklabels(np.arange(ufreq, lfreq-1, -2))
+        ax.set_xlabel('Time after onset')
+        ax.set_ylabel('Frequency')
+        warnings.filterwarnings("ignore", message='This figure includes Axes that are not compatible')
+        plt.tight_layout()
+    return mesh
+
+
+def plot_hypnogram(stages, labeldict=None, title=None, epochlen=30, ax=None,
+                   verbose=True, xlabel=True, ylabel=True, **kwargs,):
+    """
+    Plot a hypnogram, the flexible way.
+
+    A labeldict should give a mapping which integer belongs to which class
+    E.g labeldict = {0: 'Wake', 4:'REM', 1:'S1', 2:'S2', 3:'SWS'}
+    or {0:'Wake', 1:'Sleep', 2:'Sleep', 3:'Sleep', 4:'Sleep', 5:'Artefact'}
+
+    The order of the labels on the plot will be determined by the order of the dictionary.
+
+    E.g.  {0:'Wake', 1:'REM', 2:'NREM'}  will plot Wake on top, then REM, then NREM
+    while {0:'Wake', 2:'NREM', 1:'NREM'} will plot Wake on top, then NREM, then REM
+
+    This dictionary can be infered automatically from the numbers that are present
+    in the hypnogram but this functionality does not cover all cases.
+
+    :param stages: An array with different stages annotated as integers
+    :param labeldict: An enumeration of labels that correspond to the integers of stages
+    :param title: Title of the window
+    :param epochlen: How many seconds is one epoch in this annotation
+    :param ax: the axis in which we plot
+    :param verbose: Print stuff or not.
+    :param xlabel: Display xlabel ('Time after record start')
+    :param ylabel: Display ylabel ('Sleep Stage')
+    :param kwargs: additional arguments passed to plt.plot(), e.g. c='red'
+    """
+
+
+    if labeldict is None:
+        if np.max(stages)==1 and np.min(stages)==0:
+            labeldict = {0:'W', 1:'S'}
+        elif np.max(stages)==2 and np.min(stages)==0:
+            labeldict = {0:'W', 2:'REM', 1:'NREM'}
+        elif np.max(stages)==4 and np.min(stages)==0:
+            if 1 in stages:
+                labeldict = {0:'W', 4:'REM', 1:'S1', 2:'S2', 3:'SWS', }
+            else:
+                labeldict = {0:'W', 4:'REM', 2:'S2', 3:'SWS'}
+        else:
+            if verbose: print('could not detect labels?')
+            if 1 in stages:
+                labeldict = {0:'W', 4:'REM', 1:'S1', 2:'S2', 3:'SWS', 5:'A'}
+            else:
+                labeldict = {0:'W', 4:'REM', 2:'S2', 3:'SWS', 5:'A'}
+        if -1 in stages:
+            labeldict['ARTEFACT'] = -1
+        if verbose: print('Assuming {}'.format(labeldict))
+
+    # check if all stages that are in the hypnogram have a corresponding label in the dict
+    for stage in np.unique(stages):
+        if not stage in labeldict:
+            print('WARNING: {} is in stages, but not in labeldict, stage will be ??'.format(stage))
+
+    # create the label order
+    labels = [labeldict[l] for l in labeldict]
+    labels = sorted(set(labels), key=labels.index)
+
+    # we iterate through the stages and fetch the label for this stage
+    # then we append the position on the plot of this stage via the labels-dict
+    x = []
+    y = []
+    rem_start = []
+    rem_end   = []
+    for i in np.arange(len(stages)):
+        s = stages[i]
+        label = labeldict.get(s)
+        if label is None:
+            p = 99
+            if '??' not in labels: labels.append('??')
+        else :
+            p = -labels.index(label)
+        
+        # make some red line markers for REM, mark beginning and end of REM
+        if 'REM' in labels:
+            if label=='REM' and len(rem_start)==len(rem_end):
+                    rem_start.append(i-2)
+            elif label!='REM' and len(rem_start)>len(rem_end):
+                rem_end.append(i-1)
+        if label=='REM' and i==len(stages)-1:
+           rem_end.append(i+1)
+            
+        if i!=0:
+            y.append(p)
+            x.append(i-1)
+        y.append(p)
+        x.append(i)
+    
+    assert len(rem_start)==len(rem_end), 'Something went wrong in REM length calculation'
+
+    x = np.array(x)*epochlen
+    y = np.array(y)
+    y[y==99] = y.min()-1 # make sure Unknown stage is plotted below all else
+
+    if ax is None:
+        plt.figure()
+        ax = plt.gca()
+    formatter = matplotlib.ticker.FuncFormatter(lambda s, x: time.strftime('%H:%M', time.gmtime(s)))
+    
+    ax.plot(x,y, **kwargs)
+    ax.set_xlim(0, x[-1])
+    ax.xaxis.set_major_formatter(formatter)
+    
+    ax.set_yticks(np.arange(len(np.unique(labels)))*-1)
+    ax.set_yticklabels(labels)
+    ax.set_xticks(np.arange(0,x[-1],3600))
+    if xlabel: plt.xlabel('Time after recording start')
+    if ylabel: plt.ylabel('Sleep Stage')
+    if title is not None:
+        plt.title(title)
+
+    try:
+        warnings.filterwarnings("ignore", message='This figure includes Axes that are not compatible')
+        plt.tight_layout()
+    except Exception: pass
+
+    # plot REM in RED here
+    for start, end in zip(rem_start, rem_end):
+        height = -labels.index('REM')
+        ax.hlines(height, start*epochlen, end*epochlen, color='r',
+                   linewidth=4, zorder=99)
 
 
 

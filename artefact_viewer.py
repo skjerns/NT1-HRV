@@ -47,7 +47,7 @@ class ECGPlotter():
                 mat_file = misc.choose_file(dir, exts='mat', 
                         title='Select the corresponding MAT file by Kubios')
             
-        p = sleep.Patient(edf_file, channel='ECG I')
+        p = sleep.Patient(edf_file, channel='ECG')
         data = p.data
         sfreq = p.sfreq    
         self.data = data
@@ -55,7 +55,7 @@ class ECGPlotter():
         
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
-            rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
+            rrs = mat['Res']['HRV']['Data']['T_RRi'] - p.starttime
             art = mat['Res']['HRV']['TimeVar']['Artifacts']
         except:
             logging.error('Mat file not found.')            
