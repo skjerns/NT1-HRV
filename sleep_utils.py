@@ -446,7 +446,7 @@ def read_edf_header(edf_file):
 
 
 def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None,
-                  verify=False):
+                  verify=False, overwrite=False):
     """
     Remove channels from an edf file using pyedflib.
     Save the file as edf_target. 
@@ -480,8 +480,11 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None,
 
     if edf_target is None: 
         edf_target = os.path.splitext(edf_source)[0] + '_dropped.edf'
-    if os.path.exists(edf_target): 
+    if os.path.exists(edf_target) and overwrite: 
         warnings.warn('Target file will be overwritten')
+    elif os.path.exists(edf_target):
+        warnings.warn('Exists. Target file will not be overwritten')
+        return
 
     ch_names = read_edf_header(edf_source)['channels']
     # convert to all lowercase for compatibility
@@ -508,7 +511,7 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None,
 
     signals, signal_headers, header = read_edf(edf_source, 
                                                ch_nrs=load_channels, 
-                                               digital=True)
+                                               digital=True, verbose=False)
 
     write_edf(edf_target, signals, signal_headers, header, digital=True)
     return edf_target

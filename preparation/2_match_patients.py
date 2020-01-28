@@ -18,6 +18,7 @@ def read_subjects(file):
     entry_dict = dict({p[0].strip():{'age':p[2],'gender':p[1].strip()} for p in entries})
     return entry_dict
     
+
 def read_csv(file):
     with open(file, 'r') as f:
       entries = f.read().strip()
@@ -25,6 +26,7 @@ def read_csv(file):
     entries = [p.split(';') for p in entries]
     entry_dict = dict({p[0].strip():p[1].strip() for p in entries})
     return entry_dict
+
 
 if __name__ == '__main__':  
     documents = cfg.documents

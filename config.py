@@ -125,6 +125,9 @@ channel_mapping = { # this is the mapping to streamline channel names of differe
            'Akku':'Akku'
            }
 
+ecg_channel = 'ECG I'
+max_age_diff = 5 # maximum age difference to make a matching
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # USER SPECIFIC CONFIGURATION
 ###############################
@@ -136,15 +139,26 @@ home = os.path.expanduser('~')
 dropbox = get_dropbox_location()
 if dropbox:
     documents = ospath.join(dropbox, 'nt1-hrv-documents')
+    matching = ospath.join(documents, 'matching.csv')
+    edfs_invert = ospath.join(documents, 'edfs_invert.csv')
+    edfs_discard = ospath.join(documents, 'edfs_discard.csv')
 if username == 'nd269' and host=='ess-donatra':
     USER_VAR = 'test123'
     
-elif username == 'simon' and host=='desktop-tdifgpi':
+elif username == 'simon' and host=='desktop-skjerns':
     USER_VAR = 'test456'
     
 else:
-    print('Username {} on host{}({}) has no configuration.\n'.format(username,host,system) + \
+    print('Username {} on host {} with {} has no configuration.\n'.format(username,host,system) + \
     'please set user specific information in config.py')
+
+
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# USER SPECIFIC CONFIGURATION
+###############################
     
 try: 
     sys.path.append(documents)
@@ -155,8 +169,5 @@ except:
           'another script user_variables.py where you can set privacy' \
           'sensitive stuff that should not land on github such as dataset '\
           'paths.')
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# USER SPECIFIC CONFIGURATION
-###############################
-    
+
 root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''

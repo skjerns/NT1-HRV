@@ -11,6 +11,47 @@ from collections import OrderedDict
 from tkinter import simpledialog
 
 
+
+def write_csv(csv_file, data_list, sep=';'):
+    """
+    Parameters
+    ----------
+    csv_file : str
+        a filename.
+    data_list : list
+        a list of list. each list is a new line, each list of list is an entry there.
+    sep : str, optional
+        the separator to be used. The default is ';'.
+
+    Returns
+    -------
+    lines : TYPE
+        DESCRIPTION.
+
+    """
+    with open(csv_file, 'w') as f:
+        string = '\n'.join([';'.join(line) for line in data_list])
+        f.write(string)
+    return True
+
+def read_csv(csv_file, sep=';'):
+    """
+    simply load an csv file with a separator and newline as \\n
+    comments are annotated as starting with # and are removed
+    empty lines are removed
+    
+    :param csv_file: a csv file to load
+    :param sep: set a different separator. this is language specific
+    """
+    with open(csv_file, 'r') as f:
+        content = f.read()
+        lines = content.split('\n')
+        lines = [line for line in lines if not line.startswith('#')]
+        lines = [line.strip() for line in lines]
+        lines = [line for line in lines if line!='']
+        lines = [line.split(';') for line in lines]
+    return lines
+
 def choose_file(default_dir=None,exts='txt', title='Choose file'):
     """
     Open a file chooser dialoge with tkinter.

@@ -47,7 +47,9 @@ The resulting list of matchings will be stored at `dropbox/nt1-hrv-documents/mat
 
 As NT1-set1 has no scoring, we need to separate all matches with age difference maximum 5 years into different folders.
 
-The script `3_copy_set1_set2.py` will do this. It will create folder 'set1' and 'set2' under `%cfg.data%/setX` and copy each patient file and it's corresponding control to this folder. Remark: no additional files (previous scoring, kubios files, artefact annotations) are copied
+The script `3_copy_set1_set2.py` will do this. It will create folder 'set1' and 'set2' under `%cfg.data%/setX/*` and copy each patient file and it's corresponding control to this folder. Remark: no additional files (previous scoring, kubios files, artefact annotations) are copied.
+
+Additionally it will copy all non-matched files into `%cfg.data%/setX/not_matched/*`
 
 
 

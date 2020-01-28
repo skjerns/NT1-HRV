@@ -119,7 +119,7 @@ class Patient():
         return s
     
     def __init__(self, edf_file=None, hypno_file=None, resample=None,
-                 verbose=True, channel=None):
+                 verbose=True, channel=None, ch_type='EEG'):
         """
         Loads the data of one Patient (ie. an EDF file), and its corresponding
         hypnogram annotation. The channels to be loaded can be specified.
@@ -137,6 +137,7 @@ class Patient():
         self.raw_hypno = np.zeros(1)
         self.epochs = np.empty(1) # here our extracted epochs will be stored
         self.epochlen = None # epochlen defaults to 30
+        self.ch_type = ch_type
 
         
         self.hypno = None    # this has the converted hypnogram inside
@@ -232,7 +233,7 @@ class Patient():
         self.preprocessed = False
       
         hours = len(self.data)//self.sfreq/60/60
-        log.info('Loaded {:.1f} hours of EEG with sfreq={}'.format(hours, self.sfreq))
+        log.info('Loaded {:.1f} hours of {} with sfreq={}'.format(hours, self.ch_type, self.sfreq))
         
         return self
     
@@ -281,8 +282,7 @@ class Patient():
         return self
     
     
-    @staticmethod
-    def _guess_channel_name(channels=None):
+    def _guess_channel_name(self, channels=None):
         """
         Try to guess an appropriate EEG channel to load from the file.
         Will choose in the following order of fit: F4/F3/FP1/Fp2/C3/C4/ any EEG
@@ -291,8 +291,14 @@ class Patient():
         :returns: argpos of the best fitting channel name
                   returns 0 in case of failure
         """
+        if self.ch_type == 'EEG':
+            keywords = ['F4', 'F3', 'FP1', 'FP2', 'C3' , 'C4', 'EEG']
+        elif self.ch_type == 'ECG':
+            keywords = ['ECG', 'EKG']
+        else:
+            log.error('Invalid ch_type, select from [ECG, EEG]')
+
         channels = [ch.upper() for ch in channels]
-        keywords = ['F4', 'F3', 'FP1', 'FP2', 'C3' , 'C4', 'EEG']
         for k in keywords:
             matches = [k in ch for ch in channels]
             if any(matches):

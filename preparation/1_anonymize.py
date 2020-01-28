@@ -15,8 +15,9 @@ import ospath
 import sleep_utils
 import shutil
 import pandas as pd
-import zlib
 import numpy as np
+import misc
+from joblib import delayed, Parallel
 
 
 #######################
@@ -53,7 +54,7 @@ def codify(filename):
     string = str(rnd)[:3] + '_' +  str(rnd)[3:]
     return string
 
-def anonymize_and_streamline(dataset_folder, target_folder, threads=True):
+def anonymize_and_streamline(dataset_folder, target_folder):
     """
     This function loads the edfs of a folder and
     1. removes their birthdate and patient name
@@ -61,6 +62,9 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=True):
     3. saves the files in another folder with a non-identifyable 
     4. verifies that the new files have the same content as the old
     """
+    to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard)]
+    # to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
+
     files = ospath.list_files(dataset_folder, exts='edf', subfolders=True)
     old_names = []
     new_names = []
@@ -77,6 +81,8 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=True):
 
         if ospath.exists(new_file): 
             print ('New file extists already {}'.format(new_file))
+        elif old_name in to_discard:
+            print('EDF is marked as corrupt and will be discarded')
         else:
         # anonymize
             signals, signal_headers, header = sleep_utils.read_edf(old_file, 
@@ -111,13 +117,16 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=True):
     return old_names, new_names
         
 if __name__ == '__main__':
-    for name in datasets:
-        old_names, new_names = anonymize_and_streamline(datasets[name], target_folder=target_folder)
-        csv_file = ospath.join(documents, 'mapping_{}.csv'.format(name))
+    
+    results = Parallel(n_jobs=2, backend='threading')\
+    (delayed(anonymize_and_streamline)(dataset, target_folder=target_folder) for dataset in datasets.values())
+    i=0
+    for old_names, new_names in results:
+        csv_file = ospath.join(documents, 'mapping_{}.csv'.format(list(datasets.keys())[i]))
         csv = pd.DataFrame(zip(old_names, new_names))
         csv.to_csv(csv_file, header=None, index=False, sep=';')
-        
-        
+        results = Parallel(cfg.multiprocessing)
+        i+=1
         
         
         
