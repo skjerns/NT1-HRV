@@ -350,6 +350,7 @@ def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True,
             dtype = np.int if digital else np.float
             signals = np.array(signals, dtype=dtype)
     del f
+    gc.collect()
     assert len(signals)==len(signal_headers), 'Something went wrong, lengths'\
                                          ' of headers is not length of signals'
     return  signals, signal_headers, header

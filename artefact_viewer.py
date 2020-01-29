@@ -47,7 +47,7 @@ class ECGPlotter():
                 mat_file = misc.choose_file(dir, exts='mat', 
                         title='Select the corresponding MAT file by Kubios')
             
-        p = sleep.Patient(edf_file, channel='ECG')
+        p = sleep.Patient(edf_file, channel='ECG I')
         data = p.data
         sfreq = p.sfreq    
         self.data = data
