@@ -75,14 +75,17 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
             other_old = old_name[new_names.index(new_name)]
             raise Exception('Hash collision, file is already in database. '\
                             '{},{}->{}'.format(other_old, old_name, new_name))
+        elif old_name in to_discard:
+            print('EDF is marked as corrupt and will be discarded')
+            continue
+        
         new_file = ospath.join(target_folder, new_name + '.edf')
         old_names.append(old_name)
         new_names.append(new_name)  
 
         if ospath.exists(new_file): 
             print ('New file extists already {}'.format(new_file))
-        elif old_name in to_discard:
-            print('EDF is marked as corrupt and will be discarded')
+
         else:
         # anonymize
             signals, signal_headers, header = sleep_utils.read_edf(old_file, 

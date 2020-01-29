@@ -209,7 +209,7 @@ class ECGPlotter():
             print('unknown key {}'.format(event.key))
         if self.page<0:
             self.page=self.max_page
-        elif self.page>=self.max_page:
+        elif self.page>self.max_page:
             self.page=0
         self.update()
         
