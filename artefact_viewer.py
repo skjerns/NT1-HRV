@@ -55,7 +55,7 @@ class ECGPlotter():
         
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
-            rrs = mat['Res']['HRV']['Data']['T_RRi'] - p.starttime
+            rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
             art = mat['Res']['HRV']['TimeVar']['Artifacts']
         except:
             logging.error('Mat file not found.')            
