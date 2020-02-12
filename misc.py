@@ -5,12 +5,28 @@ Created on Wed Dec 18 12:46:37 2019
 @author: Simon
 """
 import os
+import numpy as np
 from tkinter import  Tk
 from tkinter.filedialog import askopenfilename
 from collections import OrderedDict
 from tkinter import simpledialog
+import hashlib
 
-
+def codify(filename): 
+    """
+    given a filename, will create a equal distributed
+    hashed file number back to de-identify this filename
+    """
+    filename = filename.lower()
+    m = hashlib.md5()
+    m.update(filename.encode('utf-8'))
+    hashing = m.hexdigest()
+    hashing = int(''.join([str(ord(c)) for c in hashing]))
+    hashing = hashing%(2**32-1) # max seed number for numpy
+    np.random.seed(hashing)
+    rnd = '{:.8f}'.format(np.random.rand())[2:]
+    string = str(rnd)[:3] + '_' +  str(rnd)[3:]
+    return string
 
 def write_csv(csv_file, data_list, sep=';'):
     """

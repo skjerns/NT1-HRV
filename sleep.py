@@ -119,7 +119,7 @@ class Patient():
         return s
     
     def __init__(self, edf_file=None, hypno_file=None, resample=None,
-                 verbose=True, channel=None, ch_type='EEG'):
+                 verbose=True, channel=None, ch_type='ECG'):
         """
         Loads the data of one Patient (ie. an EDF file), and its corresponding
         hypnogram annotation. The channels to be loaded can be specified.

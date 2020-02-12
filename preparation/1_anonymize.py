@@ -6,7 +6,6 @@ Created on Wed Nov 13 16:24:17 2019
 This script removes all patient related information from an edf
 and copies them to a new location, for n
 """
-import hashlib
 import sys
 sys.path.append("..") # append to get access to upper level modules
 from tqdm import tqdm
@@ -15,10 +14,9 @@ import ospath
 import sleep_utils
 import shutil
 import pandas as pd
-import numpy as np
 import misc
+from misc import codify
 from joblib import delayed, Parallel
-import stimer
 
 #######################
 # Settings for datasets
@@ -38,21 +36,7 @@ ch_mapping = cfg.channel_mapping
 ## Actual code
 ###############
 
-def codify(filename): 
-    """
-    given a filename, will create a equal distributed
-    hashed file number back to de-identify this filename
-    """
-    filename = filename.lower()
-    m = hashlib.md5()
-    m.update(filename.encode('utf-8'))
-    hashing = m.hexdigest()
-    hashing = int(''.join([str(ord(c)) for c in hashing]))
-    hashing = hashing%(2**32-1) # max seed number for numpy
-    np.random.seed(hashing)
-    rnd = '{:.8f}'.format(np.random.rand())[2:]
-    string = str(rnd)[:3] + '_' +  str(rnd)[3:]
-    return string
+
 
 def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     """
@@ -63,7 +47,7 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     4. verifies that the new files have the same content as the old
     """
     to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard)]
-    # to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
+    to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
 
     files = ospath.list_files(dataset_folder, exts='edf', subfolders=True)
     old_names = []
@@ -93,17 +77,24 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
                                                                    verbose=False)
             header['birthdate'] = ''
             header['patientname'] = 'xxx'
-            
+
             for shead in signal_headers:
                 ch = shead['label']
                 if ch in ch_mapping:
                     ch = ch_mapping[ch]
                     shead['label'] = ch
-            
+                    
+
+            if old_name in to_invert:
+                for i,sig in enumerate(signals):
+                    label = signal_headers[i]['label'].lower()
+                    if label == cfg.ecg_channel.lower():
+                        signals[i] = -sig
+
             sleep_utils.write_edf(new_file, signals, signal_headers, header, 
                                   digital=True, correct=True)
             sleep_utils.compare_edf(old_file, new_file, verbose=False, threading=False)
-            
+
         # also copy additional file information ie hypnograms and kubios files
         old_dir = ospath.dirname(old_file)
         add_files = ospath.list_files(old_dir, exts=['txt', 'dat', 'mat'])
@@ -129,6 +120,18 @@ if __name__ == '__main__':
         csv = pd.DataFrame(zip(old_names, new_names))
         csv.to_csv(csv_file, header=None, index=False, sep=';')
         i+=1
+        
+    # save as well in one large file
+    all_old_names = []
+    all_new_names = []
+    for old_names, new_names in results:
+        all_old_names.extend(old_names)
+        all_new_names.extend(new_names)
+    csv_file = ospath.join(documents, 'mapping_all.csv')
+    csv = pd.DataFrame(zip(all_old_names, all_new_names))
+    csv.to_csv(csv_file, header=None, index=False, sep=';')
+
+        
         
         
         

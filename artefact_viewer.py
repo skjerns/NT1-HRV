@@ -41,6 +41,8 @@ class ECGPlotter():
     def _load(self, edf_file, mat_file=None):
         if mat_file is None:
             mat_file = edf_file[:-4] + '_hrv.mat'
+            if not os.path.exists(mat_file): # maybe it's not with underscore
+                mat_file=mat_file.replace('_hrv','')
             if not os.path.exists(mat_file):
                 print('{} not found'.format(mat_file))
                 dir = os.path.dirname(mat_file)
