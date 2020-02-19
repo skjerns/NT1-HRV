@@ -28,6 +28,8 @@ def codify(filename):
     string = str(rnd)[:3] + '_' +  str(rnd)[3:]
     return string
 
+
+
 def write_csv(csv_file, data_list, sep=';'):
     """
     Parameters
@@ -65,7 +67,7 @@ def read_csv(csv_file, sep=';'):
         lines = [line for line in lines if not line.startswith('#')]
         lines = [line.strip() for line in lines]
         lines = [line for line in lines if line!='']
-        lines = [line.split(';') for line in lines]
+        lines = [[el.strip() for el in line.split(';')] for line in lines]
     return lines
 
 def choose_file(default_dir=None,exts='txt', title='Choose file'):

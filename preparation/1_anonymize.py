@@ -6,7 +6,7 @@ Created on Wed Nov 13 16:24:17 2019
 This script removes all patient related information from an edf
 and copies them to a new location, for n
 """
-import sys
+import sys,os
 sys.path.append("..") # append to get access to upper level modules
 from tqdm import tqdm
 import config as cfg# here user specific configuration is saved
@@ -46,15 +46,19 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     3. saves the files in another folder with a non-identifyable 
     4. verifies that the new files have the same content as the old
     """
-    to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard)]
+    to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']
     to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
 
     files = ospath.list_files(dataset_folder, exts='edf', subfolders=True)
     old_names = []
     new_names = []
-    for i, old_file in enumerate(tqdm(files)):
+    import stimer
+    for i, old_file in enumerate(tqdm(files, leave=True)):
+        stimer.start()
         old_name = ospath.splitext(ospath.basename(old_file))[0]
         new_name = codify(old_name)
+        # we use a temporary file to write and then rename it
+        tmp_name = ospath.join(ospath.dirname(old_file), 'tmp')
         if new_name in new_names:
             other_old = old_name[new_names.index(new_name)]
             raise Exception('Hash collision, file is already in database. '\
@@ -72,6 +76,7 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
 
         else:
         # anonymize
+            print ('Writing {}'.format(new_file))
             signals, signal_headers, header = sleep_utils.read_edf(old_file, 
                                                                    digital=True,
                                                                    verbose=False)
@@ -90,10 +95,16 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
                     label = signal_headers[i]['label'].lower()
                     if label == cfg.ecg_channel.lower():
                         signals[i] = -sig
-
-            sleep_utils.write_edf(new_file, signals, signal_headers, header, 
+            
+            # we write to tmp to prevent that corrupted files are not detected later
+            print ('Writing tmp for {}'.format(new_file))
+            sleep_utils.write_edf(tmp_name, signals, signal_headers, header, 
                                   digital=True, correct=True)
-            sleep_utils.compare_edf(old_file, new_file, verbose=False, threading=False)
+            print ('Verifying tmp for {}'.format(new_file))
+            sleep_utils.compare_edf(old_file, tmp_name, verbose=False, threading=False)
+            
+            # now we rename the tmp file.
+            shutil.move(tmp_name, new_file)
 
         # also copy additional file information ie hypnograms and kubios files
         old_dir = ospath.dirname(old_file)
@@ -107,7 +118,7 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
                 shutil.copy(add_file, new_additional_file)
             except Exception as e:
                 print(e)
-            
+        stimer.stop()
     return old_names, new_names
         
 if __name__ == '__main__':

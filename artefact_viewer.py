@@ -17,7 +17,7 @@ mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.INFO)
 #%%
    
-
+a=4
 
 class ECGPlotter():
     
@@ -292,3 +292,6 @@ if __name__=='__main__':
                       nrows=nrows, ncols=ncols)
     plt.show(block=True)
 
+
+
+# %%

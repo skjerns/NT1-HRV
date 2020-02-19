@@ -19,6 +19,7 @@ import getpass
 import platform
 from pathlib import Path
 
+
 class AttrDict(dict):
     """
     A dictionary that allows access via attributes
@@ -28,11 +29,13 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
+
 def get_dropbox_location():
     try:
         json_path = (Path(os.getenv('LOCALAPPDATA'))/'Dropbox'/'info.json').resolve()
     except FileNotFoundError:
-        try:json_path = (Path(os.getenv('APPDATA'))/'Dropbox'/'info.json').resolve()
+        try:
+            json_path = (Path(os.getenv('APPDATA'))/'Dropbox'/'info.json').resolve()
         except:
             print('dropbox does not seem to be installed')
             return False
@@ -47,7 +50,7 @@ def get_dropbox_location():
 # GENERAL CONFIGURATION
 ###############################
 
-channel_mapping = { # this is the mapping to streamline channel names of different recordings
+channel_mapping = {  # this is the mapping to streamline channel names of different recordings
            'C4:A1':     'EEG C4-A1',
            'C3:A2':     'EEG C3-A2',
            'F4:A1':     'EEG F4-A1',
@@ -119,14 +122,13 @@ channel_mapping = { # this is the mapping to streamline channel names of differe
            'Beweg.':'Accelerometer',
            'Summe Effort':'Effort',
            'Licht':'Lux Ambient',
-           'Licht':'Lux Ambient',
            'Druck Flow':'Druck Flow',
            'Microphone':'Microphone',
            'Akku':'Akku'
            }
 
 ecg_channel = 'ECG I'
-max_age_diff = 5 # maximum age difference to make a matching
+max_age_diff = 3 # maximum age difference to make a matching
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # USER SPECIFIC CONFIGURATION

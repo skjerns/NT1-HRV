@@ -37,7 +37,7 @@ if __name__=='__main__':
     
     
     # copy the files into nt1:matched set1 and nt1:matched set2 respectively
-    for p_orig, p_coded, _, c_coded, diff in tqdm(matchings):
+    for p_orig, p_coded,gender, age, c_name, c_coded,c_gender, c_age, diff in tqdm(matchings):
         if int(diff)>cfg.max_age_diff:break
         for patient, p_coded1 in set1:
             if patient==p_orig:
@@ -48,7 +48,7 @@ if __name__=='__main__':
                     shutil.copy(old_location_nt1, new_location_nt1)
                     
                 old_location_cnt = ospath.join(cfg.data, c_coded +'.edf')
-                new_location_cnt  = ospath.join(cfg.data, 'set1', c_coded +'.edf')
+                new_location_cnt  = ospath.join(cfg.data.strip(), 'set1', c_coded.strip() +'.edf')
                 if not ospath.exists(new_location_cnt):
                     shutil.copy(old_location_cnt, new_location_cnt)
                     

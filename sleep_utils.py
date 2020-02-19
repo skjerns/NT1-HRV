@@ -82,9 +82,7 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             if epochlen_infile!=sec_diff: 
                 warnings.warn('Epochlen in file is {} but {} would be selected'.format(sec_diff, epochlen_infile))
             
-            if stage not in conv_dict:
-                warnings.warn('stage {} is not known. Will annotate as Artefact (5)'.format(stage))
-                stage = conv_dict.get(stage, 5)
+            stage = conv_dict[stage]
             stages.extend([stage]*sec_diff)
     
     # read hypnogram as written by visbrain (time based)
@@ -195,6 +193,10 @@ def write_hypnogram(hypno, filename, seconds_per_annotation=30,
         f.write(hypno_str)    
     return True
 
+def minmax2offsetlsb(dmin,dmax,pmin,pmax):
+    return None
+
+
 def dig2phys(signal, dmin, dmax, pmin, pmax):
     """converts digital edf values to analogue signals """
     m = (pmax-pmin) / (dmax-dmin)
@@ -282,38 +284,20 @@ def make_signal_headers(list_of_labels, dimension='uV', sample_rate=256,
     return signal_headers
 
 
-def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
+def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True,
+             dtype=None):
     """
-    Convenience function for reading EDF+/BDF data with pyedflib.
-
+    Reading EDF+/BDF data with pyedflib.
     Will load the edf and return the signals, the headers of the signals 
     and the header of the EDF. If all signals have the same sample frequency
     will return a numpy array, else a list with the individual signals
         
-
-    Parameters
-    ----------
-    edf_file : str
-        link to an edf file.
-    ch_nrs : list of int, optional
-        The indices of the channels to read. The default is None.
-    ch_names : list of str, optional
-        The names of channels to read. The default is None.
-    digital : bool, optional
-        will return the signals as digital values (ADC). The default is False.
-    verbose : bool, optional
-        DESCRIPTION. The default is True.
-
-    Returns
-    -------
-    signals : np.ndarray or list
-        the signals of the chosen channels contained in the EDF.
-    signal_headers : list
-        one signal header for each channel in the EDF.
-    header : dict
-        the main header of the EDF file containing meta information.
-
-    """
+    :param edf_file: link to an edf file
+    :param ch_nrs: The numbers of channels to read (optional)
+    :param ch_names: The names of channels to read (optional)
+    :param dtype: The dtype of the signals. If dtype=None, smallest possible dtype will be selected
+    :returns: signals, signal_headers, header
+    """      
     assert os.path.exists(edf_file), 'file {} does not exist'.format(edf_file)
     assert (ch_nrs is  None) or (ch_names is None), \
            'names xor numbers should be supplied'
@@ -336,42 +320,48 @@ def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True):
                     print('will be ignored.')
                 else:    
                     ch_nrs.append(available_chs.index(ch.upper()))
-                    
+
         # if there ch_nrs is not given, load all channels      
 
         if ch_nrs is None: # no numbers means we load all
             ch_nrs = range(n_chrs)
-        
+
         # convert negative numbers into positives
         ch_nrs = [n_chrs+ch if ch<0 else ch for ch in ch_nrs]
-        
+
         # load headers, signal information and 
-        header = f.getHeader()    
+        header = f.getHeader()
         signal_headers = [f.getSignalHeaders()[c] for c in ch_nrs]
-        
-        # add annotations to header
+
+        # read annotations and add to header
         annotations = f.read_annotation()
-        annotations = [[t/10000000, d if d else -1, x.decode()] for t,d,x in annotations]    
+        annotations = [[float(t)/10000000, d if d else -1, x.decode()] for t,d,x in annotations]    
         header['annotations'] = annotations
 
         signals = []
         for i,c in enumerate(tqdm(ch_nrs, desc='Reading Channels', 
                                   disable=not verbose)):
             signal = f.readSignal(c, digital=digital)
+            smax = max(np.abs(np.min(signal)), np.max(signal))
+            if digital: 
+                if   smax<=128: dtype = np.int8
+                elif smax<=32768:dtype = np.int16
+                else: dtype = np.int32
+            else:
+                dtype = np.int32
+            signal = np.array(signal, dtype=dtype)
             signals.append(signal)
- 
+
         # we can only return a np.array if all signals have the same samplefreq           
-        sfreqs = [header['sample_rate'] for header in signal_headers]
+        sfreqs = [shead['sample_rate'] for shead in signal_headers]
         all_sfreq_same = sfreqs[1:]==sfreqs[:-1]
         if all_sfreq_same:
             dtype = np.int if digital else np.float
             signals = np.array(signals, dtype=dtype)
-        elif verbose:
-            warnings.warn('Not all sampling frequencies are the same ({}). '\
-                          .format(sfreqs))    
+    del f
+    gc.collect()
     assert len(signals)==len(signal_headers), 'Something went wrong, lengths'\
                                          ' of headers is not length of signals'
-    del f
     return  signals, signal_headers, header
 
 
@@ -398,12 +388,6 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
         'signals and signal_headers must be same length'
 
     n_channels = len(signals)
-    
-    default_header = make_header() 
-    default_header.update(header)
-    header = default_header
-    
-    annotations = header.get('annotations', '')
     
     # check min and max values
     if digital==True and correct:
@@ -446,15 +430,17 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
                                 (ch_name, pmin, psmin))
                 sigh['physical_min'] = psmin
                 
+    # also add annotations
+    annotations = header.get('annotations', '')
+         
     with pyedflib.EdfWriter(edf_file, n_channels=n_channels) as f:  
         f.setSignalHeaders(signal_headers)
         f.setHeader(header)
+        f.writeSamples(signals, digital=digital)
         for annotation in annotations:
             f.writeAnnotation(*annotation)
-        f.writeSamples(signals, digital=digital)
     del f
     return os.path.isfile(edf_file) 
-
 
 
 def write_edf_quick(edf_file, signals, sfreq, digital=False):
@@ -561,7 +547,6 @@ def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None,
     write_edf(edf_target, signals, signal_headers, header, digital=True)
     return edf_target
 
-    
 def compare_edf(edf_file1, edf_file2, verbose=True, threading=True):
     """
     Loads two edf files and checks whether the values contained in 
@@ -569,27 +554,25 @@ def compare_edf(edf_file1, edf_file2, verbose=True, threading=True):
     """
     if verbose: print('verifying data')
     files = [(edf_file1, True), (edf_file2, True)]
-
+    # di
     backend = 'loky' if threading else 'sequential'
     results = Parallel(n_jobs=2, backend=backend)(delayed(read_edf)\
              (file, digital=digital, verbose=False) for file, \
              digital in tqdm(files, disable=not verbose))  
+
     signals1, signal_headers1, _ =  results[0]
     signals2, signal_headers2, _ =  results[1]
-    
+
     for i, sigs in enumerate(zip(signals1, signals2)):
         s1, s2 = sigs
-        if np.array_equal(s1, s2): continue # early stopping
         s1 = np.abs(s1)
         s2 = np.abs(s2)
-        if np.array_equal(s1, s2): continue # early stopping
-        close =  np.mean(np.isclose(s1, s2))
-        assert close>0.99, 'Error, digital values of {}'\
-              ' and {} for ch {}: {} are not the same: {:.3f}'.format(
+        assert np.allclose(s1, s2), 'Error, digital values of {}'\
+            ' and {} for ch {}: {} are not the same'.format(
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
-                signal_headers2[i]['label'], close)
-    gc.collect()
-    
+                signal_headers2[i]['label'])
+        gc.collect()
+
     dmin1, dmax1 = signal_headers1[i]['digital_min'], signal_headers1[i]['digital_max']
     pmin1, pmax1 = signal_headers1[i]['physical_min'], signal_headers1[i]['physical_max']
     dmin2, dmax2 = signal_headers2[i]['digital_min'], signal_headers2[i]['digital_max']
@@ -607,36 +590,36 @@ def compare_edf(edf_file1, edf_file2, verbose=True, threading=True):
         signals2[i] = None
         
         # compare absolutes in case of inverted signals
-        if np.array_equal(s1, s2): continue # early stopping
         s1 = np.abs(s1)
         s2 = np.abs(s2)
-        if np.array_equal(s1, s2): continue # early stopping
+        
         min_dist = np.abs(dig2phys(1, dmin1, dmax1, pmin1, pmax1))
         close =  np.mean(np.isclose(s1, s2, atol=min_dist))
         assert close>0.99, 'Error, physical values of {}'\
             ' and {} for ch {}: {} are not the same: {:.3f}'.format(
                 edf_file1, edf_file2, signal_headers1[i]['label'], 
                 signal_headers2[i]['label'], close)
-    gc.collect()
+        gc.collect()
     return True
 
 
-def change_polarity(edf_file, channels, new_file=None, verify=True, verbose=True):
+def change_polarity(edf_file, channels, new_file=None):
     if new_file is None: 
-        new_file = os.path.splitext(edf_file)[0] + '.edf'
+        new_file = os.path.splitext(edf_file)[0] + '_inv.edf'
     
     if isinstance(channels, str): channels=[channels]
     channels = [c.lower() for c in channels]
 
-    signals, signal_headers, header = read_edf(edf_file, digital=True, verbose=verbose)
+    signals, signal_headers, header = read_edf(edf_file, digital=True)
     for i,sig in enumerate(signals):
+        shead = signal_headers[i]
         label = signal_headers[i]['label'].lower()
         if label in channels:
-            if verbose: print('inverting {}'.format(label))
-            signals[i] = -sig
-    write_edf(new_file, signals, signal_headers, header, digital=True, correct=False)
-    if verify: compare_edf(edf_file, new_file)
-    return True
+            print('inverting {}'.format(label))
+            shead['physical_min']*=-1
+            shead['physical_max']*=-1
+    write_edf(new_file, signals, signal_headers, header, digital=True)
+    compare_edf(edf_file, new_file)
 
 
 def anonymize_edf(edf_file, new_file=None, verify=False,
