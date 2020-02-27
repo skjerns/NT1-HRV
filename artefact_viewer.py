@@ -70,7 +70,7 @@ class ECGPlotter():
             self.artefacts = np.repeat(art>self.threshold, repeats=2, axis=0).T
             self.detect_flatline()
             
-        self.kubios_art = np.nan_to_num(art.squeeze(), nan=99.0)
+        self.kubios_art = np.nan_to_num(art.squeeze())
         self.mat = mat
         self.rrs = rrs.squeeze()
 

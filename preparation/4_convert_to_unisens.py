@@ -47,7 +47,7 @@ def to_unisens(edf_file, delete=False):
     signal, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I')
     annotations = header['annotations']
     
-    u.add_entry(SignalEntry(id='ECG', parent=u).set_data(signal))
+    u.add_entry(SignalEntry(id='ECG', parent=u).set_data(signal.astype(np.float32)))
     u.sampling_frequency = shead[0]['sample_rate']
     u.length = signal.shape[1]//int(u.sampling_frequency)
     u.epochs = signal.shape[1]//int(u.sampling_frequency)//30
