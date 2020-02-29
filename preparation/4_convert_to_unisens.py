@@ -26,10 +26,11 @@ import shutil
 import mat73
 import pyedflib
 import unisens
-from unisens import SignalEntry, Unisens
+from unisens import Unisens, SignalEntry, EventEntry
 import os
-from misc import read_csv
+from unisens.utils import read_csv
 import shutil
+import numpy as np
 import ospath
 import sleep_utils
 import config as cfg
@@ -47,18 +48,27 @@ def to_unisens(edf_file, delete=False):
     signal, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I')
     annotations = header['annotations']
     
-    u.add_entry(SignalEntry(id='ECG', parent=u).set_data(signal.astype(np.float32)))
+    SignalEntry(id='ECG.bin', parent=u).set_data(signal.astype(np.float32))
     u.sampling_frequency = shead[0]['sample_rate']
     u.length = signal.shape[1]//int(u.sampling_frequency)
     u.epochs = signal.shape[1]//int(u.sampling_frequency)//30
     
+    
+    
+    
     for file in add_files:
         if file.endswith('txt') or file.endswith('dat'):
             hypno = sleep_utils.read_hypnogram(file)
+            hypno_entry = EventEntry(id='hypnogram.csv', parent=u)
+            hypno_entry.set_data(hypno, comment=f'File: {name}')
+            
         elif file.endswith('mat'):
             mat = mat73.loadmat(file)
         elif file.endswith('npy'):
             art = np.load(file)
+            hypno_entry = EventEntry(id='hypnogram', parent=u)
+            hypno_entry.set_data(hypno, comment=f'File: {name}')
+            
         elif file.endswith('.edf'):
             pass
         else:
@@ -73,7 +83,5 @@ if __name__=='__main__':
     documents = cfg.documents
     data = cfg.data
     
-    
-    
     files = ospath.list_files(data, exts=['edf'])
-    edf_file = files[1]
+    edf_file = 'Z:/NT1-HRV-data/880_78966.edf'

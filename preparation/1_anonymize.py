@@ -82,6 +82,7 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
                                                                    verbose=False)
             header['birthdate'] = ''
             header['patientname'] = new_name
+            header['patientcode'] = new_name
 
             for shead in signal_headers:
                 ch = shead['label']
