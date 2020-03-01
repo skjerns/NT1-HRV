@@ -7,6 +7,7 @@ Created on Wed Dec 18 12:46:37 2019
 import os
 import numpy as np
 from tkinter import  Tk
+from unisens.utils import read_csv, write_csv
 from tkinter.filedialog import askopenfilename
 from collections import OrderedDict
 from tkinter import simpledialog
@@ -30,45 +31,45 @@ def codify(filename):
 
 
 
-def write_csv(csv_file, data_list, sep=';'):
-    """
-    Parameters
-    ----------
-    csv_file : str
-        a filename.
-    data_list : list
-        a list of list. each list is a new line, each list of list is an entry there.
-    sep : str, optional
-        the separator to be used. The default is ';'.
+# def write_csv(csv_file, data_list, sep=';'):
+#     """
+#     Parameters
+#     ----------
+#     csv_file : str
+#         a filename.
+#     data_list : list
+#         a list of list. each list is a new line, each list of list is an entry there.
+#     sep : str, optional
+#         the separator to be used. The default is ';'.
 
-    Returns
-    -------
-    lines : TYPE
-        DESCRIPTION.
+#     Returns
+#     -------
+#     lines : TYPE
+#         DESCRIPTION.
 
-    """
-    with open(csv_file, 'w') as f:
-        string = '\n'.join([';'.join(line) for line in data_list])
-        f.write(string)
-    return True
+#     """
+#     with open(csv_file, 'w') as f:
+#         string = '\n'.join([';'.join(line) for line in data_list])
+#         f.write(string)
+#     return True
 
-def read_csv(csv_file, sep=';'):
-    """
-    simply load an csv file with a separator and newline as \\n
-    comments are annotated as starting with # and are removed
-    empty lines are removed
+# def read_csv(csv_file, sep=';', remove_empty=True):
+#     """
+#     simply load an csv file with a separator and newline as \\n
+#     comments are annotated as starting with # and are removed
+#     empty lines are removed
     
-    :param csv_file: a csv file to load
-    :param sep: set a different separator. this is language specific
-    """
-    with open(csv_file, 'r') as f:
-        content = f.read()
-        lines = content.split('\n')
-        lines = [line for line in lines if not line.startswith('#')]
-        lines = [line.strip() for line in lines]
-        lines = [line for line in lines if line!='']
-        lines = [[el.strip() for el in line.split(';')] for line in lines]
-    return lines
+#     :param csv_file: a csv file to load
+#     :param sep: set a different separator. this is language specific
+#     """
+#     with open(csv_file, 'r') as f:
+#         content = f.read()
+#         lines = content.split('\n')
+#         lines = [line for line in lines if not line.startswith('#')]
+#         lines = [line.strip() for line in lines]
+#         lines = [line for line in lines if line!='']
+#         lines = [[el.strip() for el in line.split(sep)] for line in lines]
+#     return lines
 
 def choose_file(default_dir=None,exts='txt', title='Choose file'):
     """

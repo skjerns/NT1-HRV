@@ -23,8 +23,10 @@ files = ospath.list_files(folder, exts='edf')
 for file in tqdm(files):
     name = ospath.basename(file)[:-4]
     new_file = ospath.join(new_folder, name + ".edf")
+    if os.path.exists(new_file):
+        print(f"{new_file} exists, skipping")
+        continue
     
-    
-    highlevel.anonymize_edf(file, new_file, to_remove   = ['patientname'],
-                            new_values  = [name], verify=False)
+    highlevel.anonymize_edf(file, new_file, to_remove = ['patientcode', 'patientname'],
+                            new_values  = [name, name], verify=False)
     highlevel.rename_channels(new_file, mapping=mapping, new_file=new_file)

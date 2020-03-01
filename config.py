@@ -39,6 +39,7 @@ def get_dropbox_location():
         except:
             print('dropbox does not seem to be installed')
             return False
+
     with open(str(json_path)) as f:
         j = json.load(f)
     
