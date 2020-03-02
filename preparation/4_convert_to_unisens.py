@@ -27,6 +27,7 @@ import mat73
 import pyedflib
 import unisens
 from unisens import Unisens, SignalEntry, EventEntry, ValuesEntry
+from unisens import CustomEntry
 import os
 from unisens.utils import read_csv
 import shutil
@@ -73,7 +74,9 @@ def to_unisens(edf_file, delete=False):
         elif file.endswith('mat'):
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
-            raw_feats = json_tricks.dumps(HRV)
+            raw_feats = json_tricks.dumps(HRV, allow_nan=True)
+            feats_entry = CustomEntry('kubios.json', parent=u)
+            feats_entry.set_data(raw_feats)
             
         elif file.endswith('npy'):
             art = np.load(file).ravel()
