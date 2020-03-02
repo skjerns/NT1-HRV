@@ -46,7 +46,7 @@ def to_unisens(edf_file, delete=False):
     
     # get all additional files that belong to this EDF
     add_files = ospath.list_files(folder, patterns=name + '*')
-    u = Unisens(ospath.join(folder, name), makenew=True)
+    u = Unisens(ospath.join(folder, name), makenew=True, autosave=True)
     signal, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I')
     annotations = header['annotations']
     
@@ -58,9 +58,14 @@ def to_unisens(edf_file, delete=False):
                 'unit': 'mV'}
     SignalEntry(id='ECG.bin', parent=u).set_data(**ecg_attrib)
     
+    u.code = name
     u.sampling_frequency = sfreq
     u.duration = len(signal)//sfreq
     u.epochs = signal.shape[1]//int(u.sampling_frequency)//30
+    
+    annot_entry = EventEntry('annotations.csv', parent=u)
+    annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
+    annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
     
     for file in add_files:
         if file.endswith('txt') or file.endswith('dat'):
@@ -74,9 +79,8 @@ def to_unisens(edf_file, delete=False):
         elif file.endswith('mat'):
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
-            raw_feats = json_tricks.dumps(HRV, allow_nan=True)
             feats_entry = CustomEntry('kubios.json', parent=u)
-            feats_entry.set_data(raw_feats)
+            feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
             
         elif file.endswith('npy'):
             art = np.load(file).ravel()
