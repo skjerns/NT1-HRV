@@ -4,6 +4,7 @@ Created on Thu Nov 21 20:19:26 2019
 
 @author: skjerns
 """
+from pyedflib.highlevel import *
 import os
 import gc
 import warnings
@@ -40,8 +41,8 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         content = content.replace('\r', '') # remove windows style \r\n
         
     #conversion dictionary
-    conv_dict = {'Wake':0, 'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4, 'Art': 5,
-                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5}
+    conv_dict = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4,
+                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5}
     
     lines = content.split('\n')
     if mode=='auto':
@@ -55,6 +56,8 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             mode = 'alice'
         elif 'abstime' in lines[0]:
             mode = 'dat'
+        elif lines[0].startswith('Signal ID:'):
+            mode = 'somnoscreen'
         else :
             mode==None
     
@@ -79,12 +82,27 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             assert next_t > curr_t, 'timestamp 2 is smaller than 1? {} < {}'.format(next_t, curr_t)
             
             sec_diff = (next_t - curr_t).seconds
-            if epochlen_infile!=sec_diff: 
+            if exp_seconds and epochlen_infile!=sec_diff: 
                 warnings.warn('Epochlen in file is {} but {} would be selected'.format(sec_diff, epochlen_infile))
             
-            stage = conv_dict[stage]
+            stage = conv_dict[stage.upper()]
             stages.extend([stage]*sec_diff)
     
+    elif mode=='somnoscreen':
+        if epochlen_infile is not None:
+            warnings.warn('epochlen_infile has been supplied, but information is in file, will be ignored')
+        
+        epochlen_infile = int(lines[5].replace('Rate: ', '').replace('s',''))
+        stages = []
+        for line in lines[6:]:
+            if len(line.strip())==0: continue # skip empty lines
+            
+            _,stage = line.split('; ')
+            stage = conv_dict[stage.upper()]
+            stages.extend([stage]*epochlen_infile)
+            
+            
+            
     # read hypnogram as written by visbrain (time based)
     elif mode=='visbrain':
         if epochlen_infile is not None:
@@ -97,7 +115,7 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             if line[0] in '*#%/\\"\'': continue # this line seems to be a comment
             s, t = line.split('\t')
             t = float(t)
-            s = conv_dict[s]
+            s = conv_dict[s.upper()]
             l = int(np.round((t-prev_t))) # length of this stage
             stages.extend([s]*l)
             prev_t = t
@@ -117,7 +135,7 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
                 print('[INFO] Assuming csv annotations are per second')
         lines = [[int(line)] for line in lines if len(line)>0]
         lines = [[line]*epochlen_infile for line in lines]
-        stages = np.array([conv_dict[l] for l in np.array(lines).flatten()])
+        stages = np.array([conv_dict[l.upper()] for l in np.array(lines).flatten()])
     
     # for the Dreams Database 
     # http://www.tcts.fpms.ac.be/~devuyst/Databases/DatabaseSubjects/    
@@ -126,12 +144,11 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         conv_dict = {-2:5,-1:5, 0:5, 1:3, 2:2, 3:1, 4:4, 5:0}    
         lines = [[int(line)] for line in lines[1:] if len(line)>0]
         lines = [[line]*epochlen_infile for line in lines]
-        stages = np.array([conv_dict[l] for l in np.array(lines).flatten()])
+        stages = np.array([conv_dict[l.upper()] for l in np.array(lines).flatten()])
         
     # for hypnogram created with Alice 5 software
     elif mode=='alice':
         epochlen_infile = 30
-        conv_dict = {'WK':0,'N1':1, 'N2':2, 'N3':3, 'REM':4}  
         lines = [line.split(',')[-1] for line in lines[1:] if len(line)>0]
         lines = [[line]*epochlen_infile for line in lines]
         try: stages = np.array([conv_dict[l] for l in np.array(lines).flatten()])
@@ -145,6 +162,53 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
     if len(stages)==0:
         print('[WARNING] hypnogram loading failed, len == 0')
     return np.array(stages)
+
+hypno = read_hypnogram('Z:/NT1-HRV-data/012_48546.txt')
+
+
+def infer_eeg_channels(ch_names):
+    """
+    This function receives a list of channel names and will return
+    one frontal, one central and one occipital channel.    
+    """
+    
+    f = ['EEG Fz', 'EEG F4', 'EEG Fpz', 'EEG Fp1', 'EEG Fp2']
+    c = ['EEG C4', 'EEG C3']
+    o = ['EEG Oz', 'EEG O2', 'EEG O1']
+    
+    found = []
+
+    # find frontal channel
+    for ch in ch_names:
+        if any([x in ch for x in f]):
+            found.append(ch)
+            break
+    # find central channel
+    for ch in ch_names:
+        if any([x in ch for x in c]):
+            found.append(ch)
+            break
+    # find occipital channel
+    for ch in ch_names:
+        if any([x in ch for x in o]):
+            found.append(ch)
+            break
+    return found
+    
+def infer_eog_channels(ch_names):
+    """
+    This function receives a list of channel names and will return
+    one frontal, one central and one occipital channel.    
+    """
+    
+    eog = ['EOG ROC', 'EOG LOC']
+    found = []
+
+    # find frontal channel
+    for ch in ch_names:
+        if any([x in ch for x in eog]):
+            found.append(ch)
+    return found
 
 
 def hypno2time(hypno, seconds_per_epoch=1):
@@ -193,22 +257,13 @@ def write_hypnogram(hypno, filename, seconds_per_annotation=30,
         f.write(hypno_str)    
     return True
 
-def minmax2offsetlsb(dmin,dmax,pmin,pmax):
-    return None
-
-
-def dig2phys(signal, dmin, dmax, pmin, pmax):
-    """converts digital edf values to analogue signals """
-    m = (pmax-pmin) / (dmax-dmin)
-    physical = m * signal
-    return physical
-
-def phys2dig(signal, dmin, dmax, pmin, pmax):
-   """converts analogue edf values to digital signals"""
-   m = (dmax-dmin)/(pmax-pmin) 
-   digital = (m * signal)
-   return digital
-
+def minmax2lsb(dmin, dmax, pmin, pmax):
+    """
+    converts the edf min/max values to lsb and offset (x*m+b)
+    """
+    lsb = (pmax - pmin) / (dmax - dmin)
+    offset = pmax / lsb - dmax
+    return lsb, offset
 
 def make_header(technician='', recording_additional='', patientname='',
                 patient_additional='', patientcode= '', equipment= '',
@@ -283,86 +338,6 @@ def make_signal_headers(list_of_labels, dimension='uV', sample_rate=256,
         signal_headers.append(header)
     return signal_headers
 
-
-def read_edf(edf_file, ch_nrs=None, ch_names=None, digital=False, verbose=True,
-             dtype=None):
-    """
-    Reading EDF+/BDF data with pyedflib.
-    Will load the edf and return the signals, the headers of the signals 
-    and the header of the EDF. If all signals have the same sample frequency
-    will return a numpy array, else a list with the individual signals
-        
-    :param edf_file: link to an edf file
-    :param ch_nrs: The numbers of channels to read (optional)
-    :param ch_names: The names of channels to read (optional)
-    :param dtype: The dtype of the signals. If dtype=None, smallest possible dtype will be selected
-    :returns: signals, signal_headers, header
-    """      
-    assert os.path.exists(edf_file), 'file {} does not exist'.format(edf_file)
-    assert (ch_nrs is  None) or (ch_names is None), \
-           'names xor numbers should be supplied'
-    if ch_nrs is not None and not isinstance(ch_nrs, list): ch_nrs = [ch_nrs]
-    if ch_names is not None and \
-        not isinstance(ch_names, list): ch_names = [ch_names]
-
-    with pyedflib.EdfReader(edf_file) as f:
-        # see which channels we want to load
-        available_chs = [ch.upper() for ch in f.getSignalLabels()]
-        n_chrs = f.signals_in_file
-
-        # find out which number corresponds to which channel
-        if ch_names is not None:
-            ch_nrs = []
-            for ch in ch_names:
-                if not ch.upper() in available_chs:
-                    warnings.warn('{} is not in source file (contains {})'\
-                                  .format(ch, available_chs))
-                    print('will be ignored.')
-                else:    
-                    ch_nrs.append(available_chs.index(ch.upper()))
-
-        # if there ch_nrs is not given, load all channels      
-
-        if ch_nrs is None: # no numbers means we load all
-            ch_nrs = range(n_chrs)
-
-        # convert negative numbers into positives
-        ch_nrs = [n_chrs+ch if ch<0 else ch for ch in ch_nrs]
-
-        # load headers, signal information and 
-        header = f.getHeader()
-        signal_headers = [f.getSignalHeaders()[c] for c in ch_nrs]
-
-        # read annotations and add to header
-        annotations = f.read_annotation()
-        annotations = [[float(t)/10000000, d if d else -1, x.decode()] for t,d,x in annotations]    
-        header['annotations'] = annotations
-
-        signals = []
-        for i,c in enumerate(tqdm(ch_nrs, desc='Reading Channels', 
-                                  disable=not verbose)):
-            signal = f.readSignal(c, digital=digital)
-            smax = max(np.abs(np.min(signal)), np.max(signal))
-            if digital: 
-                if   smax<=128: dtype = np.int8
-                elif smax<=32768:dtype = np.int16
-                else: dtype = np.int32
-            else:
-                dtype = np.int32
-            signal = np.array(signal, dtype=dtype)
-            signals.append(signal)
-
-        # we can only return a np.array if all signals have the same samplefreq           
-        sfreqs = [shead['sample_rate'] for shead in signal_headers]
-        all_sfreq_same = sfreqs[1:]==sfreqs[:-1]
-        if all_sfreq_same:
-            dtype = np.int if digital else np.float
-            signals = np.array(signals, dtype=dtype)
-    del f
-    gc.collect()
-    assert len(signals)==len(signal_headers), 'Something went wrong, lengths'\
-                                         ' of headers is not length of signals'
-    return  signals, signal_headers, header
 
 
 def write_edf(edf_file, signals, signal_headers, header, digital=False,
