@@ -49,12 +49,14 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']
     to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
 
+    mappings = misc.read_csv(cfg.controls)
+    mappings.extend(misc.read_csv(cfg.patients))
+    mappings = dict([[name, {'gender':gender, 'age':age}] for name, gender, age in mappings])
+
     files = ospath.list_files(dataset_folder, exts='edf', subfolders=True)
     old_names = []
     new_names = []
-    import stimer
     for i, old_file in enumerate(tqdm(files, leave=True)):
-        stimer.start()
         old_name = ospath.splitext(ospath.basename(old_file))[0]
         new_name = codify(old_name)
         # we use a temporary file to write and then rename it
@@ -83,6 +85,8 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
             header['birthdate'] = ''
             header['patientname'] = new_name
             header['patientcode'] = new_name
+            header['gender'] = mappings[old_name]['gender']
+            header['age'] = mappings[old_name]['age']
 
             for shead in signal_headers:
                 ch = shead['label']
@@ -119,7 +123,6 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
                 shutil.copy(add_file, new_additional_file)
             except Exception as e:
                 print(e)
-        stimer.stop()
     return old_names, new_names
         
 if __name__ == '__main__':

@@ -22,6 +22,7 @@ These meta attributes will be added:
 
 @author: skjerns
 """
+import config as cfg
 import shutil
 import mat73
 import pyedflib
@@ -29,6 +30,7 @@ import unisens
 from unisens import Unisens, SignalEntry, EventEntry, ValuesEntry
 from unisens import CustomEntry
 import os
+from pyedflib import highlevel
 from unisens.utils import read_csv
 import shutil
 import numpy as np
@@ -40,60 +42,134 @@ import json_tricks
 
 
 
+
 def to_unisens(edf_file, delete=False):
+#%%    
+    dtype = np.int16
     name = ospath.basename(edf_file)[:-4]
     folder = ospath.dirname(edf_file)
-    
+    unisens_folder = ospath.join(folder, name)
+        
     # get all additional files that belong to this EDF
     add_files = ospath.list_files(folder, patterns=name + '*')
-    u = Unisens(ospath.join(folder, name), makenew=True, autosave=True)
-    signal, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I')
-    annotations = header['annotations']
+    u = Unisens(unisens_folder, makenew=True, autosave=True)
+    signals, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I', digital=True)
+
+    all_labels = highlevel.read_edf_header(edf_file)['channels']
+
+    u.startdate = header['startdate']
+    u.code = name    
+    u.sampling_frequency = shead[0]['sample_rate']
+    u.duration = len(signals)//shead[0]['sample_rate']
+    u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30
+
+    #%%####################
+    #### add ECG ##########
+    signals[:,0:2]  = signals.min(), signals.max() # trick for viewer automatic scaling
+    pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+    dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
     
-    sfreq = shead[0]['sample_rate']
-    ecg_attrib={'data': signal.astype(np.float64),
-                'sampleRate': sfreq,
+    lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+    ecg_attrib={'data': signals.astype(dtype), 
+                'sampleRate': shead[0]['sample_rate'],
                 'ch_names': 'ECG',
-                'lsbValue': '1',
-                'unit': 'mV'}
-    SignalEntry(id='ECG.bin', parent=u).set_data(**ecg_attrib)
+                'lsbValue': lsb,
+                'baseline': offset,
+                'unit': 'mV',
+                'dmin': dmin,'dmax': dmax,
+                'pmin': pmin, 'pmax': pmax}
     
-    u.code = name
-    u.sampling_frequency = sfreq
-    u.duration = len(signal)//sfreq
-    u.epochs = signal.shape[1]//int(u.sampling_frequency)//30
+    ecg_entry = SignalEntry(id='ECG.bin', parent=unisens_folder).set_data(**ecg_attrib)
+        
+    #%%####################
+    #### add EEG ##########
+    eeg = sleep_utils.infer_eeg_channels(all_labels)
+    signals, shead, header = highlevel.read_edf(edf_file, ch_names=eeg, digital=True)
+    signals[:,0:2] = signals.min(), signals.max() # trick for viewer automatic scaling
+    pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+    dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
     
-    annot_entry = EventEntry('annotations.csv', parent=u)
-    annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
-    annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
+    lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+    eeg_attrib={'data': signals.astype(dtype), 
+                'sampleRate': shead[0]['sample_rate'],
+                'ch_names': eeg,
+                'lsbValue': lsb,
+                'baseline': offset,
+                'contentClass':'EEG',
+                'unit': 'uV',
+                'dmin': dmin,'dmax': dmax,
+                'pmin': pmin, 'pmax': pmax}
+    eeg_entry = SignalEntry(id='EEG.bin', parent=unisens_folder).set_data(**eeg_attrib)
+
+ 
+    #%%####################
+    #### add EOG #########
+    eog = sleep_utils.infer_eog_channels(all_labels)
+    signals, shead, header = highlevel.read_edf(edf_file, ch_names=eog, digital=True)
+    signals[:,0:2] = signals.min(), signals.max() # trick for viewer automatic scaling
+    
+    pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+    dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
+    
+    lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+    eog_attrib={'data': signals.astype(dtype), 
+                'sampleRate': shead[0]['sample_rate'],
+                'ch_names': eog,
+                'lsbValue': 1,
+                'baseline': 0,
+                'unit': 'uV',
+                'dmin': dmin,'dmax': dmax,
+                'pmin': pmin, 'pmax': pmax}
+    eog_entry = SignalEntry(id='EOG.bin', parent=unisens_folder).set_data(**eog_attrib)
+
+    #%%####################
+    #### add annotations #######
+    
+    annotations = header['annotations']
+    if annotations!=[]:
+        annot_entry = EventEntry('annotations.csv', parent=unisens_folder)
+        annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
+        annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
+        
+    #%%####################
+    #### add rest #######
     
     for file in add_files:
         if file.endswith('txt') or file.endswith('dat'):
             hypno = sleep_utils.read_hypnogram(file)
+            u.epochs_hypno = len(hypno)
             times = np.arange(len(hypno))
             hypno = np.vstack([times, hypno]).T
-            hypno_entry = EventEntry(id='hypnogram.csv', parent=u)
+            hypno_entry = EventEntry(id='hypnogram.csv', parent=unisens_folder)
             hypno_entry.set_data(hypno, comment=f'File: {name}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
-            
+
         elif file.endswith('mat'):
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
-            feats_entry = CustomEntry('kubios.json', parent=u)
+            feats_entry = CustomEntry('kubios.json', parent=unisens_folder)
             feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
-            
         elif file.endswith('npy'):
             art = np.load(file).ravel()
+            u.epochs_art = len(art)//2
             times = np.arange(len(art))
             art = np.vstack([times, art]).T
-            artefact_entry = ValuesEntry(id='artefacts.csv', parent=u)
+            artefact_entry = ValuesEntry(id='artefacts.csv', parent=unisens_folder)
             artefact_entry.set_data(art, sampleRate=1/15, dataType='int16')
             
         elif file.endswith('.edf'):
             pass
         else:
             raise Exception(f'unkown file type: {file}')
-    
+    #%%####################
+    # we add the entries manually so they are in the right order in the unisens viewer.
+    u.add_entry(ecg_entry)
+    u.add_entry(eeg_entry)
+    u.add_entry(eog_entry)
+    if 'artefact_entry' in locals(): u.add_entry(artefact_entry)
+    if 'hypno_entry' in locals(): u.add_entry(hypno_entry)
+    if 'feats_entry' in locals(): u.add_entry(feats_entry)
+    if 'annot_entry' in locals(): u.add_entry(annot_entry)
     u.save()
     
     if delete:
@@ -102,9 +178,11 @@ def to_unisens(edf_file, delete=False):
     return
 
 if __name__=='__main__':
+    
     documents = cfg.documents
     data = cfg.data
     
     files = ospath.list_files(data, exts=['edf'])
     edf_file = 'Z:/NT1-HRV-data/228_06450.edf'
-    to_unisens(edf_file)
+    for edf_file in tqdm(files):
+        to_unisens(edf_file)

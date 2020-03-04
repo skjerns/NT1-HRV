@@ -12,6 +12,7 @@ import mat73 # pip install mat73
 import sleep
 import argparse
 import logging
+import ospath
 
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.INFO)
@@ -40,10 +41,10 @@ class ECGPlotter():
     
     def _load(self, edf_file, mat_file=None):
         if mat_file is None:
-            mat_file = edf_file[:-4] + '_hrv.mat'
-            if not os.path.exists(mat_file): # maybe it's not with underscore
-                mat_file=mat_file.replace('_hrv','')
-            if not os.path.exists(mat_file):
+            filename = ospath.basename(edf_file)[:-4]
+            folder = ospath.dirname(edf_file)
+            mat_file=ospath.list_files(folder, patterns=f'{filename}*.mat')[0]
+            if not mat_file or not os.path.exists(mat_file): 
                 print('{} not found'.format(mat_file))
                 dir = os.path.dirname(mat_file)
                 mat_file = misc.choose_file(dir, exts='mat', 
@@ -74,7 +75,6 @@ class ECGPlotter():
         self.mat = mat
         self.rrs = rrs.squeeze()
 
-        
         self.file = edf_file
         self.mat_file = mat_file
         self.artefacts_file = artefacts_file

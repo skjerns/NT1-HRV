@@ -55,7 +55,7 @@ channel_mapping = {  # this is the mapping to streamline channel names of differ
            'C4:A1':     'EEG C4-A1',
            'C3:A2':     'EEG C3-A2',
            'F4:A1':     'EEG F4-A1',
-           'Fz:A2':     'EEGF z-A2',
+           'Fz:A2':     'EEG Fz-A2',
            'O2:A1':     'EEG O2-A1',
            'Oz:A1':     'EEG Oz-A1',
            'Oz:A2':     'EEG Oz-A2',
@@ -145,6 +145,9 @@ if dropbox:
     matching = ospath.join(documents, 'matching.csv')
     edfs_invert = ospath.join(documents, 'edfs_invert.csv')
     edfs_discard = ospath.join(documents, 'edfs_discard.csv')
+    controls =  ospath.join(documents, 'subjects_control.csv')
+    patients =  ospath.join(documents, 'subjects_nt1.csv')
+
 if username == 'nd269' and host=='ess-donatra':
     USER_VAR = 'test123'
     
