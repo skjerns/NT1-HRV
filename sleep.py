@@ -13,14 +13,14 @@ import numpy as np
 import ospath
 import re
 import sleep_utils
-from unisens import Unisens
+import matplotlib.pyplot as plt
+from unisens import Unisens, CustomEntry
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
             for text in _nsre.split(s)]    
     
 class SleepSet():
-    
     """
     A SleepSet is a container for several Patients, where each Patient
     corresponds to one PSG recording (ie. an EDF file). This container
@@ -81,7 +81,11 @@ class SleepSet():
         return len(self.patients)  
     
     
-    def add(self, patient_file, resample=None, channel=None):
+    def filter(self, function):
+        return SleepSet(list(filter(function, self.patients)))
+    
+    
+    def add(self, patient):
         """
         Inserts a Patient to the SleepSet
         
@@ -89,12 +93,10 @@ class SleepSet():
         :param resample: Resample the signal to this frequency
         :param channel: Load this channel explicitly
         """
-        if type(patient_file) is str:
-            patient = Patient(patient_file, resample=resample)
+        if isinstance(patient, Patient):
+            self.patients.append(patient)
         else:
-            patient = patient_file
-        self.patients.append(patient)
-        self.files = [patient.edf_file for sr in self]
+            raise ValueError(f'patient must be or Patient, is {type(patient)}')
         return self
     
     
@@ -106,221 +108,57 @@ class Patient(Unisens):
     and hypnogram as well as visualization of the record, plus statistical
     analysis. Many of its subfunctions are inherited from Unisens
     """
-    def __new__(self, folder, *args, **kwargs):
+    def __new__(cls, folder, *args, **kwargs):
         """
         If this patient is initialized with a Patient, just return this Patient
         """
-        if isinstance(folder, Patient): return Patient
-        
+        if isinstance(folder, Patient): return folder
+        return object.__new__(cls)
+
+    def __repr__(self):
+        return 'Patient'
+    
+    def __str__(self):
+        return 'Patient'
+    
     def __init__(self, folder, *args, **kwargs):
         if isinstance(folder, Patient): return None
-        super.__init__(self, *args, **kwargs)
-    
+        super().__init__(folder, *args, autosave=True, **kwargs)
+
     def __len__(self):
         """
         returns the length of this PSG in seconds
         """
         seconds = int(len(self.data)//(self.sfreq))
         return seconds
-    
-    def __repr__(self):
-        file = ospath.basename(self.edf_file) if self.edf_file is not None else 'None' 
-        if len(file) > 25:
-            file = file[:17] + '[..]' + file[-7:]
-        length = int(len(self)//3600)
-        s = 'SleepRecord({}, {} Hz, {} h.)'.format(file, self.sfreq, length)
-        return s
-    
-    def __init__(self, edf_file=None, hypno_file=None, resample=None,
-                 verbose=True, channel=None, ch_type='ECG'):
-        """
-        Loads the data of one Patient (ie. an EDF file), and its corresponding
-        hypnogram annotation. The channels to be loaded can be specified.
         
-        :param patient: a link to an EEG recording
-        :param hypno_file: Load a specific 
-                           If None, will be infered automatically
-                           If False, will be ignored.
-        :param resample: Resample signal after loading to this sampling frequency
-        :param channel: Tells the system explicitely which channel to use from the EEG
-        :returns: Patient(edf)
-        """
+    def get_hypno(self):
+        return self['hypnogram.csv'].get_data()
+     
+    def get_ecg(self):
+        return self['ecg.csv'].get_data()
 
+    def get_eeg(self):
+        return self['eeg.csv'].get_data()
     
-
+    def plot(self, channel='eeg', ax=None, make_new=False):
+        
+        if ax is None:
+            plt.figure()
+            ax = plt.subplot()
             
-    
-    def load(self, edf_file, hypno_file=None, channel=None):
-        """
-        Loads a record file and a hypno file.
-        If a hypno-file is not supplied, a best fit is assumed
+        file = f'plot_{channel}.jpg'
         
-        according to the record_file name.
-        :param record_file: a sleep record file
-        :param hypno_file: a hypnogram annotation file
-        :param hypno_pattern: which type of hypnogram to load
-        """
-        self.load_record(edf_file, channel=channel)
-           
-        # if we have no hypnogram annotation file, try to infer the file automatically
-        if hypno_file is None:
-            hypno_file = self._guess_hypnofile(edf_file)
+        if file in self.entries and not make_new:
+            spec = self.entries[file].get_data()
+            sfreq = self.entries[f'{channel}.bin'].samplingRate
+            plt.imshow(spec)
+        else:
+            signal = self.entries[f'{channel}.bin'].get_data()[0]
+            sfreq = self.entries[f'{channel}.bin'].samplingRate
+            spec = sleep_utils.specgram_multitaper(signal, int(sfreq), 
+                                                   show_plot=False)
+            plt.imshow(spec)
             
-        if hypno_file!=False:
-            self.load_hypno(hypno_file)
-        
-        
-    def load_record(self, edf_file, channel=None):
-        """
-        receives a link to a file, infers the file type
-        and loads the data into this class into .data
-        
-        :param record_file: A link to a record file
-        :param sfreq: Use this sampling frequency
-        :param channel: Use this channel, default will be infered or is 0
-        :returns: the raw array
-        """
-        
-        if not ospath.isfile(edf_file):
-            raise FileNotFoundError('edf file does not exist: {}'.format(edf_file))
-        
-        self.edf_file = ospath.join(edf_file)
-
-        if not ospath.splitext(edf_file)[1] in ['.edf', '.bdf']:
-            raise NotImplementedError('Only EDF/BDF/BDF+ files are supported')
-
-        header = sleep_utils.read_edf_header(edf_file)
-        channels = [ch.upper() for ch in header['channels']]
-        if isinstance(channel, int): 
-            ch_idx = channel
-        else :
-            try:
-                ch_idx = channels.index(channel.upper())
-                log.info('Loading Channel #{}: {}'.format(channel, channels[ch_idx]))
-            except:
-                ch_idx = self._guess_channel_name(channels)
-                
-        self.loaded_channel = channels[ch_idx]
-        self.sfreq = header['SignalHeaders'][ch_idx]['sample_rate']
-        
-        data, _, header = sleep_utils.read_edf(edf_file, digital=False, ch_nrs=ch_idx, verbose=False)
-        data = data.squeeze()
-        
-        self.data = data
-        self.header = header
-        self.startdate = header['startdate']
-        self.starttime = (self.startdate.hour * 60 + self.startdate.minute) * 60 + self.startdate.second
-                    
-        self.preprocessed = False
-      
-        hours = len(self.data)//self.sfreq/60/60
-        log.info('Loaded {:.1f} hours of {} with sfreq={}'.format(hours, self.ch_type, self.sfreq))
-        
-        return self
-    
-    
-    def load_hypno(self, hypno_file, epochlen_infile=None):
-        """
-        Loads a hypnogram and stores results in self.hypno
-        Can parse both hypnogram types created by VisBrain
-        Internally, we store for each second one annotation
-        For preprocessing, one annotation per segment is used.
-        The concurrent transformation during processing is important
-        
-        :param hypno_file: a path to the hypnogram
-        :param epochlen_infile: how many seconds per label in original file
-        """
-        self.hypno_file = hypno_file
-        sfreq = self.sfreq
-        exp_seconds = None if self.data.size<=1 else len(self.data)//sfreq
-        print(self.data.size>1 )
-        print(exp_seconds)
-        hypno = sleep_utils.read_hypnogram(hypno_file, epochlen_infile=epochlen_infile, 
-                                 exp_seconds=exp_seconds)
-        log.debug('loaded hypnogram {}'.format(hypno_file))
-        self.raw_hypno = hypno
-        self.hypno = hypno.copy()
-        
-        
-    def resample(self, target_sfreq):
-        """
-        Uses a temporary mne array to resample self.data using MNE
-        MNE is used as it offers a resampling function that is 
-        optimized for EEG/electrophysiological data.
-        
-        :param target_sfreq: the target sampling frequency
-        """    
-        import mne
-        if np.round(self.sfreq)!=target_sfreq:
-            data = self.data
-            info = mne.create_info(ch_names=['eeg'], sfreq=self.sfreq, ch_types=['eeg'])
-            raw_mne = mne.io.RawArray(data, info, verbose='ERROR')
-            resampled = raw_mne.resample(target_sfreq, n_jobs=3)
-            new_data = resampled.get_data().squeeze()
-            self.data = new_data
-        else:
-            log.debug('Signal is already in {} Hz'.format(target_sfreq))        
-        return self
-    
-    
-    def _guess_channel_name(self, channels=None):
-        """
-        Try to guess an appropriate EEG channel to load from the file.
-        Will choose in the following order of fit: F4/F3/FP1/Fp2/C3/C4/ any EEG
-        
-        :param channels: a list of channel names
-        :returns: argpos of the best fitting channel name
-                  returns 0 in case of failure
-        """
-        if self.ch_type == 'EEG':
-            keywords = ['F4', 'F3', 'FP1', 'FP2', 'C3' , 'C4', 'EEG']
-        elif self.ch_type == 'ECG':
-            keywords = ['ECG', 'EKG']
-        else:
-            log.error('Invalid ch_type, select from [ECG, EEG]')
-
-        channels = [ch.upper() for ch in channels]
-        for k in keywords:
-            matches = [k in ch for ch in channels]
-            if any(matches):
-                ch_idx = np.argmax(matches)
-                ch_name = channels[ch_idx].upper()
-                log.info('Infering channel # {}: {} from {}...'.format(ch_idx, ch_name, channels[:4]))
-                return ch_idx
-        log.warning('No channel matches in {}. Taking channel 0={}'.format(channels, channels[0]))
-        return 0  
-    
-    
-    @staticmethod
-    def _guess_hypnofile(edf_file):
-        """
-        given an edf_file, tries to find a matching hypnogram file.
-        the pattern that is looked for is RECORDNAME + [.csv or .dat or .txt]
-        
-        :param edf_file: A string linking a edf file
-        """
-        
-        def str_match(s1, s2):
-            return SequenceMatcher(None, s1, s2).ratio()
-                
-        folder = ospath.dirname(edf_file)
-        rfile  = ospath.splitext(ospath.basename(edf_file))[0]
-        
-        files  = ospath.list_files(folder, exts=['txt', 'csv', 'dat'], relative=True) 
-        # filter out every RECORDNAME.*
-        matching = [file for file in files if 
-                    (file.lower().startswith(rfile.lower()) 
-                    and len(rfile)<len(file))]
-        if len(matching)==1:
-            hyp = ospath.join(folder, matching[0])
-
-        elif len(matching)>1:
-            hyp = matching[0]
-            log.warning('Several hypnograms found: '.format(matching))
-        else:
-            log.warning('No matching hypnogram for {} '.format(ospath.basename(edf_file)))
-            return False
-        log.info('hypnogram: Matched {} to {}'.format(ospath.basename(hyp), 
-                                                      ospath.basename(edf_file)))
-        return hyp
-            
+            CustomEntry(file, parent=self).set_data(spec)
+        plt.title(f'{channel}, {sfreq} Hz')
