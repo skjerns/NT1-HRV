@@ -42,7 +42,7 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         
     #conversion dictionary
     conv_dict = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4,
-                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5}
+                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5, 'MT':5}
     
     lines = content.split('\n')
     if mode=='auto':
@@ -163,7 +163,6 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         print('[WARNING] hypnogram loading failed, len == 0')
     return np.array(stages)
 
-hypno = read_hypnogram('Z:/NT1-HRV-data/012_48546.txt')
 
 
 def infer_eeg_channels(ch_names):
@@ -207,6 +206,20 @@ def infer_eog_channels(ch_names):
     # find frontal channel
     for ch in ch_names:
         if any([x in ch for x in eog]):
+            found.append(ch)
+    return found
+
+def infer_emg_channels(ch_names):
+    """
+    This function receives a list of channel names and will return
+    one frontal, one central and one occipital channel.    
+    """
+    emg = ['EMG Chin']
+    found = []
+
+    # find frontal channel
+    for ch in ch_names:
+        if any([x in ch for x in emg]):
             found.append(ch)
     return found
 

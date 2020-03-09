@@ -13,6 +13,7 @@ import numpy as np
 import ospath
 import re
 import sleep_utils
+from unisens import Unisens
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
@@ -24,10 +25,10 @@ class SleepSet():
     A SleepSet is a container for several Patients, where each Patient
     corresponds to one PSG recording (ie. an EDF file). This container
     makes it easier to do bulk operations, feature extraction etc.
-    on a whole set of Patients    
+    on a whole set of Patients.
     """
     
-    def __init__(self, patient_list=[], resample=None, channel=None):
+    def __init__(self, patient_list=None, patients=None):
         """
         Load a list of Patients (edf format). Resample if necessary.
         
@@ -35,18 +36,21 @@ class SleepSet():
         :param resample: resample all records to this frequency
         :param channel:  specify which channel to load
         """
-        self.records = []
-        assert type(patient_list)==list, 'patient_list must be type list'
+        assert isinstance(patient_list, list), 'patient_list must be type list'
+        self.patients = []
         
-        enable_progressbar = any([type(x) is str for x in patient_list])
-        enable_natsort = all([type(x) is str for x in patient_list])
+        # must be either Patients or strings to make patients from.
+        all_patients = all([isinstance(x, Patient) for x in patient_list])
+        all_strings = all([isinstance(x, str) for x in patient_list])
+        assert all_patients or all_strings, \
+            "patient_list must be either strings or Patients"
         
-        if enable_natsort: 
+        if all_strings: # natural sorting of file list
             patient_list = sorted(patient_list, key=natsort_key)
         
-        for patient in tqdm(patient_list, desc='[INFO] Loading Patients', 
-                           disable=not enable_progressbar, leave=True):
-            self.add(patient, resample=resample, channel=channel)   
+        for patient in patient_list:
+            patient = Patient(patient)
+            self.add(patient)   
         return None
     
     
@@ -95,13 +99,22 @@ class SleepSet():
     
     
     
-class Patient():
+class Patient(Unisens):
     """
-    A Patient contains the data of one edf file.
+    A Patient contains the data of one unisens data structure.
     It facilitates the automated extraction of features, loading of data
     and hypnogram as well as visualization of the record, plus statistical
-    analysis.
+    analysis. Many of its subfunctions are inherited from Unisens
     """
+    def __new__(self, folder, *args, **kwargs):
+        """
+        If this patient is initialized with a Patient, just return this Patient
+        """
+        if isinstance(folder, Patient): return Patient
+        
+    def __init__(self, folder, *args, **kwargs):
+        if isinstance(folder, Patient): return None
+        super.__init__(self, *args, **kwargs)
     
     def __len__(self):
         """
@@ -133,39 +146,7 @@ class Patient():
         :returns: Patient(edf)
         """
 
-        self.data = np.zeros(1)
-        self.raw_hypno = np.zeros(1)
-        self.epochs = np.empty(1) # here our extracted epochs will be stored
-        self.epochlen = None # epochlen defaults to 30
-        self.ch_type = ch_type
-
-        
-        self.hypno = None    # this has the converted hypnogram inside
-        self.edf_file = ''
-
-        self.sfreq = np.inf                     # sampling frequency of the data
-        self.loaded_channel = channel        # which channel has been loaded will be stored here
-
-        self.preprocessed = False          # indicates if this SleepRecord has been preprocessed
-        
-        if verbose==True:
-            log.basicConfig(
-                    format='[%(levelname)s] %(message)s',
-                    level=log.DEBUG,
-                    datefmt='%Y-%m-%d %H:%M:%S')     
-        else:
-            log.basicConfig(
-                    format='[%(levelname)s] %(message)s',
-                    level=log.CRITICAL,
-                    datefmt='%Y-%m-%d %H:%M:%S')   
-            
-        # add a dummy windowing method that segments in 30 seconds as standard epochs
-        if edf_file is not None:
-            self.load(edf_file=edf_file, hypno_file=hypno_file, channel=channel)
-            
-        if resample is not None:
-            self.resample(resample)
-            
+    
 
             
     
