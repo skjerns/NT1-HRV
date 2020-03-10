@@ -7,6 +7,7 @@ based upon https://github.com/skjerns/AutoSleepScorerDev
 @author: SimonKern
 """
 from difflib import SequenceMatcher
+import misc
 import logging as log
 import tqdm as tqdm
 import numpy as np
@@ -28,13 +29,11 @@ class SleepSet():
     on a whole set of Patients.
     """
     
-    def __init__(self, patient_list=None, patients=None):
+    def __init__(self, patient_list:list=None):
         """
         Load a list of Patients (edf format). Resample if necessary.
         
-        :param patient_list: A list of strings pointing to a sleep record
-        :param resample: resample all records to this frequency
-        :param channel:  specify which channel to load
+        :param patient_list: A list of strings pointing to Patients
         """
         assert isinstance(patient_list, list), 'patient_list must be type list'
         self.patients = []
@@ -52,7 +51,7 @@ class SleepSet():
             patient = Patient(patient)
             self.add(patient)   
         return None
-    
+        
     
     def __iter__(self):
         """
@@ -70,7 +69,8 @@ class SleepSet():
             items = self.patients.__getitem__(key)        
         elif type(key)==np.ndarray: 
             items = [self.patients.__getitem__(i) for i in key]
-        elif str(type(key)())=='0': return self.patients[key]
+        elif str(type(key)())=='0': # that means it is an int
+            return self.patients[key]
         else:
             raise KeyError('Unknown key type:{}, {}'.format(type(key), key))
         return SleepSet(items)
@@ -78,7 +78,7 @@ class SleepSet():
     
     def __len__(self):
         """return the number of patients in this set"""
-        return len(self.patients)  
+        return len(self.patients)
     
     
     def filter(self, function):
@@ -89,9 +89,7 @@ class SleepSet():
         """
         Inserts a Patient to the SleepSet
         
-        :param patient: Either a Patient or a file string to an ie. EDF
-        :param resample: Resample the signal to this frequency
-        :param channel: Load this channel explicitly
+        :param patient: Either a Patient or a file string to an Unisens object
         """
         if isinstance(patient, Patient):
             self.patients.append(patient)
@@ -141,24 +139,36 @@ class Patient(Unisens):
     def get_eeg(self):
         return self['eeg.csv'].get_data()
     
-    def plot(self, channel='eeg', ax=None, make_new=False):
+    def plot(self, channel='eeg', hypnogram=True, axs=None):
+        hypnogram = hypnogram * 'hypnogram' in self
+        plots = 1 + hypnogram
+        h_ratio = [0.75,0.25] if hypnogram else [1,] 
         
-        if ax is None:
-            plt.figure()
-            ax = plt.subplot()
+        if axs is None:
+            fig, axs = plt.subplots(plots, 1, 
+                                    gridspec_kw={'height_ratios':h_ratio}, 
+                                    squeeze=False)
             
-        file = f'plot_{channel}.jpg'
-        
-        if file in self.entries and not make_new:
-            spec = self.entries[file].get_data()
-            sfreq = self.entries[f'{channel}.bin'].samplingRate
-            plt.imshow(spec)
-        else:
-            signal = self.entries[f'{channel}.bin'].get_data()[0]
-            sfreq = self.entries[f'{channel}.bin'].samplingRate
+        file = f'plot_{channel}.png'
+        entry =  self[channel]
+        signal = entry.get_data()
+        if entry.id.endswith('bin'):
+            signal = signal[0]
+            sfreq = entry.samplingRate
             spec = sleep_utils.specgram_multitaper(signal, int(sfreq), 
-                                                   show_plot=False)
-            plt.imshow(spec)
-            
-            CustomEntry(file, parent=self).set_data(spec)
+                                               show_plot=False, ax=axs[0][0])
+            axs[0][0].imshow(spec, aspect='auto') 
+        elif entry.id.endswith('csv'):
+            sfreq = entry.samplingRate
+            axs[0][0].plot(signal[0], signal[1])
+
+        if hypnogram: axs[0][0].tick_params(axis='x', wich='both', bottom=False,     
+                                            top=False, labelbottom=False) 
         plt.title(f'{channel}, {sfreq} Hz')
+        
+        if hypnogram:
+            hypno = self['hypnogram'].get_data()[1]
+            sleep_utils.plot_hypnogram(hypno, ax=axs[-1][0])
+            
+        data = misc.fig2data(fig)
+        custom = CustomEntry(file, parent=self).set_data(data)
