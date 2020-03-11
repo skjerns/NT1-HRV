@@ -13,6 +13,7 @@ import sleep
 import argparse
 import logging
 import ospath
+from pyedflib import highlevel
 
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.INFO)
@@ -43,25 +44,30 @@ class ECGPlotter():
         if mat_file is None:
             filename = ospath.basename(edf_file)[:-4]
             folder = ospath.dirname(edf_file)
-            mat_file=ospath.list_files(folder, patterns=f'{filename}*.mat')[0]
+            mat_file = ospath.list_files(folder, patterns=f'{filename}*.mat')
+            if len(mat_file)>0: mat_file = mat_file[0]
             if not mat_file or not os.path.exists(mat_file): 
-                print('{} not found'.format(mat_file))
-                dir = os.path.dirname(mat_file)
+                print('matfile {} not found'.format(mat_file))
+                dir = ospath.dirname(edf_file)
                 mat_file = misc.choose_file(dir, exts='mat', 
                         title='Select the corresponding MAT file by Kubios')
+
             
-        p = sleep.Patient(edf_file, channel='ECG I')
-        data = p.data
-        sfreq = p.sfreq    
+        signals, sheader, header = highlevel.read_edf(edf_file, ch_names='ECG I')
+        sfreq =  sheader[0]['sample_rate']
+        data = signals[0].squeeze()
+        stime = header['startdate']
+        self.starttime = (stime.hour * 60 + stime.minute) * 60 + stime.second
         self.data = data
         self.sfreq = sfreq
         
+        
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
-            rrs = mat['Res']['HRV']['Data']['T_RR'] - p.starttime
+            rrs = mat['Res']['HRV']['Data']['T_RR'] - self.starttime
             art = mat['Res']['HRV']['TimeVar']['Artifacts']
         except:
-            logging.error('Mat file not found.')            
+            raise FileNotFoundError('Mat file not found.')            
 
         artefacts_file = edf_file[:-4] + '.npy'  
         if os.path.exists(artefacts_file):
