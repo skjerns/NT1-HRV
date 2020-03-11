@@ -2,12 +2,12 @@
 """
 Created on Mon Dec  2 09:53:08 2019
 
-based upon https://github.com/skjerns/AutoSleepScorerDev
+todo: check length of hypno and features
 
-@author: SimonKern
+@author: skjerns
 """
-from difflib import SequenceMatcher
 import misc
+import config
 import logging as log
 import tqdm as tqdm
 import numpy as np
@@ -97,7 +97,10 @@ class SleepSet():
             raise ValueError(f'patient must be or Patient, is {type(patient)}')
         return self
     
-    
+    def get_feat(self, name):
+        feats = [p.get_feat(name) for p in self]
+        return np.hstack(feats)
+
     
 class Patient(Unisens):
     """
@@ -139,6 +142,11 @@ class Patient(Unisens):
     def get_eeg(self):
         return self['eeg.csv'].get_data()
     
+    def get_feat(self, name):
+        if isinstance(name, int):
+            name = config.feat_mapping[name]
+        return self.feats[name].get_data()
+    
     def plot(self, channel='eeg', hypnogram=True, axs=None):
         hypnogram = hypnogram * 'hypnogram' in self
         plots = 1 + hypnogram
@@ -162,7 +170,7 @@ class Patient(Unisens):
             sfreq = entry.samplingRate
             axs[0][0].plot(signal[0], signal[1])
 
-        if hypnogram: axs[0][0].tick_params(axis='x', wich='both', bottom=False,     
+        if hypnogram: axs[0][0].tick_params(axis='x', which='both', bottom=False,     
                                             top=False, labelbottom=False) 
         plt.title(f'{channel}, {sfreq} Hz')
         

@@ -59,6 +59,8 @@ class TestPatient(unittest.TestCase):
         p = self.p
         p.plot(hypnogram=True)     
         p.plot(hypnogram=False)     
-        p.plot('hypnogram', hypnogram=False)   
+        p.plot('hypnogram', hypnogram=False)  
+        
+        
 if __name__ == '__main__':
     unittest.main()

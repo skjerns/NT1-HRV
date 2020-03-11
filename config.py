@@ -51,6 +51,9 @@ def get_dropbox_location():
 # GENERAL CONFIGURATION
 ###############################
 
+feats_mapping = {999: 'dummy_feature1'}
+
+
 channel_mapping = {  # this is the mapping to streamline channel names of different recordings
            'C4:A1':     'EEG C4-A1',
            'C3:A2':     'EEG C3-A2',
