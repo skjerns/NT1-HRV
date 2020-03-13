@@ -119,10 +119,11 @@ class ECGPlotter():
             print('WARNING: {} epochs, but {} kubios annotations?'.format(
                   epochs, self.artefacts.shape[0]))
         
-    def save(self):
-        np.save(self.artefacts_file, self.artefacts)
-        print('Saved artefacts to {}'.format(self.artefacts_file))
-        
+    def save(self, force=False):
+        if self.writeable or force:
+            np.save(self.artefacts_file, self.artefacts)
+            print('Saved artefacts to {}'.format(self.artefacts_file))
+            
     def draw(self):
         self.fig.canvas.draw() 
         

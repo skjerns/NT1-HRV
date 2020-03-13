@@ -12,7 +12,29 @@ from unisens import SignalEntry, Unisens, ValuesEntry
 import numpy as np
 from datetime import datetime, date
 from sleep import Patient, SleepSet
+import sleep_utils
 
+class TestUtils(unittest.TestCase):
+    
+    def setUp(self):
+        pass
+        
+    def tearDown(self):
+        pass
+    
+    def test_minmax2offset(self):
+        dmin = -np.random.randint(-32766, -1)
+        dmax = -np.random.randint(1,  32766)
+        pmin = -np.random.randint(-500, -1)
+        pmax = -np.random.randint(1, 500)
+        
+        signal = np.random.randint(-dmin, -dmax, 100)
+        signal_p1 = sleep_utils.dig2phys(signal, dmin, dmax, pmin, pmax)
+        
+        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+        signal_p2 = lsb*(signal + offset)
+        
+        np.testing.assert_allclose(signal_p1, signal_p2)
 
 class TestPatient(unittest.TestCase):
     
