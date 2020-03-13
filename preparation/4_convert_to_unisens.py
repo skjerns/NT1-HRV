@@ -56,7 +56,7 @@ def to_unisens(edf_file, delete=False, overwrite=False):
     u = Unisens(unisens_folder, makenew=True, autosave=True)
     header = highlevel.read_edf_header(edf_file)
     all_labels = header['channels']
-    u.startdate = header['startdate']
+    u.starttime = header['startdate']
     u.code = name    
     print('post')
 
@@ -131,7 +131,7 @@ def to_unisens(edf_file, delete=False, overwrite=False):
     #%%####################
     #### add EMG #########
     if not ospath.exists(ospath.join(folder, 'EMG.bin')) or overwrite:
-        emg = sleep_utils.infer_eog_channels(all_labels)
+        emg = sleep_utils.infer_emg_channels(all_labels)
         signals, shead, header = highlevel.read_edf(edf_file, ch_names=emg, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         
@@ -147,7 +147,7 @@ def to_unisens(edf_file, delete=False, overwrite=False):
                     'unit': 'uV',
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
-        eog_entry = SignalEntry(id='EMG.bin', parent=unisens_folder).set_data(**eog_attrib)
+        emg_entry = SignalEntry(id='EMG.bin', parent=unisens_folder).set_data(**eog_attrib)
 
     #%%####################
     #### add annotations #######
@@ -176,8 +176,15 @@ def to_unisens(edf_file, delete=False, overwrite=False):
             if ospath.exists(ospath.join(folder, 'kubios.json')) and not overwrite:continue
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
+            startsecond = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
+            T_RR = HRV['Data']['T_RR'].squeeze() - startsecond
+            T_RR = zip(T_RR, ['RR']*len(T_RR))
+            rr_entry = ValuesEntry(id='T_RR.csv', parent=unisens_folder)
+            rr_entry.set_data(T_RR, ch_names='RR')
+                       
             feats_entry = CustomEntry('kubios.json', parent=unisens_folder)
             feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
+        
         elif file.endswith('npy'):
             if ospath.exists(ospath.join(folder, 'artefacts.csv')) and not overwrite:continue
             art = np.load(file).ravel()
@@ -189,6 +196,7 @@ def to_unisens(edf_file, delete=False, overwrite=False):
             
         elif file.endswith('.edf'):
             pass
+        
         else:
             raise Exception(f'unkown file type: {file}')
     #%%####################
@@ -197,10 +205,13 @@ def to_unisens(edf_file, delete=False, overwrite=False):
     if 'eeg_entry' in locals(): u.add_entry(eeg_entry)
     if 'eog_entry' in locals(): u.add_entry(eog_entry)
     if 'emg_entry' in locals(): u.add_entry(emg_entry)
+    if 'rr_entry' in locals(): u.add_entry(rr_entry)
     if 'artefact_entry' in locals(): u.add_entry(artefact_entry)
     if 'hypno_entry' in locals(): u.add_entry(hypno_entry)
-    if 'feats_entry' in locals(): u.add_entry(feats_entry)
+    if 'feats_entry' in locals():u.add_entry(feats_entry)
     if 'annot_entry' in locals(): u.add_entry(annot_entry)
+    
+    
     u.save()
     
     if delete:

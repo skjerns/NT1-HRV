@@ -406,7 +406,7 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
                 logging.warning('{}:Digital signal maximum is {}'\
                                 ', but value range is {}, will correct'.format\
                                 (ch_name, dmax, dsmax))
-                sigh['digital_max'] = dsmax
+                # sigh['digital_max'] = dsmax
             if psmax-min_dist>pmax:
                 logging.warning('{}:Phyiscal signal maximum is {}'\
                                 ', but value range is {}, will correct'.format\
@@ -430,110 +430,6 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
     del f
     return os.path.isfile(edf_file) 
 
-
-def write_edf_quick(edf_file, signals, sfreq, digital=False):
-    """
-    wrapper for write_pyedf without creating headers.
-    Use this if you don't care about headers or channel names and just
-    want to dump some signals with the same sampling freq. to an edf
-    
-    :param edf_file: where to store the data/edf
-    :param signals: The signals you want to store as numpy array
-    :param sfreq: the sampling frequency of the signals
-    :param digital: if the data is present digitally (int) or as mV/uV
-    """
-    labels = ['CH_{}'.format(i) for i in range(len(signals))]
-    signal_headers = make_signal_headers(labels, sample_rate = sfreq)
-    return write_edf(edf_file, signals, signal_headers, digital=digital)
-
-
-def read_edf_header(edf_file):
-    """
-    Reads the header and signal headers of an EDF file
-    
-    :returns: header of the edf file (dict)
-    """
-    assert os.path.isfile(edf_file), 'file {} does not exist'.format(edf_file)
-    with pyedflib.EdfReader(edf_file) as f:
-        summary = f.getHeader()
-        summary['SignalHeaders'] = f.getSignalHeaders()
-        summary['channels'] = f.getSignalLabels()
-        summary['Duration'] = f.getFileDuration()
-    del f
-    return summary
-
-
-
-def drop_channels(edf_source, edf_target=None, to_keep=None, to_drop=None,
-                  verify=False, overwrite=False):
-    """
-    Remove channels from an edf file using pyedflib.
-    Save the file as edf_target. 
-    For safety reasons, no source files can be overwritten.
-    
-    :param edf_source: The source edf file
-    :param edf_target: Where to save the file. 
-                       If None, will be edf_source+'dropped.edf'
-    :param to_keep: A list of channel names or indices that will be kept.
-                    Strings will always be interpreted as channel names.
-                    'to_keep' will overwrite any droppings proposed by to_drop
-    :param to_drop: A list of channel names/indices that should be dropped.
-                    Strings will be interpreted as channel names.
-    :returns: the target filename with the dropped channels
-    """
-    # convert to list if necessary
-    if isinstance(to_keep, (int, str)): to_keep = [to_keep]
-    if isinstance(to_drop, (int, str)): to_drop = [to_drop]
-
-    # check all parameters are good
-    assert to_keep is None or to_drop is None,'Supply only to_keep xor to_drop'
-    if to_keep is not None:
-        assert all([isinstance(ch, (str, int)) for ch in to_keep]),\
-            'channels must be int or string'
-    if to_drop is not None:
-        assert all([isinstance(ch, (str, int)) for ch in to_drop]),\
-            'channels must be int or string'
-    assert os.path.exists(edf_source), 'source file {} does not exist'\
-                                       .format(edf_source)
-    assert edf_source!=edf_target, 'For safet, target must not be source file.'
-
-    if edf_target is None: 
-        edf_target = os.path.splitext(edf_source)[0] + '_dropped.edf'
-    if os.path.exists(edf_target) and overwrite: 
-        warnings.warn('Target file will be overwritten')
-    elif os.path.exists(edf_target):
-        warnings.warn('Exists. Target file will not be overwritten')
-        return
-
-    ch_names = read_edf_header(edf_source)['channels']
-    # convert to all lowercase for compatibility
-    ch_names = [ch.lower() for ch in ch_names]
-    ch_nrs = list(range(len(ch_names)))
-
-    if to_keep is not None:
-        for i,ch in enumerate(to_keep):
-            if isinstance(ch,str):
-                ch_idx = ch_names.index(ch.lower())
-                to_keep[i] = ch_idx
-        load_channels = to_keep.copy()
-    elif to_drop is not None:
-        for i,ch in enumerate(to_drop):
-            if isinstance(ch,str):
-                ch_idx = ch_names.index(ch.lower())
-                to_drop[i] = ch_idx 
-        to_drop = [len(ch_nrs)+ch if ch<0 else ch for ch in to_drop]
-
-        [ch_nrs.remove(ch) for ch in to_drop]
-        load_channels = ch_nrs.copy()
-    else:
-        raise ValueError
-
-    signals, signal_headers, header = read_edf(edf_source, 
-                                               ch_nrs=load_channels, 
-                                               digital=True, verbose=False)
-
-    write_edf(edf_target, signals, signal_headers, header, digital=True)
-    return edf_target
 
 def compare_edf(edf_file1, edf_file2, verbose=True, threading=True):
     """
@@ -608,78 +504,7 @@ def change_polarity(edf_file, channels, new_file=None):
             shead['physical_max']*=-1
     write_edf(new_file, signals, signal_headers, header, digital=True)
     compare_edf(edf_file, new_file)
-
-
-def anonymize_edf(edf_file, new_file=None, verify=False,
-                  to_remove   = ['patientname', 'birthdate'],
-                  new_values  = ['xxx', '']):
-    """
-    Anonymizes an EDF file, that means it strips all header information
-    that is patient specific, ie. birthdate and patientname as well as XXX
-    
-    :param edf_file: a string with a filename of an EDF/BDF
-    :param new_file: where to save the anonymized edf file
-    :param verify:   reloads the data and checks if all channels are correct
-    :param to_remove: a list of attributes to remove from the file
-    :param new_values: a list of values that should be given instead to the edf
-    :returns: True if successful, False if failed
-    """
-    assert len(to_remove)==len(new_values), \
-           'Each to_remove must have one new_value'
-    header = read_edf_header(edf_file)
-
-    for new_val, attr in zip(new_values, to_remove):
-        header[attr] = new_val
-
-    if new_file is None:
-        file, ext = os.path.splitext(edf_file)
-        new_file = file + '_anonymized' + ext
-    signal_headers = []
-    signals = []
-    # for ch_nr in range(n_chs):
-    signals, signal_headers, _ = read_edf(edf_file, digital=True, 
-                                             verbose=True)
-
-    write_edf(new_file, signals, signal_headers, header, digital=True, correct=True)
-    
-    if verify:
-        compare_edf(new_file, edf_file)
-    return 
-
-
-def rename_channels(edf_file, mapping, remove=None, new_file=None, verify=False):
-    """
-    A convenience function to rename channels in an EDF file.
-    
-    :param edf_file: an string pointing to an edf file
-    :param mapping:  a dictionary with channel mappings as key:value
-    :param new_file: the new filename
-    """  
-    if new_file is None:
-        file, ext = os.path.splitext(edf_file)
-        new_file = file + '_renamed' + ext
-
-    new_signal_headers = []
-    new_signals = []
-    
-    signals, signal_headers, header = read_edf(edf_file, digital=True, verbose=False)
-    for signal, signal_header in zip(signals, signal_headers):
-        ch = signal_header['label']
-        if ch in mapping:
-            # print('{} to {}'.format(ch, mapping[ch]))
-            ch = mapping[ch]
-            signal_header['label'] = ch
-        elif ch in mapping.values():
-            pass
-        else:
-            print('no mapping for {}, leave as it is'.format(ch))
-        new_signal_headers.append(signal_header)
-        new_signals.append(signal)
-            
-    write_edf(new_file, signals, signal_headers, header, digital=True)
-    if verify:
-        compare_edf(edf_file, new_file)
-    
+   
     
     
 def specgram_multitaper(data, sfreq, sperseg=30, perc_overlap=1/3,

@@ -21,6 +21,25 @@ def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
             for text in _nsre.split(s)]    
     
+
+def FeaturesEntry(CustomEntry):
+    """A modified Customentry that can handle subentries gracefully"""
+    
+    def to_element(self):
+        """creates a unisens.xml that shows only the features"""
+        super().to_element()
+        u = Unisens(folder=self._folder, file='features.xml')
+        
+        ecg = self._parent['ecg'].copy()
+        stages = self._parent['hypnogram'].copy()
+        
+        u.add_entry(ecg)
+        u.add_entry(stages)
+        
+        for entry in self._entries:
+            u.add_entry(entry)
+        u.save()
+        
 class SleepSet():
     """
     A SleepSet is a container for several Patients, where each Patient

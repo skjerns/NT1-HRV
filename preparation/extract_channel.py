@@ -24,4 +24,5 @@ if __name__ == '__main__':
         os.makedirs(new_folder, exist_ok=True)
         for file in tqdm(files):
             new_file = ospath.join(new_folder, ospath.basename(file))
+            if ospath.exists(new_file): continue
             sleep_utils.drop_channels(file, new_file, to_keep=['ECG I'])

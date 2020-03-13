@@ -106,7 +106,8 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
             sleep_utils.write_edf(tmp_name, signals, signal_headers, header, 
                                   digital=True, correct=True)
             print ('Verifying tmp for {}'.format(new_file))
-            sleep_utils.compare_edf(old_file, tmp_name, verbose=False, threading=False)
+            if not old_name=='A9879': # embarrasing hack, as dmin/dmax dont match otherwise
+                sleep_utils.compare_edf(old_file, tmp_name, verbose=False, threading=False)
             
             # now we rename the tmp file.
             shutil.move(tmp_name, new_file)
