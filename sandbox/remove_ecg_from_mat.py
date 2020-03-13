@@ -16,6 +16,8 @@ import argparse
 
 
 def extract_from_mat(folder=None, overwrite=False):
+    h5_repack = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'h5repack.exe')
+
     print('Converting files in ', folder)
     files = ospath.list_files(folder, exts='hrv.mat')
     for old_file in tqdm(files):
@@ -31,8 +33,7 @@ def extract_from_mat(folder=None, overwrite=False):
             del fread['Res']['CNT']
             fread.flush()
     
-        h5repack = os.path.abspath("./h5repack.exe")
-        subprocess.run([h5repack, tmp_file, new_file])
+        subprocess.run([h5_repack, tmp_file, new_file])
         os.remove(tmp_file)
 
 
