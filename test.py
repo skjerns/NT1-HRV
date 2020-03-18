@@ -8,10 +8,11 @@ import os, sys
 import shutil
 import unittest
 import tempfile
-from unisens import SignalEntry, Unisens, ValuesEntry
+import ospath
 import numpy as np
+from unisens import SignalEntry, Unisens, ValuesEntry
 from datetime import datetime, date
-from sleep import Patient, SleepSet
+from sleep import Patient, SleepSet, FeaturesEntry
 import sleep_utils
 
 class TestUtils(unittest.TestCase):
@@ -36,6 +37,8 @@ class TestUtils(unittest.TestCase):
         
         np.testing.assert_allclose(signal_p1, signal_p2)
 
+
+
 class TestPatient(unittest.TestCase):
     
     @classmethod
@@ -46,11 +49,11 @@ class TestPatient(unittest.TestCase):
         cls.patient_str = []
         cls.patients = [Patient(f) for f in cls.patient_list]
         
-        seconds = 15000
+        seconds = 15000//2
         for p in cls.patients:
-            x = np.arange(256*seconds)
-            sine = np.sin(2 * np.pi * 5 * x / 256)                  
-            signal = SignalEntry('eeg.bin', parent=p._folder).set_data(sine, samplingRate=256)
+            x = np.arange(32*seconds)
+            sine = np.sin(2 * np.pi * 5 * x / 32)                  
+            signal = SignalEntry('eeg.bin', parent=p._folder).set_data(sine, samplingRate=32)
             p.add_entry(signal)
         hypnogram = np.random.randint(0,5, [seconds//30])
         hypnogram = np.vstack([np.arange(seconds//30),hypnogram])
@@ -82,8 +85,20 @@ class TestPatient(unittest.TestCase):
         p.plot(hypnogram=True)     
         p.plot(hypnogram=False)     
         p.plot('hypnogram', hypnogram=False)  
+        self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_hypnogram.png')))
+        self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_eeg.png')))
+
+    def test_features(self):
+        p = Patient(self.tmpdir)
+        featsx = FeaturesEntry(id='feats.bin', parent=p)
+        ValuesEntry('feat1.csv', parent=featsx)
+        ValuesEntry('feat2.csv', parent=featsx).set_data([[1,2],[3,4]])
+        ValuesEntry('feat2.csv', parent=featsx).set_data([[5,6],[7,8]])
+        self.assertEqual(p['feats']['feat2'].get_data(), [[5,6],[7,8]])
         
-        
+        with self.assertRaises(KeyError):
+            FeaturesEntry(id='feats.bin', parent=p)
+
 if __name__ == '__main__':
     unittest.main()
     

@@ -4,14 +4,41 @@ Created on Wed Dec 18 12:46:37 2019
 
 @author: Simon
 """
+import config
 import os
+from unisens import utils
 import numpy as np
 from tkinter import  Tk
 from unisens.utils import read_csv, write_csv
-from tkinter.filedialog import askopenfilename
+from tkinter.filedialog import askopenfilename, askdirectory
 from collections import OrderedDict
 from tkinter import simpledialog
 import hashlib
+
+
+def get_mapping():
+    """gets the mapping dictionary for codes and names"""
+    csv = os.path.join(config.documents, 'mapping_all.csv')
+    mappings = utils.read_csv(csv)
+    mappings.extend([x[::-1] for x in mappings]) # also backwards
+    return dict(mappings)
+    
+    
+def get_attribs():
+    """get the attributes of the patients etc"""
+    mappings = get_mapping()
+    control_csv = os.path.join(config.documents, 'subjects_control.csv')
+    nt1_csv = os.path.join(config.documents, 'subjects_nt1.csv')
+    
+    control = utils.read_csv(control_csv)
+    nt1 = utils.read_csv(nt1_csv)
+
+    control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control'}] for c in control] 
+    nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1'}] for c in nt1] 
+    
+    all = control + nt1
+    all = [[mappings[x[0]],x[1]] for x in all ]
+    return dict(all)
 
 def codify(filename): 
     """
@@ -47,45 +74,7 @@ def fig2data(fig):
     buf = np.roll(buf, 3, axis = 2 )
     return buf
 
-# def write_csv(csv_file, data_list, sep=';'):
-#     """
-#     Parameters
-#     ----------
-#     csv_file : str
-#         a filename.
-#     data_list : list
-#         a list of list. each list is a new line, each list of list is an entry there.
-#     sep : str, optional
-#         the separator to be used. The default is ';'.
 
-#     Returns
-#     -------
-#     lines : TYPE
-#         DESCRIPTION.
-
-#     """
-#     with open(csv_file, 'w') as f:
-#         string = '\n'.join([';'.join(line) for line in data_list])
-#         f.write(string)
-#     return True
-
-# def read_csv(csv_file, sep=';', remove_empty=True):
-#     """
-#     simply load an csv file with a separator and newline as \\n
-#     comments are annotated as starting with # and are removed
-#     empty lines are removed
-    
-#     :param csv_file: a csv file to load
-#     :param sep: set a different separator. this is language specific
-#     """
-#     with open(csv_file, 'r') as f:
-#         content = f.read()
-#         lines = content.split('\n')
-#         lines = [line for line in lines if not line.startswith('#')]
-#         lines = [line.strip() for line in lines]
-#         lines = [line for line in lines if line!='']
-#         lines = [[el.strip() for el in line.split(sep)] for line in lines]
-#     return lines
 
 def choose_file(default_dir=None,exts='txt', title='Choose file'):
     """
@@ -111,7 +100,29 @@ def choose_file(default_dir=None,exts='txt', title='Choose file'):
     else:
         return name
 
-
+def choose_folder(default_dir=None,exts='txt', title='Choose file'):
+    """
+    Open a file chooser dialoge with tkinter.
+    
+    :param default_dir: Where to open the dir, if set to None, will start at wdir
+    :param exts: A string or list of strings with extensions etc: 'txt' or ['txt','csv']
+    :returns: the chosen file
+    """
+    root = Tk()
+    root.iconify()
+    root.update()
+    if isinstance(exts, str): exts = [exts]
+    name = askdirectory(initialdir=None,
+                           parent=root,
+                           title = title)
+    root.update()
+    root.destroy()
+    if not os.path.exists(name):
+        print("No file exists")
+    else:
+        return name
+    
+    
 def input_box(message='Please type your input', title='Input', dtype=str,
               initialvalue = None, **kwargs):
     """

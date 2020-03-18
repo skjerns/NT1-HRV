@@ -51,7 +51,6 @@ class ECGPlotter():
                 dir = ospath.dirname(edf_file)
                 mat_file = misc.choose_file(dir, exts='mat', 
                         title='Select the corresponding MAT file by Kubios')
-
             
         signals, sheader, header = highlevel.read_edf(edf_file, ch_names='ECG I')
         sfreq =  sheader[0]['sample_rate']
@@ -60,7 +59,6 @@ class ECGPlotter():
         self.starttime = (stime.hour * 60 + stime.minute) * 60 + stime.second
         self.data = data
         self.sfreq = sfreq
-        
         
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
@@ -90,15 +88,17 @@ class ECGPlotter():
 
     
     def __init__(self, edf_file, mat_file=None, page=0, 
-                 interval=30, nrows=4, ncols=4):
+                 interval=30, nrows=4, ncols=4, no_autosave=True):
+        plt.rcParams['keymap.save'].remove('s')
         self.c_okay = (1, 1, 1, 1)       # background coloring of accepted
-        self.c_art = (1, 0.8, 0.4, 0.5)  # background coloring of artefact
+        self.c_art = (1, 0.8, 0.4, 0.2)  # background coloring of artefact
         self.threshold = 5
         self.page = page
         self.interval = interval
         self.nrows = nrows
         self.ncols = ncols
         self.gridsize = nrows*ncols
+        self.no_autosave = no_autosave
         
         self._load(edf_file=edf_file, mat_file=mat_file)
         # set up the plot, connect the button presses
@@ -111,18 +111,19 @@ class ECGPlotter():
         self.background = self.fig.canvas.copy_from_bbox(self.axs[0].bbox)
         self.update()
         
-        
-        
         # sanity check
         epochs = len(self.data)/self.sfreq/30
         if epochs!=self.artefacts.shape[0]:
             print('WARNING: {} epochs, but {} kubios annotations?'.format(
                   epochs, self.artefacts.shape[0]))
-        
+         
     def save(self, force=False):
-        if self.writeable or force:
+        if not self.no_autosave or force:
             np.save(self.artefacts_file, self.artefacts)
             print('Saved artefacts to {}'.format(self.artefacts_file))
+        else:
+            print('No auto-saving')
+            
             
     def draw(self):
         self.fig.canvas.draw() 
@@ -195,6 +196,7 @@ class ECGPlotter():
         helpstr = 'right\tnext page\n'\
                   'left\tprevious page\n'\
                   'enter\tjump to page X\n'\
+                  's\tsave\n'\
                   'escape\tsave progress and quit\n'\
                   '\nmouse button\tmark as artefact\n\n'\
         
@@ -202,6 +204,11 @@ class ECGPlotter():
             self.save()
             plt.close('all')
             return
+        
+        if event.key=='s':
+            self.save(force=True)
+            return
+        
         elif event.key =='enter':
             page = misc.input_box('Please select new page position', dtype=int, 
                                  initialvalue=self.page, minvalue=0, 
@@ -282,12 +289,15 @@ if __name__=='__main__':
                          help='Number of columns to display in the viewer')
     parser.add_argument('-page', type=int, default=0,
                          help='At which page (epoch*gridsize) to start the viewer')
+    parser.add_argument('-no-autosave', action='store_true',
+                         help='give flag if no autosave is wished')
     args = parser.parse_args()
     edf_file = args.edf_file
     mat_file = args.mat_file
     nrows = args.nrows
     ncols = args.ncols
     page = args.page
+    no_autosave = args.no_autosave
 
     if edf_file is None:
         edf_file = misc.choose_file(exts=['edf', 'npy'], 
@@ -296,7 +306,7 @@ if __name__=='__main__':
     
     
     self = ECGPlotter(edf_file=edf_file, mat_file=mat_file, page=page,
-                      nrows=nrows, ncols=ncols)
+                      nrows=nrows, ncols=ncols, no_autosave=no_autosave)
     plt.show(block=True)
 
 

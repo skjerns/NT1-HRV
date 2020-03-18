@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 if __name__ == '__main__':
     ecg = cfg.ecg_channel
-    data = cfg.data
+    data = cfg.folder_edf
     folders = ospath.list_folders(data, subfolders=True, add_parent=False)
     for folder in folders:
         if ecg in folder: continue

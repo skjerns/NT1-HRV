@@ -12,33 +12,44 @@ import logging as log
 import tqdm as tqdm
 import numpy as np
 import ospath
+import os
 import re
+import time
 import sleep_utils
 import matplotlib.pyplot as plt
-from unisens import Unisens, CustomEntry
+from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
             for text in _nsre.split(s)]    
     
 
-def FeaturesEntry(CustomEntry):
+class FeaturesEntry(CustomEntry):
     """A modified Customentry that can handle subentries gracefully"""
+       
+    
+    def add_entry(self, *args, **kwargs):
+        super().add_entry(*args,**kwargs, stack=False)
     
     def to_element(self):
         """creates a unisens.xml that shows only the features"""
-        super().to_element()
+        
         u = Unisens(folder=self._folder, file='features.xml')
         
-        ecg = self._parent['ecg'].copy()
-        stages = self._parent['hypnogram'].copy()
-        
-        u.add_entry(ecg)
-        u.add_entry(stages)
+        if 'ecg' in self._parent: 
+            ecg = self._parent['ecg'].copy()
+            u.add_entry(ecg)
+
+        if 'hypnogram' in self._parent: 
+            stages = self._parent['hypnogram'].copy()
+            u.add_entry(stages)
         
         for entry in self._entries:
             u.add_entry(entry)
         u.save()
+        return super().to_element()
+        
+        
         
 class SleepSet():
     """
@@ -71,7 +82,17 @@ class SleepSet():
             self.add(patient)   
         return None
         
-    
+    def __repr__(self):
+        n_patients = len(self)
+        
+        f_control = lambda x: x.group.lower()=='control'
+        n_control = len(self.filter(f_control))
+        f_nt1 = lambda x: x.group.lower()=='control'
+        n_nt1 = len(self.filter(f_nt1))
+
+        return f'SleepSet({n_patients} Patients, {n_control} Control,'\
+                '{n_nt1} NT1)'
+        
     def __iter__(self):
         """
         iterate through all patients in this set
@@ -101,7 +122,16 @@ class SleepSet():
     
     
     def filter(self, function):
-        return SleepSet(list(filter(function, self.patients)))
+        p_true = []
+        for p in self.patients:
+            try: 
+                is_true = function(p)
+                if is_true: p_true.append(p)
+            except Exception as e:
+                code = p.attrib.get('code', 'unknown')
+                print(f'Can\'t filter {code}: {e}')
+            
+        return SleepSet(p_true)
     
     
     def add(self, patient):
@@ -136,14 +166,27 @@ class Patient(Unisens):
         return object.__new__(cls)
 
     def __repr__(self):
-        return 'Patient'
+        name = self.attrib.get('code', 'unkown')
+        sfreq = int(self.attrib.get('sampling_frequency', -1))
+        seconds = int(self.attrib.get('duration', 0))
+        length = time.strftime('%H:%M:%S', time.gmtime(seconds))
+        gender = self.attrib.get('gender', '')
+        age = self.attrib.get('age', -1)
+        
+        if 'features' in  self:
+            nfeats = len(self['feats'])
+        else:
+            nfeats = 0
+        return f'Patient({name}, {length} , {sfreq} Hz, {nfeats} feats, '\
+               f'{gender} {age} y)'
     
     def __str__(self):
-        return 'Patient'
+        return repr(self)
     
     def __init__(self, folder, *args, **kwargs):
         if isinstance(folder, Patient): return None
-        super().__init__(folder, *args, autosave=True, **kwargs)
+        if not 'autosave' in kwargs: kwargs['autosave'] = True
+        super().__init__(folder, *args, **kwargs)
 
     def __len__(self):
         """
@@ -176,7 +219,7 @@ class Patient(Unisens):
                                     gridspec_kw={'height_ratios':h_ratio}, 
                                     squeeze=False)
             
-        file = f'plot_{channel}.png'
+        file = ospath.join(self._folder, '/plots/', f'plot_{channel}.png')
         entry =  self[channel]
         signal = entry.get_data()
         if entry.id.endswith('bin'):
@@ -196,6 +239,6 @@ class Patient(Unisens):
         if hypnogram:
             hypno = self['hypnogram'].get_data()[1]
             sleep_utils.plot_hypnogram(hypno, ax=axs[-1][0])
-            
-        data = misc.fig2data(fig)
-        custom = CustomEntry(file, parent=self).set_data(data)
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        plt.savefig(file)
+        return file

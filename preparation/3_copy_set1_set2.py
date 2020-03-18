@@ -21,8 +21,8 @@ if __name__=='__main__':
     documents = cfg.documents
     datasets = [ospath.join(documents, 'mapping_' + d + '.csv') for d in cfg.datasets]
     matching = cfg.matching
-    set1_path = ospath.join(cfg.data, 'set1')
-    set2_path = ospath.join(cfg.data, 'set2')
+    set1_path = ospath.join(cfg.folder_edf, 'set1')
+    set2_path = ospath.join(cfg.folder_edf, 'set2')
     
     
     matchings = read_csv(matching)
@@ -30,10 +30,10 @@ if __name__=='__main__':
     set1 = read_csv(datasets[0])
     set2 = read_csv(datasets[1])
     
-    os.makedirs(ospath.join(cfg.data, 'set1'), exist_ok=True)
-    os.makedirs(ospath.join(cfg.data, 'set2'), exist_ok=True)
-    os.makedirs(ospath.join(cfg.data, 'set1', 'not_matched'), exist_ok=True)
-    os.makedirs(ospath.join(cfg.data, 'set2', 'not_matched'), exist_ok=True)
+    os.makedirs(ospath.join(cfg.folder_edf, 'set1'), exist_ok=True)
+    os.makedirs(ospath.join(cfg.folder_edf, 'set2'), exist_ok=True)
+    os.makedirs(ospath.join(cfg.folder_edf, 'set1', 'not_matched'), exist_ok=True)
+    os.makedirs(ospath.join(cfg.folder_edf, 'set2', 'not_matched'), exist_ok=True)
     
     
     # copy the files into nt1:matched set1 and nt1:matched set2 respectively
@@ -42,26 +42,26 @@ if __name__=='__main__':
         for patient, p_coded1 in set1:
             if patient==p_orig:
                 assert p_coded==p_coded1 # sanity check
-                old_location_nt1 = ospath.join(cfg.data, p_coded +'.edf')
-                new_location_nt1  = ospath.join(cfg.data, 'set1', p_coded +'.edf')
+                old_location_nt1 = ospath.join(cfg.folder_edf, p_coded +'.edf')
+                new_location_nt1  = ospath.join(cfg.folder_edf, 'set1', p_coded +'.edf')
                 if not ospath.exists(new_location_nt1):
                     shutil.copy(old_location_nt1, new_location_nt1)
                     
-                old_location_cnt = ospath.join(cfg.data, c_coded +'.edf')
-                new_location_cnt  = ospath.join(cfg.data.strip(), 'set1', c_coded.strip() +'.edf')
+                old_location_cnt = ospath.join(cfg.folder_edf, c_coded +'.edf')
+                new_location_cnt  = ospath.join(cfg.folder_edf.strip(), 'set1', c_coded.strip() +'.edf')
                 if not ospath.exists(new_location_cnt):
                     shutil.copy(old_location_cnt, new_location_cnt)
                     
         for patient, p_coded1 in set2:
             if patient==p_orig:
                 assert p_coded==p_coded1 # sanity check
-                old_location_nt1 = ospath.join(cfg.data, p_coded +'.edf')
-                new_location_nt1  = ospath.join(cfg.data, 'set2', p_coded +'.edf')
+                old_location_nt1 = ospath.join(cfg.folder_edf, p_coded +'.edf')
+                new_location_nt1  = ospath.join(cfg.folder_edf, 'set2', p_coded +'.edf')
                 if not ospath.exists(new_location_nt1):
                     shutil.copy(old_location_nt1, new_location_nt1)
                     
-                old_location_cnt = ospath.join(cfg.data, c_coded +'.edf')
-                new_location_cnt  = ospath.join(cfg.data, 'set2', c_coded +'.edf')
+                old_location_cnt = ospath.join(cfg.folder_edf, c_coded +'.edf')
+                new_location_cnt  = ospath.join(cfg.folder_edf, 'set2', c_coded +'.edf')
                 if not ospath.exists(new_location_cnt):
                     shutil.copy(old_location_cnt, new_location_cnt)
                     
@@ -69,14 +69,14 @@ if __name__=='__main__':
     matched = [match[1] for match in matchings if int(match[-1])<=cfg.max_age_diff]
     for p_orig, p_coded in tqdm(set1):
         if p_coded not in matched:
-            old_location = ospath.join(cfg.data, p_coded +'.edf')
-            new_location = ospath.join(cfg.data, 'set1', 'not_matched', p_coded +'.edf')
+            old_location = ospath.join(cfg.folder_edf, p_coded +'.edf')
+            new_location = ospath.join(cfg.folder_edf, 'set1', 'not_matched', p_coded +'.edf')
             if not ospath.exists(new_location):
                 shutil.copy(old_location, new_location)
                     
     for p_orig, p_coded in tqdm(set2):
         if p_coded not in matched:
-            old_location = ospath.join(cfg.data, p_coded +'.edf')
-            new_location = ospath.join(cfg.data, 'set2', 'not_matched', p_coded +'.edf')
+            old_location = ospath.join(cfg.folder_edf, p_coded +'.edf')
+            new_location = ospath.join(cfg.folder_edf, 'set2', 'not_matched', p_coded +'.edf')
             if not ospath.exists(new_location):
                 shutil.copy(old_location, new_location)

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from sleep_utils import read_edf
 from tqdm import tqdm
 if __name__ == '__main__':
-    data = cfg.data
+    data = cfg.folder_edf
     files = ospath.list_files(data, exts='edf') 
     _, ax = plt.subplots()
     for file in tqdm(files):

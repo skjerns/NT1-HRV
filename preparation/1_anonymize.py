@@ -22,7 +22,7 @@ from joblib import delayed, Parallel
 # Settings for datasets
 #######################
 
-target_folder = cfg.data  # leads to where the final data is stored
+target_folder = cfg.folder_edf  # leads to where the final data is stored
 datasets = cfg.datasets   # contains a dictionary with a mapping of datasetname:location leading to datasets
 documents = cfg.documents # contains the path to the nt1-hrv-documents folder in the dropbox
 

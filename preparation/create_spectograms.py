@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 if __name__ == '__main__':  
-    dataset = cfg.data
+    dataset = cfg.folder_edf
     files = ospath.list_files(dataset, exts='edf')
     ax = plt.subplot(1,1,1)
     for file in tqdm(files):

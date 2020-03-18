@@ -32,37 +32,50 @@ from unisens import CustomEntry
 import os
 from pyedflib import highlevel
 from unisens.utils import read_csv
+from sleep import FeaturesEntry
 import shutil
 import numpy as np
+from sleep import Patient
 import ospath
 import sleep_utils
 import config as cfg
 from tqdm import tqdm
 import json_tricks
+import misc
 
 
 
 
-def to_unisens(edf_file, delete=False, overwrite=False):
+def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
     pass
 #%%    
+    if tqdm_desc is None:  tqdm_desc=lambda x: None
     dtype = np.int16
-    name = ospath.basename(edf_file)[:-4]
+    code = ospath.basename(edf_file)[:-4]
     folder = ospath.dirname(edf_file)
-    unisens_folder = ospath.join(folder, name)
+    if unisens_folder is None: 
+        unisens_folder = '.'
+    
+    unisens_folder = ospath.join(unisens_folder, code)
         
     # get all additional files that belong to this EDF
-    add_files = ospath.list_files(folder, patterns=name + '*')
-    u = Unisens(unisens_folder, makenew=True, autosave=True)
+    add_files = ospath.list_files(folder, patterns=code + '*')
+    u = Patient(unisens_folder, makenew=False, autosave=True)
     header = highlevel.read_edf_header(edf_file)
     all_labels = header['channels']
     u.starttime = header['startdate']
-    u.code = name    
-    print('post')
+    u.code = code
+    
+    attribs = misc.get_attribs()
+    u.group = attribs[code].get('group', 'none')
+    u.gender = attribs[code].get('gender', 'none')
+    u.age = attribs[code].get('age', -1)
+    
 
     #%%####################
     #### add ECG ##########
-    if not ospath.exists(ospath.join(folder, 'ECG.bin')) or overwrite:
+    tqdm_desc(f'{code}: Reading ECG')
+    if not 'ECG' in u or overwrite:
         signals, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I', digital=True)
         signals[:,0:2]  = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -80,13 +93,14 @@ def to_unisens(edf_file, delete=False, overwrite=False):
         
         ecg_entry = SignalEntry(id='ECG.bin', parent=unisens_folder).set_data(**ecg_attrib)
         
-
+    
         u.sampling_frequency = shead[0]['sample_rate']
-        u.duration = len(signals)//shead[0]['sample_rate']
+        u.duration = len(signals.squeeze())//shead[0]['sample_rate']
         u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30        
     #%%####################
     #### add EEG ##########
-    if not ospath.exists(ospath.join(folder, 'EEG.bin')) or overwrite:
+    tqdm_desc(f'{code}: Reading EEG')
+    if not 'EEG' in u or overwrite:
         eeg = sleep_utils.infer_eeg_channels(all_labels)
         signals, shead, header = highlevel.read_edf(edf_file, ch_names=eeg, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
@@ -108,7 +122,8 @@ def to_unisens(edf_file, delete=False, overwrite=False):
  
     #%%####################
     #### add EOG #########
-    if not ospath.exists(ospath.join(folder, 'EOG.bin')) or overwrite:
+    if not 'EOG' in u or overwrite:
+        tqdm_desc(f'{code}: Reading EOG')
         eog = sleep_utils.infer_eog_channels(all_labels)
         signals, shead, header = highlevel.read_edf(edf_file, ch_names=eog, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
@@ -130,28 +145,30 @@ def to_unisens(edf_file, delete=False, overwrite=False):
         
     #%%####################
     #### add EMG #########
-    if not ospath.exists(ospath.join(folder, 'EMG.bin')) or overwrite:
+    if not 'EMG' in u or overwrite:
+        tqdm_desc(f'{code}: Reading EMG')
         emg = sleep_utils.infer_emg_channels(all_labels)
-        signals, shead, header = highlevel.read_edf(edf_file, ch_names=emg, digital=True)
-        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
-        
-        pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
-        dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
-        
-        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-        eog_attrib={'data': signals.astype(dtype), 
-                    'sampleRate': shead[0]['sample_rate'],
-                    'ch_names': emg,
-                    'lsbValue': 1,
-                    'baseline': 0,
-                    'unit': 'uV',
-                    'dmin': dmin,'dmax': dmax,
-                    'pmin': pmin, 'pmax': pmax}
-        emg_entry = SignalEntry(id='EMG.bin', parent=unisens_folder).set_data(**eog_attrib)
+        if emg!=[]: # fix for 888_49272
+            signals, shead, header = highlevel.read_edf(edf_file, ch_names=emg, digital=True)
+            signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
+            
+            pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+            dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
+            
+            lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+            eog_attrib={'data': signals.astype(dtype), 
+                        'sampleRate': shead[0]['sample_rate'],
+                        'ch_names': emg,
+                        'lsbValue': 1,
+                        'baseline': 0,
+                        'unit': 'uV',
+                        'dmin': dmin,'dmax': dmax,
+                        'pmin': pmin, 'pmax': pmax}
+            emg_entry = SignalEntry(id='EMG.bin', parent=unisens_folder).set_data(**eog_attrib)
 
     #%%####################
     #### add annotations #######
-    if not ospath.exists(ospath.join(folder, 'annotations.csv')) or overwrite:
+    if not 'annotations' in u or overwrite:
         annotations = header['annotations']
         if annotations!=[]:
             annot_entry = EventEntry('annotations.csv', parent=unisens_folder)
@@ -163,30 +180,40 @@ def to_unisens(edf_file, delete=False, overwrite=False):
     
     for file in add_files:
         if file.endswith('txt') or file.endswith('dat'):
-            if ospath.exists(ospath.join(folder, 'hypnogram.csv')) and not overwrite:continue
+            if  'hypnogram' in u and not overwrite: continue
+            tqdm_desc(f'{code}: Reading Hypnogram')
             hypno = sleep_utils.read_hypnogram(file)
             u.epochs_hypno = len(hypno)
             times = np.arange(len(hypno))
             hypno = np.vstack([times, hypno]).T
             hypno_entry = EventEntry(id='hypnogram.csv', parent=unisens_folder)
-            hypno_entry.set_data(hypno, comment=f'File: {name}\nSleep stages 30s epochs.', 
+            hypno_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
 
-        elif file.endswith('mat'):
-            if ospath.exists(ospath.join(folder, 'kubios.json')) and not overwrite:continue
+        elif file.endswith('mat'):              
+            tqdm_desc(f'{code}: Reading Kubios')
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
             startsecond = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
             T_RR = HRV['Data']['T_RR'].squeeze() - startsecond
-            T_RR = zip(T_RR, ['RR']*len(T_RR))
-            rr_entry = ValuesEntry(id='T_RR.csv', parent=unisens_folder)
-            rr_entry.set_data(T_RR, ch_names='RR')
-                       
-            feats_entry = CustomEntry('kubios.json', parent=unisens_folder)
-            feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
+            T_RR = list(zip(T_RR, ['RR']*len(T_RR)))
+            if not 'T_RR' in u:
+                rr_entry = ValuesEntry(id='T_RR.csv', parent=unisens_folder)
+                rr_entry.set_data(T_RR, ch_names='RR')
+                           
+            if 'feats' in u:
+                feats_entry = u.feats
+            else:
+                feats_entry = FeaturesEntry('feats.json', parent=unisens_folder)
+                feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
+            for key in HRV['TimeVar']:
+                if key=='Overview':continue
+                CustomEntry('feats/' + key + '.npy', parent=feats_entry)\
+                    .set_data(HRV['TimeVar'][key])
         
         elif file.endswith('npy'):
-            if ospath.exists(ospath.join(folder, 'artefacts.csv')) and not overwrite:continue
+            if  'artefacts' in u and not overwrite: continue
+            tqdm_desc(f'{code}: Reading artefacts')
             art = np.load(file).ravel()
             u.epochs_art = len(art)//2
             times = np.arange(len(art))
@@ -211,19 +238,18 @@ def to_unisens(edf_file, delete=False, overwrite=False):
     if 'feats_entry' in locals():u.add_entry(feats_entry)
     if 'annot_entry' in locals(): u.add_entry(annot_entry)
     
-    
     u.save()
-    
-    if delete:
-        for file in add_files + [edf_file]:
-            os.remove(file)
-    return
+
 #%%
 if __name__=='__main__':
     
     documents = cfg.documents
-    data = cfg.data
+    data = cfg.folder_edf
+    unisens = cfg.folder_unisens
     
     files = ospath.list_files(data, exts=['edf'])
-    for edf_file in tqdm(files):
-        to_unisens(edf_file)
+    
+    progbar = tqdm(files)
+    for edf_file in progbar:
+        to_unisens(edf_file,unisens_folder=unisens, tqdm_desc= progbar.set_description)
+        

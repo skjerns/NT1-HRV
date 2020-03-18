@@ -4,6 +4,7 @@ Created on Sun Mar  1 21:02:13 2020
 
 @author: skjerns
 """
+import misc
 import os
 import ospath
 import h5py
@@ -39,9 +40,8 @@ def extract_from_mat(folder=None, overwrite=False):
 
 
 if __name__ == '__main__':
-    folder = os.path.abspath(os.path.dirname(__file__))    
     parser = argparse.ArgumentParser(description='Load the visualizer for artefacts')
-    parser.add_argument('-f', '--folder', type=str, default=folder,
+    parser.add_argument('-f', '--folder', type=str, default=None,
                          help='A folder with kubios .mat files with ECG')
     parser.add_argument('-overwrite', type=bool, default=False,
                          help='Overwrite existing files?')
@@ -50,5 +50,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     folder = args.folder
     overwrite = args.overwrite
-    
-    
+    if folder is None:
+        folder = misc.choose_folder('Choose a folder')
+    extract_from_mat(folder, overwrite)
