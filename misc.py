@@ -96,7 +96,7 @@ def choose_file(default_dir=None,exts='txt', title='Choose file'):
     root.update()
     root.destroy()
     if not os.path.exists(name):
-        print("No file exists")
+        print("No file chosen")
     else:
         return name
 
@@ -118,7 +118,7 @@ def choose_folder(default_dir=None,exts='txt', title='Choose file'):
     root.update()
     root.destroy()
     if not os.path.exists(name):
-        print("No file exists")
+        print("No folder chosen")
     else:
         return name
     

@@ -203,6 +203,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                            
             if 'feats' in u:
                 feats_entry = u.feats
+                u.remove_entry('feats.json')
             else:
                 feats_entry = FeaturesEntry('feats.json', parent=unisens_folder)
                 feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
@@ -210,7 +211,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                 if key=='Overview':continue
                 CustomEntry('feats/' + key + '.npy', parent=feats_entry)\
                     .set_data(HRV['TimeVar'][key])
-        
+           
         elif file.endswith('npy'):
             if  'artefacts' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading artefacts')
@@ -235,21 +236,22 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
     if 'rr_entry' in locals(): u.add_entry(rr_entry)
     if 'artefact_entry' in locals(): u.add_entry(artefact_entry)
     if 'hypno_entry' in locals(): u.add_entry(hypno_entry)
-    if 'feats_entry' in locals():u.add_entry(feats_entry)
+    if 'feats_entry' in locals(): u.add_entry(feats_entry)
     if 'annot_entry' in locals(): u.add_entry(annot_entry)
     
     u.save()
 
 #%%
 if __name__=='__main__':
-    
+    import stimer
+    from joblib import Parallel, delayed
     documents = cfg.documents
     data = cfg.folder_edf
-    unisens = cfg.folder_unisens
+    unisens_folder = cfg.folder_unisens
     
     files = ospath.list_files(data, exts=['edf'])
     
     progbar = tqdm(files)
-    for edf_file in progbar:
-        to_unisens(edf_file,unisens_folder=unisens, tqdm_desc= progbar.set_description)
-        
+    # for edf_file in progbar:
+    Parallel(n_jobs=8, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
+    # to_unisens(edf_file, unisens_folder=unisens_folder)

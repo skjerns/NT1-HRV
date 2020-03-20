@@ -14,6 +14,7 @@ import numpy as np
 import ospath
 import os
 import re
+from tqdm import tqdm
 import time
 import sleep_utils
 import matplotlib.pyplot as plt
@@ -34,7 +35,7 @@ class FeaturesEntry(CustomEntry):
     def to_element(self):
         """creates a unisens.xml that shows only the features"""
         
-        u = Unisens(folder=self._folder, file='features.xml')
+        u = Unisens(folder=self._folder, filename='features.xml')
         
         if 'ecg' in self._parent: 
             ecg = self._parent['ecg'].copy()
@@ -76,8 +77,10 @@ class SleepSet():
         
         if all_strings: # natural sorting of file list
             patient_list = sorted(patient_list, key=natsort_key)
+            
+        tqdm_loop = tqdm if all_strings else lambda x, *args,**kwargs: x
         
-        for patient in patient_list:
+        for patient in tqdm_loop(patient_list, desc='Loading Patients'):
             patient = Patient(patient)
             self.add(patient)   
         return None
@@ -91,7 +94,7 @@ class SleepSet():
         n_nt1 = len(self.filter(f_nt1))
 
         return f'SleepSet({n_patients} Patients, {n_control} Control,'\
-                '{n_nt1} NT1)'
+               f'{n_nt1} NT1)'
         
     def __iter__(self):
         """
@@ -146,10 +149,14 @@ class SleepSet():
             raise ValueError(f'patient must be or Patient, is {type(patient)}')
         return self
     
-    def get_feat(self, name):
+    def get_feats(self, name):
         feats = [p.get_feat(name) for p in self]
         return np.hstack(feats)
-
+    
+    def get_hypnos(self, only_sleeptime=False):
+        hypnos = [p.get_hypno(only_sleeptime) for p in self]
+        return hypnos
+    
     
 class Patient(Unisens):
     """
@@ -195,8 +202,14 @@ class Patient(Unisens):
         seconds = int(len(self.data)//(self.sfreq))
         return seconds
         
-    def get_hypno(self):
-        return self['hypnogram.csv'].get_data()
+    def get_hypno(self, only_sleeptime=False):
+        hypno = self['hypnogram.csv'].get_data()
+        hypno = np.array(list(zip(*hypno))[1])
+        if only_sleeptime:
+            start = np.argmax(np.logical_and(hypno>0 , hypno<5))
+            end = len(hypno)-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])
+            hypno = hypno[start:end]
+        return hypno
      
     def get_ecg(self):
         return self['ecg.csv'].get_data()

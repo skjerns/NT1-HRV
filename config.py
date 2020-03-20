@@ -48,10 +48,66 @@ def get_dropbox_location():
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# GENERAL CONFIGURATION
+# USER SPECIFIC CONFIGURATION
+###############################
+username = getpass.getuser().lower()  # your login name
+host     = platform.node().lower()    # the name of this computer
+system   = platform.system().lower()  # linux, windows or mac.
+home = os.path.expanduser('~')
+
+dropbox = get_dropbox_location()
+if dropbox:
+    documents = ospath.join(dropbox, 'nt1-hrv-documents')
+    matching = ospath.join(documents, 'matching.csv')
+    edfs_invert = ospath.join(documents, 'edfs_invert.csv')
+    edfs_discard = ospath.join(documents, 'edfs_discard.csv')
+    controls =  ospath.join(documents, 'subjects_control.csv')
+    patients =  ospath.join(documents, 'subjects_nt1.csv')
+
+if username == 'nd269' and host=='ess-donatra':
+    USER_VAR = 'test123'
+    
+elif username == 'simon' and host=='desktop-skjerns':
+    USER_VAR = 'test456'
+    
+else:
+    print('Username {} on host {} with {} has no configuration.\n'.format(username,host,system) + \
+    'please set user specific information in config.py')
+
+
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# USER SPECIFIC CONFIGURATION
+###############################
+    
+try: 
+    sys.path.append(documents)
+    from user_variables import *
+except:
+    print('It seems like you have not set the documents folder for this '\
+          'machine. Please add in config.py. The documents folder contains '\
+          'another script user_variables.py where you can set privacy' \
+          'sensitive stuff that should not land on github such as dataset '\
+          'paths.')
+
+root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# SOME GENERAL LOOKUP TABLES
 ###############################
 
+ecg_channel = 'ECG I'
+max_age_diff = 3 # maximum age difference to make a matching
+
 feats_mapping = {999: 'dummy_feature1'}
+
+
+stage2num = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4,
+                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5, 'MT':5}
+num2stage = {0:'WAKE', 1:'S1', 2:'S2', 3:'SWS', 4:'REM', 5:'Artefact'}
 
 
 channel_mapping = {  # this is the mapping to streamline channel names of different recordings
@@ -130,53 +186,3 @@ channel_mapping = {  # this is the mapping to streamline channel names of differ
            'Microphone':'Microphone',
            'Akku':'Akku'
            }
-
-ecg_channel = 'ECG I'
-max_age_diff = 3 # maximum age difference to make a matching
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# USER SPECIFIC CONFIGURATION
-###############################
-username = getpass.getuser().lower()  # your login name
-host     = platform.node().lower()    # the name of this computer
-system   = platform.system().lower()  # linux, windows or mac.
-home = os.path.expanduser('~')
-
-dropbox = get_dropbox_location()
-if dropbox:
-    documents = ospath.join(dropbox, 'nt1-hrv-documents')
-    matching = ospath.join(documents, 'matching.csv')
-    edfs_invert = ospath.join(documents, 'edfs_invert.csv')
-    edfs_discard = ospath.join(documents, 'edfs_discard.csv')
-    controls =  ospath.join(documents, 'subjects_control.csv')
-    patients =  ospath.join(documents, 'subjects_nt1.csv')
-
-if username == 'nd269' and host=='ess-donatra':
-    USER_VAR = 'test123'
-    
-elif username == 'simon' and host=='desktop-skjerns':
-    USER_VAR = 'test456'
-    
-else:
-    print('Username {} on host {} with {} has no configuration.\n'.format(username,host,system) + \
-    'please set user specific information in config.py')
-
-
-
-
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# USER SPECIFIC CONFIGURATION
-###############################
-    
-try: 
-    sys.path.append(documents)
-    from user_variables import *
-except:
-    print('It seems like you have not set the documents folder for this '\
-          'machine. Please add in config.py. The documents folder contains '\
-          'another script user_variables.py where you can set privacy' \
-          'sensitive stuff that should not land on github such as dataset '\
-          'paths.')
-
-root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''
