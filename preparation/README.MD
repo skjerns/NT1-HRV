@@ -36,6 +36,8 @@ The patient name and the birthdate will be stripped from the header.
 Channel names vary depending on the recording system.
 For easier analysis we rename the channels to a common system. The ECG channel will always be named 'ECG I'
 
+The folder locations are declared in `Dropbox\nt1-hrv-documents\user_variables.py \datasets` and the target folder is declared at `Dropbox\nt1-hrv-documents\user_variables.py \folder_edf`
+
 
 #### 2. Create matchings
 
@@ -53,6 +55,12 @@ Additionally it will copy all non-matched files into `%cfg.data%/setX/not_matche
 
 
 
+#### 4. Create Unisens data structure
 
+Next step comprises extracting relevant information from the EDF and saving it as Unisens. `sleep.py` contains a class `Patient` that extends `Unisens`. Here we save features, hypnograms etc without having a monolith-edf-file. 
+
+ECG, EEG, EMG and EOG will be extracted as well as all features from Kubios, EDF annotations and hypnograms.
+
+The script `4_convert_to_unisens.py` will convert all EDFs in the data folder to the unisens folder, that can be set in the `user_variables.py`. All edfs at `folder_edf` will be converted to unisens at `folder_unisens` 
 
 
