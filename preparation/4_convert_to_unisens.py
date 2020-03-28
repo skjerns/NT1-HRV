@@ -28,11 +28,10 @@ import mat73
 import pyedflib
 import unisens
 from unisens import Unisens, SignalEntry, EventEntry, ValuesEntry
-from unisens import CustomEntry
+from sleep import CustomEntry
 import os
 from pyedflib import highlevel
 from unisens.utils import read_csv
-from sleep import FeaturesEntry
 import shutil
 import numpy as np
 from sleep import Patient
@@ -190,7 +189,8 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
             hypno_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
 
-        elif file.endswith('mat'):              
+        elif file.endswith('mat'):     
+            if  'feats.json' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Kubios')
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
@@ -198,20 +198,12 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
             T_RR = HRV['Data']['T_RR'].squeeze() - startsecond
             T_RR = list(zip(T_RR, ['RR']*len(T_RR)))
             if not 'T_RR' in u:
-                rr_entry = ValuesEntry(id='T_RR.csv', parent=unisens_folder)
+                rr_entry = ValuesEntry(id='RR.csv', parent=unisens_folder)
                 rr_entry.set_data(T_RR, ch_names='RR')
-                           
-            if 'feats' in u:
-                feats_entry = u.feats
-                u.remove_entry('feats.json')
-            else:
-                feats_entry = FeaturesEntry('feats.json', parent=unisens_folder)
-                feats_entry.set_data(HRV, comment='json dump of the kubios created RR file', fileType='JSON')
-            for key in HRV['TimeVar']:
-                if key=='Overview':continue
-                CustomEntry('feats/' + key + '.npy', parent=feats_entry)\
-                    .set_data(HRV['TimeVar'][key])
-           
+                  
+            feats_entry = CustomEntry('feats.pkl', parent=unisens_folder)
+            feats_entry.set_data(HRV, comment='pickle dump of the kubios created features file', fileType='pickle')
+
         elif file.endswith('npy'):
             if  'artefacts' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading artefacts')
@@ -224,7 +216,6 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
             
         elif file.endswith('.edf'):
             pass
-        
         else:
             raise Exception(f'unkown file type: {file}')
     #%%####################
@@ -253,5 +244,5 @@ if __name__=='__main__':
     
     progbar = tqdm(files)
     # for edf_file in progbar:
-    Parallel(n_jobs=8, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
+    Parallel(n_jobs=6, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
     # to_unisens(edf_file, unisens_folder=unisens_folder)

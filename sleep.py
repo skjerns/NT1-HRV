@@ -25,31 +25,8 @@ def natsort_key(s, _nsre=re.compile('([0-9]+)')):
             for text in _nsre.split(s)]    
     
 
-class FeaturesEntry(CustomEntry):
-    """A modified Customentry that can handle subentries gracefully"""
-       
-    
-    def add_entry(self, *args, **kwargs):
-        super().add_entry(*args,**kwargs, stack=False)
-    
-    def to_element(self):
-        """creates a unisens.xml that shows only the features"""
-        
-        u = Unisens(folder=self._folder, filename='features.xml')
-        
-        if 'ecg' in self._parent: 
-            ecg = self._parent['ecg'].copy()
-            u.add_entry(ecg)
 
-        if 'hypnogram' in self._parent: 
-            stages = self._parent['hypnogram'].copy()
-            u.add_entry(stages)
-        
-        for entry in self._entries:
-            u.add_entry(entry)
-        u.save()
-        return super().to_element()
-        
+
         
         
 class SleepSet():
@@ -219,8 +196,24 @@ class Patient(Unisens):
     
     def get_feat(self, name):
         if isinstance(name, int):
-            name = config.feat_mapping[name]
+            name = config.feats_mapping[name]
         return self.feats[name].get_data()
+    
+    """creates a unisens.xml that shows only the features"""
+    def write_features_to_unisens(self):
+        u = Unisens(folder=self._folder, filename='features.xml')
+        
+        if 'ecg' in self.feats._parent: 
+            ecg = self.feats._parent['ecg'].copy()
+            u.add_entry(ecg)
+    
+        if 'hypnogram' in self.feats._parent: 
+            stages = self.feats._parent['hypnogram'].copy()
+            u.add_entry(stages)
+        
+        for entry in self.feats._entries:
+            u.add_entry(entry)
+        u.save()
     
     def plot(self, channel='eeg', hypnogram=True, axs=None):
         hypnogram = hypnogram * 'hypnogram' in self

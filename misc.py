@@ -4,7 +4,6 @@ Created on Wed Dec 18 12:46:37 2019
 
 @author: Simon
 """
-import config
 import os
 from unisens import utils
 import numpy as np
@@ -17,6 +16,7 @@ import hashlib
 
 
 def get_mapping():
+    import config
     """gets the mapping dictionary for codes and names"""
     csv = os.path.join(config.documents, 'mapping_all.csv')
     mappings = utils.read_csv(csv)
@@ -25,6 +25,7 @@ def get_mapping():
     
     
 def get_attribs():
+    import config
     """get the attributes of the patients etc"""
     mappings = get_mapping()
     control_csv = os.path.join(config.documents, 'subjects_control.csv')
@@ -200,3 +201,36 @@ class AttrDict(OrderedDict):
     #         item += '_'
     #     print(item, value)
     #     OrderedDict.__setitem__(self, item, value)
+    
+    
+class CaseInsensitiveDict(OrderedDict):
+    @classmethod
+    def _k(cls, key):
+        return key.lower() if isinstance(key, str) else key
+
+    def __init__(self, *args, **kwargs):
+        super(CaseInsensitiveDict, self).__init__(*args, **kwargs)
+        self._convert_keys()
+    def __getitem__(self, key):
+        return super(CaseInsensitiveDict, self).__getitem__(self.__class__._k(key))
+    def __setitem__(self, key, value):
+        super(CaseInsensitiveDict, self).__setitem__(self.__class__._k(key), value)
+    def __delitem__(self, key):
+        return super(CaseInsensitiveDict, self).__delitem__(self.__class__._k(key))
+    def __contains__(self, key):
+        return super(CaseInsensitiveDict, self).__contains__(self.__class__._k(key))
+    def has_key(self, key):
+        return super(CaseInsensitiveDict, self).has_key(self.__class__._k(key))
+    def pop(self, key, *args, **kwargs):
+        return super(CaseInsensitiveDict, self).pop(self.__class__._k(key), *args, **kwargs)
+    def get(self, key, *args, **kwargs):
+        return super(CaseInsensitiveDict, self).get(self.__class__._k(key), *args, **kwargs)
+    def setdefault(self, key, *args, **kwargs):
+        return super(CaseInsensitiveDict, self).setdefault(self.__class__._k(key), *args, **kwargs)
+    def update(self, E={}, **F):
+        super(CaseInsensitiveDict, self).update(self.__class__(E))
+        super(CaseInsensitiveDict, self).update(self.__class__(**F))
+    def _convert_keys(self):
+        for k in list(self.keys()):
+            v = super(CaseInsensitiveDict, self).pop(k)
+            self.__setitem__(k, v)

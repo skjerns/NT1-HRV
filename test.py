@@ -12,7 +12,7 @@ import ospath
 import numpy as np
 from unisens import SignalEntry, Unisens, ValuesEntry
 from datetime import datetime, date
-from sleep import Patient, SleepSet, FeaturesEntry
+from sleep import Patient, SleepSet
 import sleep_utils
 
 class TestUtils(unittest.TestCase):
@@ -24,16 +24,18 @@ class TestUtils(unittest.TestCase):
         pass
     
     def test_minmax2offset(self):
-        dmin = -np.random.randint(-32766, -1)
-        dmax = -np.random.randint(1,  32766)
-        pmin = -np.random.randint(-500, -1)
-        pmax = -np.random.randint(1, 500)
+        dmin = np.random.randint(-32766, -1)
+        dmax = np.random.randint(1,  32766)
+        pmin = np.random.randint(-500, -1)
+        pmax = np.random.randint(1, 500)
         
-        signal = np.random.randint(-dmin, -dmax, 100)
+        signal = np.random.randint(dmin, dmax, 100)
         signal_p1 = sleep_utils.dig2phys(signal, dmin, dmax, pmin, pmax)
         
         lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
         signal_p2 = lsb*(signal + offset)
+        
+        # plt.plot(signal_p1-signal_p2)
         
         np.testing.assert_allclose(signal_p1, signal_p2)
 
@@ -88,16 +90,6 @@ class TestPatient(unittest.TestCase):
         self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_hypnogram.png')))
         self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_eeg.png')))
 
-    def test_features(self):
-        p = Patient(self.tmpdir)
-        featsx = FeaturesEntry(id='feats.bin', parent=p)
-        ValuesEntry('feat1.csv', parent=featsx)
-        ValuesEntry('feat2.csv', parent=featsx).set_data([[1,2],[3,4]])
-        ValuesEntry('feat2.csv', parent=featsx).set_data([[5,6],[7,8]])
-        self.assertEqual(p['feats']['feat2'].get_data(), [[5,6],[7,8]])
-        
-        with self.assertRaises(KeyError):
-            FeaturesEntry(id='feats.bin', parent=p)
 
 if __name__ == '__main__':
     unittest.main()

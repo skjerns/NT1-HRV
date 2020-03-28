@@ -14,20 +14,21 @@ All privacy
 """
 import json
 import os, sys
+from misc import CaseInsensitiveDict
 import ospath
 import getpass
 import platform
 from pathlib import Path
 
 
-class AttrDict(dict):
-    """
-    A dictionary that allows access via attributes
-    a['entry'] == a.entry
-    """
-    def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
+# class AttrDict(dict):
+#     """
+#     A dictionary that allows access via attributes
+#     a['entry'] == a.entry
+#     """
+#     def __init__(self, *args, **kwargs):
+#         super(AttrDict, self).__init__(*args, **kwargs)
+#         self.__dict__ = self
 
 
 def get_dropbox_location():
@@ -95,19 +96,80 @@ except:
 root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''
 
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# SOME GENERAL LOOKUP TABLES
-###############################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# SOME GENERAL LOOKUP TABLES AND VARIABLES
+##########################################
 
 ecg_channel = 'ECG I'
 max_age_diff = 3 # maximum age difference to make a matching
 
-feats_mapping = {999: 'dummy_feature1'}
-
-
+# Conversion for sleep stage names to numbers and back
 stage2num = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4,
                  0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5, 'MT':5}
 num2stage = {0:'WAKE', 1:'S1', 2:'S2', 3:'SWS', 4:'REM', 5:'Artefact'}
+
+
+
+# Features mapping to names
+# The names should be used to store and access the features in Unisens
+# The dictionary is case insensitive
+feats_mapping = {1:  'mean_HR',
+                 2:  'mean_RR',
+                 3:  'detrend_mean_RR',
+                 4:  'SDNN',
+                 5:  'RR_range',
+                 6:  'pNN50',
+                 7:  'RMSSD',
+                 8:  'SDSD',
+                 9:  'RR_log_VLF',
+                 10: 'LF',                  # LF power
+                 11: 'HF',                  # HF power
+                 12: 'LF_HF',               # ratio LF/HF
+                 13: 'mean_RR_resp_freq',   # RR mean respiratory frequency
+                 14: 'mean_RR_resp_pow',    # RR mean respiratory power
+                 15: 'max_phase_HF',        # max phase HF pole
+                 16: 'max_mod_HF',          # max mod HF pole
+                 # multiscale entr. of RR intervals 1-2 scale 1-10 over 510 sec
+                 **dict(zip(range(17,27), [f'multiscale_entropy_1_{s}' for s in range(1,11)])),
+                 **dict(zip(range(27,37), [f'multiscale_entropy_2_{s}' for s in range(1,11)])),
+                 37: 'RR_DFA',
+                 38: 'RR_DFA_short',        # RR DFA short exponent
+                 39: 'RR_DFA_long',         # RR DFA long exponent
+                 40: 'RR_DFA_all',          # RR DFA all scales
+                 41: 'WDFA',                # WDFA over 330 sec
+                 42: 'PDFA',                # PDFA non-overlapping segments of 64 heart beats
+                 43: 'mean_abs_diff_HR',
+                 44: 'mean_abs_diff_RR',
+                 45: 'mean_abs_diff_detr_HR', 
+                 46: 'mean_abs_diff_detr_RR', 
+                 # 47-51: RR percentiles
+                 **dict(zip(range(47,52), [f'RR_{i}_perc' for i in (10,25,50,75,90)])),
+                 # 52-56: HR percentiles
+                 **dict(zip(range(52,57), [f'HR_{i}_perc' for i in (10,25,50,75,90)])),
+                 # 47-51: detrended RR percentiles
+                 **dict(zip(range(57,62), [f'detr_RR_{i}_perc' for i in (10,25,50,75,90)])),
+                 # 52-56: detrended HR percentiles
+                 **dict(zip(range(62,67), [f'detr_HR_{i}_perc' for i in (10,25,50,75,90)])),
+                 67: 'sample_entropy',      # sample entropy of symbolic binary change in RR interval
+                 68: 'ECG_power',           # power of ECG
+                 69: 'ECG_4th_power',       # fouth power of ECG
+                 70: 'ECG_curve_length',
+                 71: 'nonlinear_energy',
+                 72: 'hjorth_mobility', 
+                 73: 'ECG_complexity',
+                 74: 'ECG_peak_pow_psd',
+                 75: 'ECG_peak_freq_psd',
+                 76: 'ECG_peak_mean_psd',
+                 77: 'ECG_peak_media_psd',
+                 78: 'spectral_entropy',    # of ECG
+                 79: 'hurst_exponent', 
+                 80: 'short_phase_coord',   # short phase coordination
+                 81: 'long_phase_coord'     # long phase coordination
+                 }
+
+
+# feats_mapping.update( {v: k for k, v in feats_mapping.items()})
+feats_mapping = CaseInsensitiveDict(feats_mapping)
 
 
 channel_mapping = {  # this is the mapping to streamline channel names of different recordings
