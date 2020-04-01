@@ -34,9 +34,7 @@ class TestUtils(unittest.TestCase):
         
         lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
         signal_p2 = lsb*(signal + offset)
-        
-        # plt.plot(signal_p1-signal_p2)
-        
+                
         np.testing.assert_allclose(signal_p1, signal_p2)
 
 
