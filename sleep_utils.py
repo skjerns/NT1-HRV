@@ -545,25 +545,17 @@ def plot_hypnogram(stages, labeldict=None, title=None, epochlen=30, ax=None,
     :param kwargs: additional arguments passed to plt.plot(), e.g. c='red'
     """
 
-
     if labeldict is None:
-        if np.max(stages)==1 and np.min(stages)==0:
-            labeldict = {0:'W', 1:'S'}
-        elif np.max(stages)==2 and np.min(stages)==0:
-            labeldict = {0:'W', 2:'REM', 1:'NREM'}
-        elif np.max(stages)==4 and np.min(stages)==0:
-            if 1 in stages:
-                labeldict = {0:'W', 4:'REM', 1:'S1', 2:'S2', 3:'SWS', }
-            else:
-                labeldict = {0:'W', 4:'REM', 2:'S2', 3:'SWS'}
+        labeldict = {}
+        _defaultdict = {-1: 'A', 0:'Wake', 4:'REM', 1:'S1', 2:'S2', 3:'SWS', 5:'Artefact'}
+        if set(stages) == set([0, 1]):
+            labeldict = {0:'Wake', 1:'Sleep'}
+        elif set(stages) == set([0, 1, 2]):
+            labeldict = {0:'Wake', 2:'REM', 1:'NREM'}
         else:
-            if verbose: print('could not detect labels?')
-            if 1 in stages:
-                labeldict = {0:'W', 4:'REM', 1:'S1', 2:'S2', 3:'SWS', 5:'A'}
-            else:
-                labeldict = {0:'W', 4:'REM', 2:'S2', 3:'SWS', 5:'A'}
-        if -1 in stages:
-            labeldict['ARTEFACT'] = -1
+            for stage in _defaultdict:
+                if stage in stages:
+                    labeldict[stage] = _defaultdict[stage]
         if verbose: print('Assuming {}'.format(labeldict))
 
     # check if all stages that are in the hypnogram have a corresponding label in the dict
