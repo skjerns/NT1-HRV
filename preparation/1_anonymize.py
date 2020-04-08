@@ -49,6 +49,8 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']
     to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
 
+    # Here we read the list of controls and patients with their age and gender
+    # NOTE:
     mappings = misc.read_csv(cfg.controls)
     mappings.extend(misc.read_csv(cfg.patients))
     mappings = dict([[name, {'gender':gender, 'age':age}] for name, gender, age in mappings])
@@ -78,7 +80,8 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
 
         else:
         # anonymize
-            print ('Writing {}'.format(new_file))
+            print ('Writing {} from {}'.format(new_file, old_name))
+            assert ospath.isfile(old_file), f'{old_file} does not exist'
             signals, signal_headers, header = sleep_utils.read_edf(old_file, 
                                                                    digital=True,
                                                                    verbose=False)
@@ -105,29 +108,34 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
             print ('Writing tmp for {}'.format(new_file))
             sleep_utils.write_edf(tmp_name, signals, signal_headers, header, 
                                   digital=True, correct=True)
+            
             print ('Verifying tmp for {}'.format(new_file))
-            if not old_name=='A9879': # embarrasing hack, as dmin/dmax dont match otherwise
-                sleep_utils.compare_edf(old_file, tmp_name, verbose=False, threading=False)
+            if not old_name=='B0036': # embarrasing hack, as dmin/dmax dont in these files
+                sleep_utils.compare_edf(old_file, tmp_name, verbose=False)
             
             # now we rename the tmp file.
             shutil.move(tmp_name, new_file)
 
         # also copy additional file information ie hypnograms and kubios files
         old_dir = ospath.dirname(old_file)
-        add_files = ospath.list_files(old_dir, exts=['txt', 'dat', 'mat'])
-        copy_as_well = [file for file in add_files if old_name[:-2] in file]
-        for add_file in copy_as_well: 
-            ext = ospath.splitext(add_file)[-1]
-            new_additional_file = ospath.join(target_folder, new_name + ext)
-            if ospath.exists(new_additional_file):continue
+        old_name = old_name.replace('_m', '').replace('_w', '') # remove gender from weitere nt1 patients
+        add_files = ospath.list_files(old_dir, patterns=[f'{old_name}*txt', f'{old_name}*dat', f'{old_name}*mat'])
+        for add_file in add_files: 
+            new_add_file = ospath.join(target_folder, 
+                                       ospath.basename(add_file.replace(old_name, new_name)))
+            if ospath.exists(new_add_file):continue
             try:
-                shutil.copy(add_file, new_additional_file)
+                new_add_file = new_add_file.replace('-Schlafprofil', '')
+                new_add_file = new_add_file.replace('_sl','')
+                new_add_file = new_add_file.replace('.txt', '.hypno').replace('.dat', '.hypno')
+                shutil.copy(add_file, new_add_file)
             except Exception as e:
                 print(e)
     return old_names, new_names
         
 if __name__ == '__main__':
     print('running in parallel. if you don\'t see output, start with python.exe')
+    
     results = Parallel(n_jobs=4, backend='loky')\
     (delayed(anonymize_and_streamline)(dataset, target_folder=target_folder) for dataset in datasets.values())
     i=0

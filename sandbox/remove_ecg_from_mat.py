@@ -13,7 +13,7 @@ import tempfile
 import shutil
 from tqdm import tqdm
 import argparse
-
+import time
 
 
 def extract_from_mat(folder=None, overwrite=False):
@@ -53,3 +53,5 @@ if __name__ == '__main__':
     if folder is None:
         folder = misc.choose_folder('Choose a folder')
     extract_from_mat(folder, overwrite)
+    print('\nfinished...')
+    time.sleep(15)

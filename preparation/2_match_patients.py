@@ -13,7 +13,9 @@ import config as cfg
 def read_subjects(file):
     with open(file, 'r', encoding='utf8') as f:
       entries = f.read().strip()
+     
     entries = entries.split('\n')
+    entries = [entry for entry in entries if not entry.startswith('#')]
     entries = [p.split(';') for p in entries]
     entry_dict = dict({p[0].strip():{'age':p[2],'gender':p[1].strip()} for p in entries})
     return entry_dict
@@ -49,7 +51,7 @@ if __name__ == '__main__':
     max_age_diff = cfg.max_age_diff
     
     matches = []
-    used_controls = ['A5941', 'A3558', 'B0007', 'B0025', 'A9308']
+    used_controls = ['A5941', 'A3558', 'B0007', 'B0025', 'A9308', 'B0045']
     for i in range(max_age_diff+1):
         match = {}
         for p_name, attr in list(patients.items()):

@@ -43,6 +43,8 @@ class SleepSet():
         
         :param patient_list: A list of strings pointing to Patients
         """
+        if isinstance(patient_list, str):
+            patient_list = ospath.list_folders(patient_list)
         assert isinstance(patient_list, list), 'patient_list must be type list'
         self.patients = []
         
@@ -70,7 +72,7 @@ class SleepSet():
         f_nt1 = lambda x: x.group.lower()=='control'
         n_nt1 = len(self.filter(f_nt1))
 
-        return f'SleepSet({n_patients} Patients, {n_control} Control,'\
+        return f'SleepSet({n_patients} Patients, {n_control} Control, '\
                f'{n_nt1} NT1)'
         
     def __iter__(self):
@@ -180,7 +182,10 @@ class Patient(Unisens):
         return seconds
         
     def get_hypno(self, only_sleeptime=False):
-        hypno = self['hypnogram.csv'].get_data()
+        try:
+            hypno = self['hypnogram.csv'].get_data()
+        except:
+            hypno = self['hypnogram_old.csv'].get_data()
         hypno = np.array(list(zip(*hypno))[1])
         if only_sleeptime:
             start = np.argmax(np.logical_and(hypno>0 , hypno<5))
@@ -189,15 +194,15 @@ class Patient(Unisens):
         return hypno
      
     def get_ecg(self):
-        return self['ecg.csv'].get_data()
+        return self['ecg.bin'].get_data().squeeze()
 
     def get_eeg(self):
-        return self['eeg.csv'].get_data()
+        return self['eeg.bin'].get_data().squeeze()
     
     def get_feat(self, name):
         if isinstance(name, int):
             name = config.feats_mapping[name]
-        return self.feats[name].get_data()
+        return self.feats[name].get_data().squeeze()
     
     """creates a unisens.xml that shows only the features"""
     def write_features_to_unisens(self):
@@ -230,20 +235,18 @@ class Patient(Unisens):
         signal = entry.get_data()
         if entry.id.endswith('bin'):
             signal = signal[0]
-            sfreq = entry.samplingRate
-            spec = sleep_utils.specgram_multitaper(signal, int(sfreq), 
-                                               show_plot=False, ax=axs[0][0])
-            axs[0][0].imshow(spec, aspect='auto') 
+            sfreq = entry.sampleRate
+            sleep_utils.specgram_multitaper(signal, int(sfreq), ax=axs[0][0])
+            
         elif entry.id.endswith('csv'):
             sfreq = entry.samplingRate
             axs[0][0].plot(signal[0], signal[1])
-
         if hypnogram: axs[0][0].tick_params(axis='x', which='both', bottom=False,     
                                             top=False, labelbottom=False) 
         plt.title(f'{channel}, {sfreq} Hz')
         
         if hypnogram:
-            hypno = self['hypnogram'].get_data()[1]
+            hypno = self.get_hypno()
             sleep_utils.plot_hypnogram(hypno, ax=axs[-1][0])
         os.makedirs(os.path.dirname(file), exist_ok=True)
         plt.savefig(file)

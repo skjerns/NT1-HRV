@@ -77,7 +77,7 @@ def fig2data(fig):
 
 
 
-def choose_file(default_dir=None,exts='txt', title='Choose file'):
+def choose_file(default_dir=None, exts='txt', title='Choose file'):
     """
     Open a file chooser dialoge with tkinter.
     
@@ -101,7 +101,7 @@ def choose_file(default_dir=None,exts='txt', title='Choose file'):
     else:
         return name
 
-def choose_folder(default_dir=None,exts='txt', title='Choose file'):
+def choose_folder(default_dir=None, exts='txt', title='Choose file'):
     """
     Open a file chooser dialoge with tkinter.
     

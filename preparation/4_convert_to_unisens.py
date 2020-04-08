@@ -59,10 +59,12 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
         
     # get all additional files that belong to this EDF
     add_files = ospath.list_files(folder, patterns=code + '*')
-    u = Patient(unisens_folder, makenew=False, autosave=True)
+    u = Patient(unisens_folder, makenew=False, autosave=True,
+                measurementId=code)
     header = highlevel.read_edf_header(edf_file)
     all_labels = header['channels']
     u.starttime = header['startdate']
+    u.timestampStart = header['startdate'].strftime('%Y-%m-%dT%H:%M:%S')
     u.code = code
     
     attribs = misc.get_attribs()
@@ -81,7 +83,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
         
         lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-        ecg_attrib={'data': signals.astype(dtype), 
+        attrib={'data': signals.astype(dtype), 
                     'sampleRate': shead[0]['sample_rate'],
                     'ch_names': 'ECG',
                     'lsbValue': lsb,
@@ -90,7 +92,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         
-        ecg_entry = SignalEntry(id='ECG.bin', parent=unisens_folder).set_data(**ecg_attrib)
+        SignalEntry(id='ECG.bin', parent=u).set_data(**attrib)
         
     
         u.sampling_frequency = shead[0]['sample_rate']
@@ -100,77 +102,99 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
     #### add EEG ##########
     tqdm_desc(f'{code}: Reading EEG')
     if not 'EEG' in u or overwrite:
-        eeg = sleep_utils.infer_eeg_channels(all_labels)
-        signals, shead, header = highlevel.read_edf(edf_file, ch_names=eeg, digital=True)
+        chs = sleep_utils.infer_eeg_channels(all_labels)
+        signals, shead, header = highlevel.read_edf(edf_file, ch_names=chs, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
         
         lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-        eeg_attrib={'data': signals.astype(dtype), 
+        attrib={'data': signals.astype(dtype), 
                     'sampleRate': shead[0]['sample_rate'],
-                    'ch_names': eeg,
+                    'ch_names': chs,
                     'lsbValue': lsb,
                     'baseline': offset,
                     'contentClass':'EEG',
                     'unit': 'uV',
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
-        eeg_entry = SignalEntry(id='EEG.bin', parent=unisens_folder).set_data(**eeg_attrib)
+        SignalEntry(id='EEG.bin', parent=u).set_data(**attrib)
 
  
     #%%####################
     #### add EOG #########
     if not 'EOG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EOG')
-        eog = sleep_utils.infer_eog_channels(all_labels)
-        signals, shead, header = highlevel.read_edf(edf_file, ch_names=eog, digital=True)
+        chs = sleep_utils.infer_eog_channels(all_labels)
+        signals, shead, header = highlevel.read_edf(edf_file, ch_names=chs, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
         
         lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-        eog_attrib={'data': signals.astype(dtype), 
+        attrib={'data': signals.astype(dtype), 
                     'sampleRate': shead[0]['sample_rate'],
-                    'ch_names': eog,
+                    'ch_names': chs,
                     'lsbValue': 1,
                     'baseline': 0,
                     'unit': 'uV',
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
-        eog_entry = SignalEntry(id='EOG.bin', parent=unisens_folder).set_data(**eog_attrib)
+        SignalEntry(id='EOG.bin', parent=u).set_data(**attrib)
         
         
     #%%####################
     #### add EMG #########
     if not 'EMG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EMG')
-        emg = sleep_utils.infer_emg_channels(all_labels)
-        if emg!=[]: # fix for 888_49272
-            signals, shead, header = highlevel.read_edf(edf_file, ch_names=emg, digital=True)
+        chs = sleep_utils.infer_emg_channels(all_labels)
+        if chs!=[]: # fix for 888_49272
+            signals, shead, header = highlevel.read_edf(edf_file, ch_names=chs, digital=True)
             signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
             
             pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
             dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
             
             lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-            eog_attrib={'data': signals.astype(dtype), 
+            attrib={'data': signals.astype(dtype), 
                         'sampleRate': shead[0]['sample_rate'],
-                        'ch_names': emg,
+                        'ch_names': chs,
                         'lsbValue': 1,
                         'baseline': 0,
                         'unit': 'uV',
                         'dmin': dmin,'dmax': dmax,
                         'pmin': pmin, 'pmax': pmax}
-            emg_entry = SignalEntry(id='EMG.bin', parent=unisens_folder).set_data(**eog_attrib)
+            SignalEntry(id='EMG.bin', parent=u).set_data(**attrib)
+
+    #%%####################
+    #### add Thorax #########
+    if not 'thorax' in u or overwrite:
+        tqdm_desc(f'{code}: Reading Thorax')
+        signals, shead, header = highlevel.read_edf(edf_file, ch_names=['Thorax'], digital=True)
+        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
+        
+        pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+        dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
+        
+        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+        attrib={'data': signals.astype(dtype), 
+                    'sampleRate': shead[0]['sample_rate'],
+                    'ch_names': 'thorax',
+                    'lsbValue': 1,
+                    'baseline': 0,
+                    'unit': 'uV',
+                    'dmin': dmin,'dmax': dmax,
+                    'pmin': pmin, 'pmax': pmax}
+        SignalEntry(id='thorax.bin', parent=u).set_data(**attrib)
+
 
     #%%####################
     #### add annotations #######
     if not 'annotations' in u or overwrite:
         annotations = header['annotations']
         if annotations!=[]:
-            annot_entry = EventEntry('annotations.csv', parent=unisens_folder)
+            annot_entry = EventEntry('annotations.csv', parent=u)
             annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
             annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
             
@@ -178,30 +202,47 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
     #### add rest #######
     
     for file in add_files:
-        if file.endswith('txt') or file.endswith('dat'):
+        if file.endswith('_arousals.txt'):
+            if  'arousals' in u and not overwrite: continue
+            with open(file, 'r') as f:
+                data = f.read()
+                arousal_entry = CustomEntry('arousals.txt', parent=u)
+                arousal_entry.set_data(data)
+        
+        elif file.endswith('txt'):
             if  'hypnogram' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Hypnogram')
             hypno = sleep_utils.read_hypnogram(file)
             u.epochs_hypno = len(hypno)
             times = np.arange(len(hypno))
             hypno = np.vstack([times, hypno]).T
-            hypno_entry = EventEntry(id='hypnogram.csv', parent=unisens_folder)
+            hypno_entry = EventEntry(id='hypnogram.csv', parent=u)
             hypno_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
+                                 sampleRate=1/30, contentClass='Stage', typeLength=1)
+            
+        elif file.endswith('.hypno'):
+            if  'hypnogram_old' in u and not overwrite: continue
+            hypno = sleep_utils.read_hypnogram(file)
+            u.epochs_hypno = len(hypno)
+            times = np.arange(len(hypno))
+            hypno = np.vstack([times, hypno]).T
+            hypno_old_entry = EventEntry(id='hypnogram_old.csv', parent=u)
+            hypno_old_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
 
         elif file.endswith('mat'):     
-            if  'feats.json' in u and not overwrite: continue
+            if  'feats.pkl' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Kubios')
             mat = mat73.loadmat(file)
             HRV = mat['Res']['HRV']
             startsecond = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
             T_RR = HRV['Data']['T_RR'].squeeze() - startsecond
             T_RR = list(zip(T_RR, ['RR']*len(T_RR)))
-            if not 'T_RR' in u:
-                rr_entry = ValuesEntry(id='RR.csv', parent=unisens_folder)
+            if not 'RR' in u:
+                rr_entry = EventEntry(id='RR.csv', parent=u)
                 rr_entry.set_data(T_RR, ch_names='RR')
                   
-            feats_entry = CustomEntry('feats.pkl', parent=unisens_folder)
+            feats_entry = CustomEntry('feats.pkl', parent=u)
             feats_entry.set_data(HRV, comment='pickle dump of the kubios created features file', fileType='pickle')
 
         elif file.endswith('npy'):
@@ -211,30 +252,18 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
             u.epochs_art = len(art)//2
             times = np.arange(len(art))
             art = np.vstack([times, art]).T
-            artefact_entry = ValuesEntry(id='artefacts.csv', parent=unisens_folder)
+            artefact_entry = ValuesEntry(id='artefacts.csv', parent=u)
             artefact_entry.set_data(art, sampleRate=1/15, dataType='int16')
             
         elif file.endswith('.edf'):
             pass
+
         else:
-            raise Exception(f'unkown file type: {file}')
-    #%%####################
-    # we add the entries manually so they are in the right order in the unisens viewer.
-    if 'ecg_entry' in locals(): u.add_entry(ecg_entry)
-    if 'eeg_entry' in locals(): u.add_entry(eeg_entry)
-    if 'eog_entry' in locals(): u.add_entry(eog_entry)
-    if 'emg_entry' in locals(): u.add_entry(emg_entry)
-    if 'rr_entry' in locals(): u.add_entry(rr_entry)
-    if 'artefact_entry' in locals(): u.add_entry(artefact_entry)
-    if 'hypno_entry' in locals(): u.add_entry(hypno_entry)
-    if 'feats_entry' in locals(): u.add_entry(feats_entry)
-    if 'annot_entry' in locals(): u.add_entry(annot_entry)
-    
+            raise Exception(f'unkown file type: {file}')    
     u.save()
 
 #%%
 if __name__=='__main__':
-    import stimer
     from joblib import Parallel, delayed
     documents = cfg.documents
     data = cfg.folder_edf
@@ -244,5 +273,5 @@ if __name__=='__main__':
     
     progbar = tqdm(files)
     # for edf_file in progbar:
-    Parallel(n_jobs=6, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
+    Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
     # to_unisens(edf_file, unisens_folder=unisens_folder)

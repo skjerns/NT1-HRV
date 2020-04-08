@@ -42,7 +42,8 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         
     #conversion dictionary
     conv_dict = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4,
-                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5, 'MT':5}
+                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5, 'MT':5,
+                 'BEWEGUNG':5}
     
     lines = content.split('\n')
     if mode=='auto':
@@ -401,12 +402,15 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
                 logging.warning('{}:Digital signal minimum is {}'\
                                 ', but value range is {}, will correct'.format\
                                 (ch_name, dmin, dsmin))
+                dsmin = min(dsmin, 32767)
                 sigh['digital_min'] = dsmin
+                
             if dsmax>dmax:
                 logging.warning('{}:Digital signal maximum is {}'\
                                 ', but value range is {}, will correct'.format\
                                 (ch_name, dmax, dsmax))
-                # sigh['digital_max'] = dsmax
+                dsmax = min(dsmax, 32767)    
+                sigh['digital_max'] = dsmax
             if psmax-min_dist>pmax:
                 logging.warning('{}:Phyiscal signal maximum is {}'\
                                 ', but value range is {}, will correct'.format\
@@ -431,60 +435,6 @@ def write_edf(edf_file, signals, signal_headers, header, digital=False,
     return os.path.isfile(edf_file) 
 
 
-def compare_edf(edf_file1, edf_file2, verbose=True, threading=True):
-    """
-    Loads two edf files and checks whether the values contained in 
-    them are the same. Does not check the header data
-    """
-    if verbose: print('verifying data')
-    files = [(edf_file1, True), (edf_file2, True)]
-    # di
-    backend = 'loky' if threading else 'sequential'
-    results = Parallel(n_jobs=2, backend=backend)(delayed(read_edf)\
-             (file, digital=digital, verbose=False) for file, \
-             digital in tqdm(files, disable=not verbose))  
-
-    signals1, signal_headers1, _ =  results[0]
-    signals2, signal_headers2, _ =  results[1]
-
-    for i, sigs in enumerate(zip(signals1, signals2)):
-        s1, s2 = sigs
-        s1 = np.abs(s1)
-        s2 = np.abs(s2)
-        assert np.allclose(s1, s2), 'Error, digital values of {}'\
-            ' and {} for ch {}: {} are not the same'.format(
-                edf_file1, edf_file2, signal_headers1[i]['label'], 
-                signal_headers2[i]['label'])
-        gc.collect()
-
-    dmin1, dmax1 = signal_headers1[i]['digital_min'], signal_headers1[i]['digital_max']
-    pmin1, pmax1 = signal_headers1[i]['physical_min'], signal_headers1[i]['physical_max']
-    dmin2, dmax2 = signal_headers2[i]['digital_min'], signal_headers2[i]['digital_max']
-    pmin2, pmax2 = signal_headers2[i]['physical_min'], signal_headers2[i]['physical_max']
-
-    for i, sigs in enumerate(zip(signals1, signals2)):
-        s1, s2 = sigs
-     
-        # convert to physical values, no need to load all data again
-        s1 = dig2phys(s1, dmin1, dmax1, pmin1, pmax1)
-        s2 = dig2phys(s2, dmin2, dmax2, pmin2, pmax2)
-        
-        # now we can remove the signals from the list to save memory
-        signals1[i] = None
-        signals2[i] = None
-        
-        # compare absolutes in case of inverted signals
-        s1 = np.abs(s1)
-        s2 = np.abs(s2)
-        
-        min_dist = np.abs(dig2phys(1, dmin1, dmax1, pmin1, pmax1))
-        close =  np.mean(np.isclose(s1, s2, atol=min_dist))
-        assert close>0.99, 'Error, physical values of {}'\
-            ' and {} for ch {}: {} are not the same: {:.3f}'.format(
-                edf_file1, edf_file2, signal_headers1[i]['label'], 
-                signal_headers2[i]['label'], close)
-        gc.collect()
-    return True
 
 
 def change_polarity(edf_file, channels, new_file=None):
