@@ -17,41 +17,41 @@ import unisens
 import features
 import numpy as np
 import config as cfg
+from sleep import Patient, SleepSet
 from unisens import Unisens, CustomEntry, EventEntry, ValuesEntry
 from joblib import Parallel, delayed
 
 #%%
 
-def extract_features(folder):
+def extract_features(patient):
     pass
 #%%   
-    u = Unisens(folder)
-    kubios = u.feats.get_data()
-    feats = u.feats
+    kubios = patient.feats.get_data()
+    feats = patient.feats
     
     ValuesEntry(id='0_dummy.csv', parent=feats)
     
-    ecg = u.ECG.get_data()
-    sfreq = u.ECG.sampleRate
-    rr = u.rr.get_times()
+    ecg = patient.ECG.get_data()
+    sfreq = patient.ECG.sampleRate
+    rr = patient.rr.get_times()
     
     
     for nr, name in cfg.feats_mapping.items():
         id = f'{name}.csv'
-        if id in u: u.remove_entry(id)
+        if id in patient: patient.remove_entry(id)
         data = features.__dict__[name](ecg=ecg, rr=rr, kubios=kubios, sfreq=sfreq)
         if data is False: continue
         data = list(zip(np.arange(0, len(data)), data))
         feat = ValuesEntry(id=id, parent=feats)
         feat.set_data(data, sampleRate=1/30)
         feat.seg_len = kubios['Param']['Length_Segment']
-    u.save()
+    patient.save()
     
 #%%
 if __name__=='__main__':
     documents = cfg.documents
     unisens_folder = cfg.folder_unisens
     
-    folders = ospath.list_folders(unisens_folder)
-    folder = folders[1]
-    # Parallel(n_jobs=8, verbose=10)(delayed(extract_features)(folder) for folder in folders) 
+    ss = SleepSet(unisens_folder)
+    patient = ss[1]
+    Parallel(n_jobs=8, verbose=10)(delayed(extract_features)(p) for p in ss) 

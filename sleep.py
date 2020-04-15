@@ -18,6 +18,7 @@ from tqdm import tqdm
 import time
 import sleep_utils
 import matplotlib.pyplot as plt
+
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
@@ -60,8 +61,12 @@ class SleepSet():
         tqdm_loop = tqdm if all_strings else lambda x, *args,**kwargs: x
         
         for patient in tqdm_loop(patient_list, desc='Loading Patients'):
-            patient = Patient(patient)
-            self.add(patient)   
+            try:
+                patient = Patient(patient)
+                self.add(patient)   
+            except Exception as e:
+                print('Error in', patient)
+                raise e
         return None
         
     def __repr__(self):
@@ -69,7 +74,7 @@ class SleepSet():
         
         f_control = lambda x: x.group.lower()=='control'
         n_control = len(self.filter(f_control))
-        f_nt1 = lambda x: x.group.lower()=='control'
+        f_nt1 = lambda x: x.group.lower()=='nt1'
         n_nt1 = len(self.filter(f_nt1))
 
         return f'SleepSet({n_patients} Patients, {n_control} Control, '\
@@ -136,6 +141,11 @@ class SleepSet():
         hypnos = [p.get_hypno(only_sleeptime) for p in self]
         return hypnos
     
+    def print(self):
+        s = '['
+        s += ',\n'.join([str(x) for x in self.patients])
+        print(s + ']')
+    
     
 class Patient(Unisens):
     """
@@ -172,7 +182,7 @@ class Patient(Unisens):
     def __init__(self, folder, *args, **kwargs):
         if isinstance(folder, Patient): return None
         if not 'autosave' in kwargs: kwargs['autosave'] = True
-        super().__init__(folder, *args, **kwargs)
+        super().__init__(folder, convert_nums=True, *args, **kwargs)
 
     def __len__(self):
         """
@@ -181,12 +191,16 @@ class Patient(Unisens):
         seconds = int(len(self.data)//(self.sfreq))
         return seconds
         
-    def get_hypno(self, only_sleeptime=False):
-        try:
-            hypno = self['hypnogram.csv'].get_data()
-        except:
-            hypno = self['hypnogram_old.csv'].get_data()
-        hypno = np.array(list(zip(*hypno))[1])
+    def get_hypno(self, only_sleeptime=False, cache=True):
+        if cache and hasattr(self, '_hypno'):
+            hypno = self._hypno
+        else:
+            try:
+                hypno = self['hypnogram.csv'].get_data()
+            except:
+                hypno = self['hypnogram_old.csv'].get_data()
+            hypno = np.array(list(zip(*hypno))[1])
+            self._hypno = hypno
         if only_sleeptime:
             start = np.argmax(np.logical_and(hypno>0 , hypno<5))
             end = len(hypno)-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])
@@ -199,10 +213,17 @@ class Patient(Unisens):
     def get_eeg(self):
         return self['eeg.bin'].get_data().squeeze()
     
+    def get_arousals(self):
+        """return epochs in which an arousal has taken place"""
+        arousals = self['arousals'].get_data()
+        
     def get_feat(self, name):
         if isinstance(name, int):
             name = config.feats_mapping[name]
         return self.feats[name].get_data().squeeze()
+    
+
+        
     
     """creates a unisens.xml that shows only the features"""
     def write_features_to_unisens(self):
@@ -221,7 +242,7 @@ class Patient(Unisens):
         u.save()
     
     def plot(self, channel='eeg', hypnogram=True, axs=None):
-        hypnogram = hypnogram * 'hypnogram' in self
+        hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
         plots = 1 + hypnogram
         h_ratio = [0.75,0.25] if hypnogram else [1,] 
         

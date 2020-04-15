@@ -26,7 +26,6 @@ import config as cfg
 import shutil
 import mat73
 import pyedflib
-import unisens
 from unisens import Unisens, SignalEntry, EventEntry, ValuesEntry
 from sleep import CustomEntry
 import os
@@ -39,23 +38,24 @@ import ospath
 import sleep_utils
 import config as cfg
 from tqdm import tqdm
-import json_tricks
 import misc
+from datetime import datetime
+
+import stimer
 
 
-
-
-def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
+def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
+               skip_exist=False):
     pass
-#%%    
+#%%
     if tqdm_desc is None:  tqdm_desc=lambda x: None
     dtype = np.int16
     code = ospath.basename(edf_file)[:-4]
     folder = ospath.dirname(edf_file)
-    if unisens_folder is None: 
-        unisens_folder = '.'
-    
+
     unisens_folder = ospath.join(unisens_folder, code)
+    
+    if skip_exist and ospath.isdir(unisens_folder): return
         
     # get all additional files that belong to this EDF
     add_files = ospath.list_files(folder, patterns=code + '*')
@@ -71,8 +71,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
     u.group = attribs[code].get('group', 'none')
     u.gender = attribs[code].get('gender', 'none')
     u.age = attribs[code].get('age', -1)
-    
-
+    stimer.lapse()
     #%%####################
     #### add ECG ##########
     tqdm_desc(f'{code}: Reading ECG')
@@ -97,7 +96,9 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
     
         u.sampling_frequency = shead[0]['sample_rate']
         u.duration = len(signals.squeeze())//shead[0]['sample_rate']
-        u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30        
+        u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30  
+    stimer.lapse()
+
     #%%####################
     #### add EEG ##########
     tqdm_desc(f'{code}: Reading EEG')
@@ -119,8 +120,8 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EEG.bin', parent=u).set_data(**attrib)
+    stimer.lapse()
 
- 
     #%%####################
     #### add EOG #########
     if not 'EOG' in u or overwrite:
@@ -142,8 +143,8 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EOG.bin', parent=u).set_data(**attrib)
-        
-        
+    stimer.lapse()
+ 
     #%%####################
     #### add EMG #########
     if not 'EMG' in u or overwrite:
@@ -166,7 +167,8 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                         'dmin': dmin,'dmax': dmax,
                         'pmin': pmin, 'pmax': pmax}
             SignalEntry(id='EMG.bin', parent=u).set_data(**attrib)
-
+    stimer.lapse()
+    
     #%%####################
     #### add Thorax #########
     if not 'thorax' in u or overwrite:
@@ -187,7 +189,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='thorax.bin', parent=u).set_data(**attrib)
-
+    stimer.lapse()
 
     #%%####################
     #### add annotations #######
@@ -197,17 +199,26 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
             annot_entry = EventEntry('annotations.csv', parent=u)
             annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
             annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
-            
+    stimer.lapse()
+ 
     #%%####################
     #### add rest #######
-    
     for file in add_files:
         if file.endswith('_arousals.txt'):
             if  'arousals' in u and not overwrite: continue
-            with open(file, 'r') as f:
-                data = f.read()
-                arousal_entry = CustomEntry('arousals.txt', parent=u)
-                arousal_entry.set_data(data)
+            lines = misc.read_csv(file, convert_nums=True)
+            
+            sdate = u.starttime
+            data = []
+            for t_arousal, length, _ in lines[4:]:
+                t_arousal = f'{sdate.year}.{sdate.month}.{sdate.day} ' + t_arousal[:8]
+                t_arousal = datetime.strptime(t_arousal, '%Y.%m.%d %H:%M:%S')
+                epoch = (t_arousal - sdate).seconds//30
+                data += [[epoch, length]]
+            
+            arousal_event = EventEntry('arousals.csv', parent=u)
+            arousal_event.set_data(data, comment=f'Arousal appearance epoch, name is lengths in seconds', 
+                                 sampleRate=1/30, contentClass='Arousal', typeLength=1)
         
         elif file.endswith('txt'):
             if  'hypnogram' in u and not overwrite: continue
@@ -223,7 +234,7 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
         elif file.endswith('.hypno'):
             if  'hypnogram_old' in u and not overwrite: continue
             hypno = sleep_utils.read_hypnogram(file)
-            u.epochs_hypno = len(hypno)
+            if not hasattr(u, 'epochs_hypno'): u.epochs_hypno = len(hypno)
             times = np.arange(len(hypno))
             hypno = np.vstack([times, hypno]).T
             hypno_old_entry = EventEntry(id='hypnogram_old.csv', parent=u)
@@ -259,7 +270,9 @@ def to_unisens(edf_file, unisens_folder=None, overwrite=False, tqdm_desc= None):
             pass
 
         else:
-            raise Exception(f'unkown file type: {file}')    
+            raise Exception(f'unkown file type: {file}')   
+    stimer.lapse()
+
     u.save()
 
 #%%
@@ -271,7 +284,10 @@ if __name__=='__main__':
     
     files = ospath.list_files(data, exts=['edf'])
     
-    progbar = tqdm(files)
-    # for edf_file in progbar:
-    Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
-    # to_unisens(edf_file, unisens_folder=unisens_folder)
+    for edf_file in files:
+        to_unisens(edf_file, unisens_folder=unisens_folder, skip_exist=True)
+        stimer.lapse()
+    # progbar = tqdm(files)
+    # # for edf_file in progbar:
+    # Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
+    # # to_unisens(edf_file, unisens_folder=unisens_folder)
