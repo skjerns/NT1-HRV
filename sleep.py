@@ -6,7 +6,6 @@ todo: check length of hypno and features
 
 @author: skjerns
 """
-import misc
 import config
 import logging as log
 import tqdm as tqdm
@@ -18,6 +17,8 @@ from tqdm import tqdm
 import time
 import sleep_utils
 import matplotlib.pyplot as plt
+import matplotlib
+from scipy.ndimage.morphology import binary_dilation
 
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 
@@ -38,7 +39,7 @@ class SleepSet():
     on a whole set of Patients.
     """
     
-    def __init__(self, patient_list:list=None):
+    def __init__(self, patient_list:list=None, readonly=True):
         """
         Load a list of Patients (edf format). Resample if necessary.
         
@@ -62,7 +63,7 @@ class SleepSet():
         
         for patient in tqdm_loop(patient_list, desc='Loading Patients'):
             try:
-                patient = Patient(patient)
+                patient = Patient(patient, readonly=readonly)
                 self.add(patient)   
             except Exception as e:
                 print('Error in', patient)
@@ -181,7 +182,7 @@ class Patient(Unisens):
     
     def __init__(self, folder, *args, **kwargs):
         if isinstance(folder, Patient): return None
-        if not 'autosave' in kwargs: kwargs['autosave'] = True
+        if not 'autosave' in kwargs: kwargs['autosave'] = False
         super().__init__(folder, convert_nums=True, *args, **kwargs)
 
     def __len__(self):
@@ -190,8 +191,49 @@ class Patient(Unisens):
         """
         seconds = int(len(self.data)//(self.sfreq))
         return seconds
+         
         
+    def get_artefacts(self, only_sleeptime=False,
+                      block_window_length=15):
+        """
+        As some calculations include surrounding epochs, we need to figure
+        out which epochs cant be used because their neighbouring epochs
+        have an artefact.
+        
+        block_window_length 0 will only get the annotated artefacts as boolean array
+        block_window_length 1 will get the same boolean array but with each neighbour
+        seconds block_window_length/2 blocked as well. Kind of like a cellular automata ;-)
+        """
+        if hasattr(self, '_artefacts_cache'):
+            data = self._artefacts_cache
+        else:
+            try:
+                data = list(zip(*self['artefacts'].get_data()))[1]  
+            except:
+                data = np.zeros(self.epochs_hypno*2)
+            self._artefacts_cache = data
+            
+        data = np.array(data, dtype=bool)
+        
+        # now repeat to get on a per-second-basis
+        data = np.repeat(data, 15)
+        
+        if only_sleeptime:
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            data = data[self.sleep_onset:self.sleep_offset]
+            
+        block_window_length -= 15 # substract window middle
+        if block_window_length>0:
+            data = binary_dilation(data, structure=[True,True,True], 
+                                   iterations=block_window_length)
+        
+        # we are very strict. If there is a single second of artefact, 
+        # we discard the whole epoch.
+        data = data.reshape([-1,30]).max(1)
+        return data
+
     def get_hypno(self, only_sleeptime=False, cache=True):
+        
         if cache and hasattr(self, '_hypno'):
             hypno = self._hypno
         else:
@@ -201,26 +243,61 @@ class Patient(Unisens):
                 hypno = self['hypnogram_old.csv'].get_data()
             hypno = np.array(list(zip(*hypno))[1])
             self._hypno = hypno
+            
+        self.sleep_onset = np.argmax(np.logical_and(hypno>0 , hypno<5))*30
+        self.sleep_offset = len(hypno)*30-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])*30
         if only_sleeptime:
-            start = np.argmax(np.logical_and(hypno>0 , hypno<5))
-            end = len(hypno)-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])
-            hypno = hypno[start:end]
+            hypno = hypno[self.sleep_onset//30:self.sleep_offset//30]
         return hypno
-     
-    def get_ecg(self):
-        return self['ecg.bin'].get_data().squeeze()
-
-    def get_eeg(self):
-        return self['eeg.bin'].get_data().squeeze()
     
-    def get_arousals(self):
-        """return epochs in which an arousal has taken place"""
-        arousals = self['arousals'].get_data()
+     
+    def get_ecg(self, only_sleeptime=False):
+        data = self['ecg.bin'].get_data().squeeze()
         
-    def get_feat(self, name):
+        if only_sleeptime:
+            sfreq = int(self.ecg.sampleRate)
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
+        return data
+
+    def get_eeg(self, only_sleeptime=False):
+        data = self['eeg.bin'].get_data().squeeze()
+        if only_sleeptime:
+            sfreq = int(self.eeg.sampleRate)
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
+        return data
+    
+    def get_arousals(self, only_sleeptime=False):
+        """return epochs in which an arousal has taken place"""
+        try:
+            epochs = self['arousals.csv'].get_data()
+        except:
+            log.warn(f'{self.code} has no arousal file')
+            return(np.array([0]))
+        arousals = set()
+        for epoch, length in epochs:
+            arousals.add(epoch)
+            i = 1
+            while length>30:
+                arousals.add(epoch+i)
+                i+=1
+                
+        data = np.array(sorted(list(arousals)))       
+        if only_sleeptime:
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            data = data-self.sleep_onset//30
+        return data
+    
+    def get_feat(self, name, only_sleeptime=False):
         if isinstance(name, int):
-            name = config.feats_mapping[name]
-        return self.feats[name].get_data().squeeze()
+            name = config.feats_mapping[name] 
+        data = self.feats[name].get_data().squeeze()
+        if only_sleeptime:
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            data = data[self.sleep_onset:self.sleep_offset]
+            
+        return data
     
 
         
@@ -243,6 +320,8 @@ class Patient(Unisens):
     
     def plot(self, channel='eeg', hypnogram=True, axs=None):
         hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
+        
+        
         plots = 1 + hypnogram
         h_ratio = [0.75,0.25] if hypnogram else [1,] 
         
@@ -261,14 +340,24 @@ class Patient(Unisens):
             
         elif entry.id.endswith('csv'):
             sfreq = entry.samplingRate
+            signal = list(zip(*signal))
             axs[0][0].plot(signal[0], signal[1])
+            
         if hypnogram: axs[0][0].tick_params(axis='x', which='both', bottom=False,     
                                             top=False, labelbottom=False) 
         plt.title(f'{channel}, {sfreq} Hz')
+        formatter = matplotlib.ticker.FuncFormatter(lambda s, x: time.strftime('%H:%M', time.gmtime(s)))
+        axs[0][0].xaxis.set_major_formatter(formatter)
+
+        
         
         if hypnogram:
+            artefacts = self.get_artefacts()
             hypno = self.get_hypno()
             sleep_utils.plot_hypnogram(hypno, ax=axs[-1][0])
+            for i, is_art in enumerate(artefacts):
+                plt.plot([i*30,(i+1)*30],[0.2, 0.2],c='red', alpha=0.75*is_art, linewidth=1)
+                
         os.makedirs(os.path.dirname(file), exist_ok=True)
         plt.savefig(file)
         return file

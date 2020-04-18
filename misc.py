@@ -15,6 +15,12 @@ from tkinter import simpledialog
 import hashlib
 
 
+def set_time_xticks(ax, sfreq=256):
+    """
+    given an axis will set the xticks of the axis to time annotations
+    """
+    pass
+
 def get_mapping():
     import config
     """gets the mapping dictionary for codes and names"""

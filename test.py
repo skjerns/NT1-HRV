@@ -10,10 +10,11 @@ import unittest
 import tempfile
 import ospath
 import numpy as np
-from unisens import SignalEntry, Unisens, ValuesEntry
+from unisens import SignalEntry, Unisens, ValuesEntry, EventEntry
 from datetime import datetime, date
 from sleep import Patient, SleepSet
 import sleep_utils
+import matplotlib.pyplot as plt
 
 class TestUtils(unittest.TestCase):
     
@@ -57,10 +58,29 @@ class TestPatient(unittest.TestCase):
             p.add_entry(signal)
         hypnogram = np.random.randint(0,5, [seconds//30])
         hypnogram = np.vstack([np.arange(seconds//30),hypnogram])
-        cls.p = Patient(cls.tmpdir + '/test/')
-        cls.p.add_entry(signal)
-        hypno = ValuesEntry(id = 'hypnogram.csv', parent=cls.p)
-        hypno.set_data(hypnogram, samplingRate=1/30)
+    
+        p = Patient(cls.tmpdir + '_xxx', makenew=True)
+        hypno = [0]*5 + [2]*10 + [3]*3 + [5]*4 + [5] + [2]*4 + [0]*10      
+        times = np.arange(len(hypno))
+        hypno = np.vstack([times, hypno]).T
+        
+        artefacts = np.zeros(len(hypno)*2, dtype=bool)
+        artefacts[16:22] = True
+        artefacts[28] = True
+        times = np.arange(len(artefacts))
+        artefacts = np.vstack([times, artefacts]).T
+        
+        
+        arousals = [[7, 5], [20, 2]]
+        ecg = np.random.rand(600 * 256)
+        eeg = np.random.rand(600 * 256)
+        
+        SignalEntry('ECG.bin', parent=p).set_data(ecg)
+        SignalEntry('EEG.bin', parent=p).set_data(eeg)
+        EventEntry('artefacts.csv', parent=p).set_data(artefacts, samplingRate=1/15)
+        EventEntry('hypnogram.csv', parent=p).set_data(hypno, samplingRate=1/30)
+        EventEntry('arousals.csv', parent=p).set_data(arousals, samplingRate=1)
+        cls.p = p
         
     @classmethod
     def tearDownClass(cls):
@@ -82,13 +102,59 @@ class TestPatient(unittest.TestCase):
         
     def test_plot(self):
         p = self.p
-        p.plot(hypnogram=True)     
+        p.plot(hypnogram=True)
         p.plot(hypnogram=False)     
-        p.plot('hypnogram', hypnogram=False)  
-        self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_hypnogram.png')))
+        p.plot('artefacts', hypnogram=False)
+        self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_artefacts.png')))
         self.assertTrue(os.path.isfile(ospath.join(p._folder, '/plots', 'plot_eeg.png')))
 
+    def test_load_sleeptime_only(self):
+        
+        self.p.get_hypno()
+        arousals1 = self.p.get_arousals()
+        ecg1 = self.p.get_ecg()
+        eeg1 = self.p.get_eeg()
+        art1 = self.p.get_artefacts()
+        
+        onset = self.p.sleep_onset
+        offset = self.p.sleep_offset
+        
+        self.assertEqual(self.p.sleep_onset, 5*30)
+        self.assertEqual(self.p.sleep_offset, 27*30)       
+        
+        hypno2 = self.p.get_hypno(only_sleeptime=True)
+        arousals2 = self.p.get_arousals(only_sleeptime=True)
+        ecg2 = self.p.get_ecg(only_sleeptime=True)
+        eeg2 = self.p.get_eeg(only_sleeptime=True)
+        art2 = self.p.get_artefacts(only_sleeptime=True)      
 
+        
+        np.testing.assert_array_equal(hypno2, [2]*10 + [3]*3 + [5]*4 + [5] + [2]*4 )
+        np.testing.assert_array_equal(arousals2, arousals1-onset//30 )
+        np.testing.assert_array_equal(ecg2, ecg1[onset*256:offset*256] )
+        np.testing.assert_array_equal(eeg2, eeg1[onset*256:offset*256] )
+        np.testing.assert_array_equal(art2, art1[onset//30:offset//30] )
+
+    def test_artefacts_neighbours(self):
+        hypno1 = self.p.get_hypno()
+        art1 = self.p.get_artefacts()
+        assert sum(art1)==4
+        
+        art = self.p.get_artefacts(block_window_length=30)
+        assert sum(art)==7
+ 
+        art = self.p.get_artefacts(block_window_length=45)
+        assert sum(art)==8
+        
+        art = self.p.get_artefacts(block_window_length=46)
+        assert sum(art)==10
+        
+        hypno = self.p.get_hypno(only_sleeptime=True)
+        art = self.p.get_artefacts(only_sleeptime=True)
+        np.testing.assert_array_equal(hypno[art], hypno1[art1]) 
+        
+ 
 if __name__ == '__main__':
+    plt.close('all')
     unittest.main()
     

@@ -23,23 +23,18 @@ These meta attributes will be added:
 @author: skjerns
 """
 import config as cfg
-import shutil
 import mat73
 import pyedflib
-from unisens import Unisens, SignalEntry, EventEntry, ValuesEntry
+from unisens import SignalEntry, EventEntry, ValuesEntry
 from sleep import CustomEntry
-import os
 from pyedflib import highlevel
-from unisens.utils import read_csv
-import shutil
 import numpy as np
 from sleep import Patient
 import ospath
 import sleep_utils
-import config as cfg
-from tqdm import tqdm
 import misc
 from datetime import datetime
+from tqdm import tqdm
 
 import stimer
 
@@ -284,10 +279,10 @@ if __name__=='__main__':
     
     files = ospath.list_files(data, exts=['edf'])
     
-    for edf_file in files:
-        to_unisens(edf_file, unisens_folder=unisens_folder, skip_exist=True)
-        stimer.lapse()
-    # progbar = tqdm(files)
-    # # for edf_file in progbar:
-    # Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder) for edf_file in files) 
-    # # to_unisens(edf_file, unisens_folder=unisens_folder)
+    # for edf_file in files:
+    #     to_unisens(edf_file, unisens_folder=unisens_folder, skip_exist=True)
+    #     stimer.lapse()
+    progbar = tqdm(files)
+    # for edf_file in progbar:
+    Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder,skip_exist=True) for edf_file in files) 
+    # to_unisens(edf_file, unisens_folder=unisens_folder)

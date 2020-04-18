@@ -73,7 +73,11 @@ Additionally:
 
 
 TODO: Remove artefact from sleep transition score (done?)
-TODO: Arousal transitions!
+TODO: switch to Mann–Whitney U-test??
+
+Notes:
+    I'm taking the mean instead of median for episode/phase calculation
+    If I'm taking the median as in the paper I get very low numbers
 
 @author: Simon Kern
 """
@@ -81,14 +85,16 @@ TODO: Arousal transitions!
 import ospath
 import stimer
 import functions
+from functions import arousal_transitions
 import numpy as np
 import config as cfg
 import scipy.stats as stats
 from sleep import Patient, SleepSet
-from tqdm import tqdm
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
-ss = SleepSet(cfg.folder_unisens)
+ss = SleepSet(cfg.folder_unisens, readonly=True)
 nt1 = ss.filter(lambda x: x.group=='nt1')
 controls = ss.filter(lambda x: x.group=='control')
 p = ss[3]
@@ -98,7 +104,7 @@ results = {}
 
 descriptors = ['age', 'gender', 'TST', 'sleep efficiency', 'REM latency',
                'S1 ratio', 'S2 ratio', 'SWS ratio', 'REM ratio', 'WASO ratio',
-               'Stage shift index', 'Arousals']
+               'Stage shift index', 'Arousals', 'Arousal transitions']
 
 table1 = {name:{'nt1':{}, 'control':{}} for name in descriptors}
 for group in ['nt1', 'control']:
@@ -149,28 +155,33 @@ for group in ['nt1', 'control']:
     
     # LM index (movements)
     # PLM index
+    # we dont have these annotations, so skip
+    
     # Arousal transitions
     
+    hypnos = [p.get_hypno() for p in subset]
+    arousals = [p.get_arousals() for p in subset]
+    values = [arousal_transitions(h, a) for h, a in zip(hypnos, arousals)]
+    table1['Arousal transitions'][group]['values'] = values
     
     #### Additional
     # WASO ratio
     values = np.array([np.sum(p.get_hypno(only_sleeptime=True)==0) for p in subset])
     values = values / table1['TST'][group]['values']
     table1['WASO ratio'][group]['values'] = values
-    stimer.lapse()   
     
     # Number of arousals
-    values = [p.arousals.get_data() for p in subset if hasattr(p, 'arousals_txt')]
-    values = [len(v.split('\n'))-6 for v in values]
+    values = [p.get_arousals() for p in subset]
+    values = [len(values) for v in values]
     table1['Arousals'][group]['values'] = values
     
     
-    
+# calculate mean, std and p values for the values above
 for descriptor in descriptors:
     if descriptor=='gender': continue
     values_nt1 = table1[descriptor]['nt1']['values']
     values_control = table1[descriptor]['control']['values']
-    table1[descriptor]['p'] = stats.ttest_ind(values_nt1, values_control).pvalue
+    table1[descriptor]['p'] = stats.mannwhitneyu(values_nt1, values_control).pvalue
     for group in ['nt1', 'control']:
         table1[descriptor][group]['mean'] = np.mean(table1[descriptor][group]['values'])
         table1[descriptor][group]['std'] = np.std(table1[descriptor][group]['values'])
@@ -178,8 +189,56 @@ for descriptor in descriptors:
 #####################################
 #%% Calculate mean episode length // Recreate Figure 2
 
+fig, axs = plt.subplots(2,2)
+
+means = dict(zip(range(6), [{} for _ in range(6)]))
 
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group)
-    phase_counts = list(map(functions.epoch_lengths, subset.get_hypnos(only_sleeptime=True)))
+    phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
+    phase_counts_all = dict(zip(range(6), [[] for _ in range(6)]))
+    for phase_count in phase_counts: 
+        for i in phase_count:
+            phase_counts_all[i].extend(phase_count[i])
+            
+    
+    for stage in range(6):
+        durations = np.array(phase_counts_all[stage], dtype=int)/2
+        means[stage][group] = np.mean(durations)
+        if stage in [0, 5]: continue
+    
+        hist = np.histogram(durations, bins=np.arange(16))
+        ax = axs.flatten()[stage-1]
+        ax.plot(hist[1][:-1], hist[0])
+        ax.set_title(cfg.num2stage[stage])
+        ax.set_xlabel('minutes')
+        ax.set_ylabel('# of epochs')
+        ax.legend(['nt1', 'control'])
+        
+plt.suptitle('Number of sleep phases for different phase lengths')
+for i, stage in enumerate([1,2,3,4]):
+    ax = axs.flatten()[i]
+    minmean = min(means[stage]['nt1'], means[stage]['control'])
+    ax.axvline(minmean, linestyle='dashed', linewidth=0.5, c='black')
+
+#%% calculate metrics for different sleep stages: HF/LF, HRV, etc
+masks = {'nt1':{}, 'control':{}}
+for group in ['nt1', 'control']:
+    subset = ss.filter(lambda x: x.group==group)
+    phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
+    phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
+    
+    
+    for stage in range(5):
+        minmean = min(means[stage]['nt1'], means[stage]['control'])
+        mask_length = [np.array(l)>minmean for l in phase_lengths]
+        mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
+        mask_art = [p.get_artefacts(only_sleeptime=True)==False for p in subset]
+        assert all([len(x)==len(y) for x,y in zip(mask_length, mask_stage)])
+        assert all([len(x)==len(y)  for x,y in zip(mask_length, mask_art)])
+        mask = [np.logical_and.reduce((x,y,z)) for x,y,z in zip(mask_length, mask_stage, mask_art)]
+        masks[group][stage] = mask
+    
+for group in ['nt1', 'control']:
+    subset = ss.filter(lambda x: x.group==group)
     
