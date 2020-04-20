@@ -155,7 +155,7 @@ class Patient(Unisens):
     and hypnogram as well as visualization of the record, plus statistical
     analysis. Many of its subfunctions are inherited from Unisens
     """
-    def __new__(cls, folder, *args, **kwargs):
+    def __new__(cls, folder=None, *args, **kwargs):
         """
         If this patient is initialized with a Patient, just return this Patient
         """
@@ -170,10 +170,10 @@ class Patient(Unisens):
         gender = self.attrib.get('gender', '')
         age = self.attrib.get('age', -1)
         
-        if 'features' in  self:
+        if 'feats' in  self:
             nfeats = len(self['feats'])
         else:
-            nfeats = 0
+            nfeats = 'None'
         return f'Patient({name}, {length} , {sfreq} Hz, {nfeats} feats, '\
                f'{gender} {age} y)'
     
@@ -289,15 +289,22 @@ class Patient(Unisens):
             data = data-self.sleep_onset//30
         return data
     
-    def get_feat(self, name, only_sleeptime=False):
+    
+    def get_feat(self, name, only_sleeptime=False, cache=True):
         if isinstance(name, int):
-            name = config.feats_mapping[name] 
-        data = self.feats[name].get_data().squeeze()
+            name = 'feats/' + config.feats_mapping[name] + '.csv'
+            
+        if cache and hasattr(self, f'{name}'):
+            feat = self.__dict__[f'{name}']
+        else:      
+            
+            feat = np.array(self.feats[name].get_data())[:,1]
+            self.__dict__[f'{name}'] = feat
+            
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            data = data[self.sleep_onset:self.sleep_offset]
-            
-        return data
+            feat = feat[self.sleep_onset//30:self.sleep_offset//30]
+        return feat
     
 
         

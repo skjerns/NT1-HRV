@@ -168,7 +168,7 @@ feats_mapping = {1:  'mean_HR',
                  }
 
 
-# feats_mapping.update( {v: k for k, v in feats_mapping.items()})
+feats_mapping.update( {v: k for k, v in feats_mapping.items()}) # reverse as well
 feats_mapping = CaseInsensitiveDict(feats_mapping)
 
 

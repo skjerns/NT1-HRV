@@ -10,6 +10,7 @@ import unittest
 import tempfile
 import ospath
 import numpy as np
+import pickle
 from unisens import SignalEntry, Unisens, ValuesEntry, EventEntry
 from datetime import datetime, date
 from sleep import Patient, SleepSet
@@ -153,6 +154,15 @@ class TestPatient(unittest.TestCase):
         art = self.p.get_artefacts(only_sleeptime=True)
         np.testing.assert_array_equal(hypno[art], hypno1[art1]) 
         
+        
+    def test_serialize(self)       :
+        with open(self.tmpdir + '/asd.pkl', 'wb') as f:   
+            pickle.dump(self.p, f)
+            
+        with open(self.tmpdir + '/asd.pkl', 'rb') as f:   
+            pickle.load(f)         
+            
+          
  
 if __name__ == '__main__':
     plt.close('all')

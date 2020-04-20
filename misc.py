@@ -15,11 +15,6 @@ from tkinter import simpledialog
 import hashlib
 
 
-def set_time_xticks(ax, sfreq=256):
-    """
-    given an axis will set the xticks of the axis to time annotations
-    """
-    pass
 
 def get_mapping():
     import config
@@ -28,23 +23,34 @@ def get_mapping():
     mappings = utils.read_csv(csv)
     mappings.extend([x[::-1] for x in mappings]) # also backwards
     return dict(mappings)
-    
-    
+
+def get_matching():
+    import config 
+    csv = os.path.join(config.documents, 'matching.csv')
+    matching = utils.read_csv(csv, convert_nums=True)
+    matching = [[code1, code2] for nt1,code1,_,_,cnt,code2,_,_,diff in matching if diff<99]
+    matching.extend([x[::-1] for x in matching]) # also backwards
+    return dict(matching)
+
 def get_attribs():
     import config
     """get the attributes of the patients etc"""
     mappings = get_mapping()
+    matching = get_matching()
     control_csv = os.path.join(config.documents, 'subjects_control.csv')
     nt1_csv = os.path.join(config.documents, 'subjects_nt1.csv')
     
     control = utils.read_csv(control_csv)
     nt1 = utils.read_csv(nt1_csv)
+    
 
     control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control'}] for c in control] 
     nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1'}] for c in nt1] 
     
+    
     all = control + nt1
-    all = [[mappings[x[0]],x[1]] for x in all ]
+    all = dict([[mappings[x[0]],x[1]] for x in all]) # convert to codified version
+    for c in all: all[c].update({'match':matching.get(c,'')})
     return dict(all)
 
 def codify(filename): 

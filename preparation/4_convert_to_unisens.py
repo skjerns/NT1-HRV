@@ -35,9 +35,15 @@ import sleep_utils
 import misc
 from datetime import datetime
 from tqdm import tqdm
-
+from joblib import Memory
 import stimer
 
+
+#%% We use memory to massively speed up these computations
+memory = Memory(cfg.folder_cache, verbose=5)
+read_edf_header = memory.cache(highlevel.read_edf_header)
+read_edf = memory.cache(highlevel.read_edf)
+loadmat = memory.cache(mat73.loadmat)
 
 def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                skip_exist=False):
@@ -56,7 +62,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     add_files = ospath.list_files(folder, patterns=code + '*')
     u = Patient(unisens_folder, makenew=False, autosave=True,
                 measurementId=code)
-    header = highlevel.read_edf_header(edf_file)
+    header = read_edf_header(edf_file)
     all_labels = header['channels']
     u.starttime = header['startdate']
     u.timestampStart = header['startdate'].strftime('%Y-%m-%dT%H:%M:%S')
@@ -66,12 +72,13 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.group = attribs[code].get('group', 'none')
     u.gender = attribs[code].get('gender', 'none')
     u.age = attribs[code].get('age', -1)
+    u.match = attribs[code].get('match', '')
     stimer.lapse()
     #%%####################
     #### add ECG ##########
     tqdm_desc(f'{code}: Reading ECG')
     if not 'ECG' in u or overwrite:
-        signals, shead, header = pyedflib.highlevel.read_edf(edf_file, ch_names='ECG I', digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names='ECG I', digital=True)
         signals[:,0:2]  = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -99,7 +106,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     tqdm_desc(f'{code}: Reading EEG')
     if not 'EEG' in u or overwrite:
         chs = sleep_utils.infer_eeg_channels(all_labels)
-        signals, shead, header = highlevel.read_edf(edf_file, ch_names=chs, digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -122,7 +129,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     if not 'EOG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EOG')
         chs = sleep_utils.infer_eog_channels(all_labels)
-        signals, shead, header = highlevel.read_edf(edf_file, ch_names=chs, digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -146,7 +153,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         tqdm_desc(f'{code}: Reading EMG')
         chs = sleep_utils.infer_emg_channels(all_labels)
         if chs!=[]: # fix for 888_49272
-            signals, shead, header = highlevel.read_edf(edf_file, ch_names=chs, digital=True)
+            signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True)
             signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
             
             pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -168,7 +175,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     #### add Thorax #########
     if not 'thorax' in u or overwrite:
         tqdm_desc(f'{code}: Reading Thorax')
-        signals, shead, header = highlevel.read_edf(edf_file, ch_names=['Thorax'], digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names=['Thorax'], digital=True)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -239,7 +246,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         elif file.endswith('mat'):     
             if  'feats.pkl' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Kubios')
-            mat = mat73.loadmat(file)
+            mat = loadmat(file)
             HRV = mat['Res']['HRV']
             startsecond = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
             T_RR = HRV['Data']['T_RR'].squeeze() - startsecond

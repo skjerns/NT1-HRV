@@ -92,13 +92,14 @@ import scipy.stats as stats
 from sleep import Patient, SleepSet
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
+stimer.start('All calculations')
 
 ss = SleepSet(cfg.folder_unisens, readonly=True)
-nt1 = ss.filter(lambda x: x.group=='nt1')
-controls = ss.filter(lambda x: x.group=='control')
-p = ss[3]
-results = {}
+ss = ss.filter(lambda x: x.match!='') # only use matched participants
+ss = ss.filter(lambda x: len(x.get_hypno())>0)
+p = ss[1]
 
 #%%### Recreate Table 1
 
@@ -112,7 +113,7 @@ for group in ['nt1', 'control']:
 
     # gender
     table1['gender'][group]['female'] = np.sum([x.gender=='female' for x in subset])
-    table1['gender'][group]['male'] = np.sum([x.gender=='male' for x in nt1])
+    table1['gender'][group]['male'] = np.sum([x.gender=='male' for x in subset])
 
     # age
     values = np.array([x.age for x in subset])
@@ -172,7 +173,7 @@ for group in ['nt1', 'control']:
     
     # Number of arousals
     values = [p.get_arousals() for p in subset]
-    values = [len(values) for v in values]
+    values = [len(v) for v in values]
     table1['Arousals'][group]['values'] = values
     
     
@@ -222,23 +223,54 @@ for i, stage in enumerate([1,2,3,4]):
     ax.axvline(minmean, linestyle='dashed', linewidth=0.5, c='black')
 
 #%% calculate metrics for different sleep stages: HF/LF, HRV, etc
+
+features = ['LF', 'HF', 'LF_HF', 'mean_HR', 'RMSSD', 'pNN50', 'n_epochs']
+table2 = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(6)} for name in features}
 masks = {'nt1':{}, 'control':{}}
+
 for group in ['nt1', 'control']:
-    subset = ss.filter(lambda x: x.group==group)
+    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
     phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
     phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
     
     
     for stage in range(5):
+        ##### here we filter out which epochs are elegible for analysis
+        # only take epochs that are longer than the mean epoch length
         minmean = min(means[stage]['nt1'], means[stage]['control'])
         mask_length = [np.array(l)>minmean for l in phase_lengths]
+        # onlt take epochs of the given stage
         mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
-        mask_art = [p.get_artefacts(only_sleeptime=True)==False for p in subset]
+        # only take epochs with no artefacts surrounding 300 seconds
+        mask_art = [p.get_artefacts(only_sleeptime=True, block_window_length=300)==False for p in subset]
         assert all([len(x)==len(y) for x,y in zip(mask_length, mask_stage)])
         assert all([len(x)==len(y)  for x,y in zip(mask_length, mask_art)])
+        # create a signel mask
         mask = [np.logical_and.reduce((x,y,z)) for x,y,z in zip(mask_length, mask_stage, mask_art)]
         masks[group][stage] = mask
+        print(f'{stage}: {np.mean([np.mean(x) for x in mask])}')
+ 
     
-for group in ['nt1', 'control']:
-    subset = ss.filter(lambda x: x.group==group)
+
+
+for feat in tqdm(features, desc='Calculating features'):
     
+    for stage in range(5):
+        for group in 'nt1', 'control':
+            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
+            # get all subset that have features
+            feat_idx = cfg.feats_mapping[feat]
+            # get all values
+            values = [p.get_feat(feat_idx, only_sleeptime=True, cache=True) for p in subset]
+            # combine values with masks
+            values = [np.mean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage])]
+            table2[feat][stage][group] = {'values':values}
+            table2[feat][stage][group]['mean'] = np.nanmean(values)
+            table2[feat][stage][group]['std'] = np.nanmean(values)
+        values_nt1 = table2[feat][stage]['nt1']['values']
+        values_control = table2[feat][stage]['control']['values']
+        table2[feat][stage]['p'] = stats.mannwhitneyu(values_nt1, values_control).pvalue
+
+
+#%%
+stimer.stop('All calculations')
