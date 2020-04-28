@@ -16,9 +16,11 @@ import re
 from tqdm import tqdm
 import time
 import sleep_utils
+from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 import matplotlib
 from scipy.ndimage.morphology import binary_dilation
+from scipy.ndimage.filters import gaussian_filter1d
 
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 
@@ -142,7 +144,33 @@ class SleepSet():
         hypnos = [p.get_hypno(only_sleeptime) for p in self]
         return hypnos
     
+    def summary(self):
+        """print a detailed summary of the items in this set"""
+        n_all = len(self)
+        n_nt1 = len(self.filter(lambda x: x.group=='nt1'))
+        n_cnt = len(self.filter(lambda x:  x.group=='control'))
+        n_nt1_m = len(self.filter(lambda x: x.group=='nt1' and x.match!=''))
+        n_cnt_m = len(self.filter(lambda x:  x.group=='control' and x.match!=''))
+        n_ecg = len(self.filter(lambda x: 'ECG' in x))
+        n_eeg = len(self.filter(lambda x: 'EEG' in x))
+        n_emg = len(self.filter(lambda x: 'EMG' in x))
+        n_eog = len(self.filter(lambda x: 'EOG' in x))
+        n_lage = len(self.filter(lambda x: 'Body' in x.channels))
+        n_thorax = len(self.filter(lambda x: 'thorax' in x))
+        
+        s = f'{n_all} Patients, {n_nt1} NT1 ({n_nt1_m} matched), {n_cnt} controls ({n_cnt_m} matched)\n'
+        s += '\nECG:\t' + ("all" if n_all==n_ecg else f"{n_ecg}/{n_all}")
+        s += '\nEEG:\t' + ("all" if n_all==n_eeg else f"{n_eeg}/{n_all}")
+        s += '\nEMG:\t' + ("all" if n_all==n_emg else f"{n_emg}/{n_all}")
+        s += '\nEOG:\t' + ("all" if n_all==n_eog else f"{n_eog}/{n_all}")
+        s += '\nLage:\t' + ("all" if n_all==n_lage else f"{n_lage}/{n_all}")
+        s += '\nThorax\t' + ("all" if n_all==n_thorax else f"{n_thorax}/{n_all}")
+        print(s)
+        
+        
+        
     def print(self):
+        """pretty-print all containing patients in a list"""
         s = '['
         s += ',\n'.join([str(x) for x in self.patients])
         print(s + ']')
@@ -324,47 +352,65 @@ class Patient(Unisens):
         for entry in self.feats._entries:
             u.add_entry(entry)
         u.save()
-    
-    def plot(self, channel='eeg', hypnogram=True, axs=None):
-        hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
         
-        
-        plots = 1 + hypnogram
-        h_ratio = [0.75,0.25] if hypnogram else [1,] 
-        
-        if axs is None:
-            fig, axs = plt.subplots(plots, 1, 
-                                    gridspec_kw={'height_ratios':h_ratio}, 
-                                    squeeze=False)
-            
-        file = ospath.join(self._folder, '/plots/', f'plot_{channel}.png')
-        entry =  self[channel]
-        signal = entry.get_data()
-        if entry.id.endswith('bin'):
-            signal = signal[0]
-            sfreq = entry.sampleRate
-            sleep_utils.specgram_multitaper(signal, int(sfreq), ax=axs[0][0])
-            
-        elif entry.id.endswith('csv'):
-            sfreq = entry.samplingRate
-            signal = list(zip(*signal))
-            axs[0][0].plot(signal[0], signal[1])
-            
-        if hypnogram: axs[0][0].tick_params(axis='x', which='both', bottom=False,     
-                                            top=False, labelbottom=False) 
-        plt.title(f'{channel}, {sfreq} Hz')
-        formatter = matplotlib.ticker.FuncFormatter(lambda s, x: time.strftime('%H:%M', time.gmtime(s)))
-        axs[0][0].xaxis.set_major_formatter(formatter)
 
-        
-        
-        if hypnogram:
-            artefacts = self.get_artefacts()
-            hypno = self.get_hypno()
-            sleep_utils.plot_hypnogram(hypno, ax=axs[-1][0])
-            for i, is_art in enumerate(artefacts):
-                plt.plot([i*30,(i+1)*30],[0.2, 0.2],c='red', alpha=0.75*is_art, linewidth=1)
+    
+    def plot(self, channels='eeg', hypnogram=True, axs=None):
+        with plt.style.context('default'):
+            hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
+            if isinstance(channels, str): channels = [channels]
+            n_chs = len(channels)
+            plots = n_chs + hypnogram
+            
+            h_ratio = [*[0.75/n_chs]*n_chs,0.25] if hypnogram else [((0.75/n_chs)*n_chs)]
+            
+            if axs is None:
+                fig, axs = plt.subplots(plots, 1, 
+                                        gridspec_kw={'height_ratios':h_ratio}, 
+                                        squeeze=False)
+            axs = axs.flatten()
+            file = ospath.join(self._folder, '/plots/', f'plot_{"_".join(channels)}.png')
+            for i, channel in enumerate(channels):
+                if channel in self:
+                    entry =  self[channel]
+                    signal = entry.get_data()
+                    if entry.id.endswith('bin'):
+                        signal = signal[0]
+                        sfreq = entry.sampleRate
+                        sleep_utils.specgram_multitaper(signal, int(sfreq), ax=axs[i])
+                        
+                    elif entry.id.endswith('csv'):
+                        sfreq = entry.samplingRate
+                        signal = list(zip(*signal))
+                        axs[i].plot(signal[0], signal[1])
+                else:
+                    signal = self.get_feat(channel)
+                    smoothed = gaussian_filter1d(signal, sigma=3.5)
+                    sfreq = '1/30'
+                    axs[i].plot(np.arange(len(signal)), signal, linewidth=0.7, alpha=0.6)
+                    axs[i].plot(np.arange(len(signal)), smoothed, c='b')
+                    axs[i].set_xlim([0,len(signal)])
+                axs[i].set_title(channel)
                 
-        os.makedirs(os.path.dirname(file), exist_ok=True)
-        plt.savefig(file)
+            for ax in axs[:-1]:
+                ax.tick_params(axis='x', which='both', bottom=False,     
+                                                top=False, labelbottom=False) 
+            
+            formatter = FuncFormatter(lambda s, x: time.strftime('%H:%M', time.gmtime(s)))
+            axs[-1].xaxis.set_major_formatter(formatter)
+            
+            if hypnogram:
+                artefacts = self.get_artefacts()
+                hypno = self.get_hypno()
+                sleep_utils.plot_hypnogram(hypno, ax=axs[-1])
+                for i, is_art in enumerate(artefacts):
+                    plt.plot([i*30,(i+1)*30],[0.2, 0.2],c='red', 
+                             alpha=0.75*is_art, linewidth=1)
+            plt.suptitle(f'Plotted: {channels}, {sfreq} Hz', y=1)
+            plt.pause(0.01)
+            plt.tight_layout()
+            plt.pause(0.01)
+            plt.savefig(file)
+            os.makedirs(os.path.dirname(file), exist_ok=True)
+
         return file

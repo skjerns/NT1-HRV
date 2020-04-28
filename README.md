@@ -7,7 +7,7 @@ Experimental biomarker research for early detection of Narcolepsy type 1
 
 to install the packages needed for this repository, run the following command:
 ```
-pip install tqdm pyedflib h5py mat73 dateparser joblib
+pip install tqdm pyedflib h5py mat73 dateparser joblib pytablewriter
 pip install git+https://github.com/skjerns/skjerns-utils
 ```
 

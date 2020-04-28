@@ -40,7 +40,7 @@ import stimer
 
 
 #%% We use memory to massively speed up these computations
-memory = Memory(cfg.folder_cache, verbose=5)
+memory = Memory(cfg.folder_cache, verbose=0)
 read_edf_header = memory.cache(highlevel.read_edf_header)
 read_edf = memory.cache(highlevel.read_edf)
 loadmat = memory.cache(mat73.loadmat)
@@ -73,7 +73,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.gender = attribs[code].get('gender', 'none')
     u.age = attribs[code].get('age', -1)
     u.match = attribs[code].get('match', '')
-    stimer.lapse()
+    u.channels = str(', '.join(header['channels']))
     #%%####################
     #### add ECG ##########
     tqdm_desc(f'{code}: Reading ECG')
@@ -99,7 +99,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         u.sampling_frequency = shead[0]['sample_rate']
         u.duration = len(signals.squeeze())//shead[0]['sample_rate']
         u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30  
-    stimer.lapse()
 
     #%%####################
     #### add EEG ##########
@@ -122,7 +121,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EEG.bin', parent=u).set_data(**attrib)
-    stimer.lapse()
 
     #%%####################
     #### add EOG #########
@@ -145,7 +143,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EOG.bin', parent=u).set_data(**attrib)
-    stimer.lapse()
  
     #%%####################
     #### add EMG #########
@@ -169,7 +166,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                         'dmin': dmin,'dmax': dmax,
                         'pmin': pmin, 'pmax': pmax}
             SignalEntry(id='EMG.bin', parent=u).set_data(**attrib)
-    stimer.lapse()
     
     #%%####################
     #### add Thorax #########
@@ -191,7 +187,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='thorax.bin', parent=u).set_data(**attrib)
-    stimer.lapse()
 
     #%%####################
     #### add annotations #######
@@ -201,7 +196,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             annot_entry = EventEntry('annotations.csv', parent=u)
             annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
             annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
-    stimer.lapse()
  
     #%%####################
     #### add rest #######
@@ -273,7 +267,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
 
         else:
             raise Exception(f'unkown file type: {file}')   
-    stimer.lapse()
 
     u.save()
 
@@ -285,11 +278,8 @@ if __name__=='__main__':
     unisens_folder = cfg.folder_unisens
     
     files = ospath.list_files(data, exts=['edf'])
-    
+    # stimer.start('unisens')
     # for edf_file in files:
     #     to_unisens(edf_file, unisens_folder=unisens_folder, skip_exist=True)
-    #     stimer.lapse()
-    progbar = tqdm(files)
-    # for edf_file in progbar:
     Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder,skip_exist=True) for edf_file in files) 
     # to_unisens(edf_file, unisens_folder=unisens_folder)

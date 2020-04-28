@@ -11,8 +11,7 @@ import tempfile
 import ospath
 import numpy as np
 import pickle
-from unisens import SignalEntry, Unisens, ValuesEntry, EventEntry
-from datetime import datetime, date
+from unisens import SignalEntry, ValuesEntry, EventEntry
 from sleep import Patient, SleepSet
 import sleep_utils
 import matplotlib.pyplot as plt
