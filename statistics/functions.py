@@ -8,6 +8,9 @@ from itertools import groupby
 import numpy as np
 import scipy.stats as stats
 
+significance_test = stats.mannwhitneyu
+significance_test = stats.ttest_ind
+
 
 def calc_statistics(table):
     """
@@ -24,6 +27,8 @@ def calc_statistics(table):
         dictionary['variable name']['subvarname']['group1/group2']['values'] = [0,5,2,3,4, ...]
 
     """
+    
+    
     for descriptor in table:
         if 'nt1' in table[descriptor]: # only one level
             values_nt1 = table[descriptor]['nt1']['values']
@@ -40,7 +45,7 @@ def calc_statistics(table):
                 values_nt1 = table[descriptor][subvar]['nt1']['values']
                 values_cnt = table[descriptor][subvar]['control']['values']
                 try:
-                    table[descriptor][subvar]['p'] = stats.mannwhitneyu(values_nt1, values_cnt).pvalue
+                    table[descriptor][subvar]['p'] = significance_test(values_nt1, values_cnt).pvalue
                 except:
                     table[descriptor][subvar]['p'] = '-'
                 for group in ['nt1', 'control']:
@@ -76,7 +81,7 @@ def transition_index(hypno, transition_pattern):
     return len(positions)
 
 
-def sleep_stage_sequence(hypno):
+def starting_sequence_pizza(hypno):
     """
     
     return which sequence sleep stages occur in a hypnogram
@@ -99,16 +104,50 @@ def sleep_stage_sequence(hypno):
     sequence.remove(0)
     
     # check which sequence we got
-    if sequence[:3]==[1,2,3] or sequence[:3]==[2,3,4]:
+    if sequence[:4]==[1,2,3,4]:
         sequence_nr = 0
-    elif sequence[:3]==[1,2,4] or sequence[:3]==[2,4,1] or sequence[:3]==[2,1,4]:
-        sequence_nr = 1  
-    elif sequence[:2]==[1,4] or sequence[:4]==[2,0,1,4]:
+    elif sequence[:3]==[1,2,4]:
+        sequence_nr = 1
+    elif sequence[:2]==[1,4] or sequence[0]==[4]:
         sequence_nr = 2
     else:
-        sequence_nr=-1
-        print(f'unknown sequence: {sequence}')
+        sequence_nr = 3
     return sequence_nr
+
+def starting_sequence(hypno):
+    """
+    
+    return which sequence sleep stages occur in a hypnogram
+    this is our own definition
+    
+    
+    
+    0:  'normal transitions': First SWS then REM
+    1:  'kind of normal': First N2, no SWS, then REM
+    3:  SOREM: No N2, no SWS, directly REM
+    -1: other should not happen, 
+        all of them should fall into one of the categories above, 
+        unless there is no REM at all
+    """
+    # idx of first S2, SWS and REM
+    # add artificial -9 so that no argmax can be 0. 
+    # if it's zero we know that it isn't found in the hypnogram at all
+    # e.g. there is no REM,SWS or S2 at all
+    hypno = np.array([-9] + [x for x in hypno])
+    s2, sws, rem = np.argmax(hypno==2), np.argmax(hypno==3), np.argmax(hypno==4)
+    
+    if s2==0: s2=99999
+    if sws==0: sws=99999
+    if rem==0: rem=99999
+    
+    if sws<rem: sequence_nr = 0
+    elif s2<rem: sequence_nr = 1
+    elif rem<sws: sequence_nr=2
+    else:
+        sequence_nr=-1
+        print(f'no rem?')
+    return sequence_nr
+
 
 
 def search_sequences(arr,seq):

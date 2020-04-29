@@ -96,7 +96,7 @@ import functions
 from functions import arousal_transitions
 import numpy as np
 import config as cfg
-import scipy.stats as stats
+import scipy.stats as stats 
 from sleep import SleepSet
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -110,13 +110,14 @@ plt.close('all')
 stimer.start('All calculations')
 
 ss = SleepSet(cfg.folder_unisens, readonly=True)
-ss = ss.filter(lambda x: x.match!='') # only use matched participants
+# ss = ss.filter(lambda x: x.match!='') # only use matched participants
 ss = ss.filter(lambda x: len(x.get_hypno())>0) # filter out patients with no hypnogram
 p = ss[1]
-
+stop
 #%%### Van Meijden 2015 Table 1
 
-descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'REM latency',
+descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
+               'S2 latency','SWS latency','REM latency',
                'S1 ratio', 'S2 ratio', 'SWS ratio', 'REM ratio', 'WASO ratio',
                'Stage shift index', 'Arousals', 'Arousal transitions',
                'Nr. of Awakenings', 'Awakenings/Hour', 'Awakening Lengths']
@@ -145,6 +146,18 @@ for group in ['nt1', 'control']:
     values = np.array([len(p.get_hypno(only_sleeptime=True)) for p in subset])
     values = values / table1['TST'][group]['values']
     table1['sleep efficiency'][group]['values'] = values
+   
+    # S1 latency in minutes
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==1)/2 for p in subset])
+    table1['S1 latency'][group]['values'] = values
+   
+    # S2 latency in minutes
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==2)/2 for p in subset])
+    table1['S2 latency'][group]['values'] = values
+    
+    # SWS latency in minutes
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==3)/2 for p in subset])
+    table1['SWS latency'][group]['values'] = values
     
     # REM latency in minutes
     values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==4)/2 for p in subset])
@@ -209,17 +222,20 @@ for group in ['nt1', 'control']:
     values = list([np.mean(functions.phase_lengths(h)[0])/2 for h in subset.get_hypnos(only_sleeptime=True)])
     table1['Awakening Lengths'][group]['values'] = values
   
+    
+  
 
 # calculate mean, std and p values for the values above
 functions.calc_statistics(table1)
 # plot distributions for the two groups and save results to html
 plotting.print_table(table1, 'Sleep Stage Parameters') 
-table1.pop('gender')
-plotting.distplot_table(table1, 'Sleep Stage Parameters')
+table1.pop('gender') # remove this, can't be plotted appropriately
+plotting.distplot_table(table1, 'Sleep Stage Parameters', ylabel='counts')
 
 #%% Van Meijden 2015 Figure 2, Mean episode length
 stage_means = dict(zip(range(6), [{'control':{}, 'nt1':{}} for _ in range(6)]))
 fig, axs = plt.subplots(2, 2)
+
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
 
@@ -242,10 +258,11 @@ for group in ['nt1', 'control']:
         ax.set_xlabel('minutes')
         ax.set_ylabel('total # of epochs')
         ax.legend(['nt1', 'control'])
+n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl')))
+plt.suptitle(f'Number of sleep phases for different phase lengths, n={n}')
 
 # calculate statistics and print out results
 functions.calc_statistics(stage_means)
-# plotting.distplot_table(stage_means, 'Number of sleep phases for different phase lengths')
 plotting.print_table(stage_means, 'Number of sleep phases for different phase lengths') 
 
 for i, stage in enumerate([1,2,3,4]):
@@ -255,8 +272,8 @@ for i, stage in enumerate([1,2,3,4]):
     
 #%% Van Meijden 2015 Figure 3: Change after transition
 
-features = ['mean_HR', 'LF', 'LF_HF']
-post_transition = {feat:{stage:{} for stage in range(6)} for feat in features} 
+features = ['mean_HR', 'LF', 'HF', 'LF_HF']
+post_transitions = {feat:{stage:{} for stage in range(6)} for feat in features} 
    
 for name in features:
     for stage in range(6):
@@ -285,33 +302,37 @@ for name in features:
                     artefacts = artefacts[idxs[start]: idxs[start]+lengths[start]]
                     values.append(feat_values[:minmean]) # only take %minmean% epochs
                     
-            post_transition[name][stage][group] = {'values':np.array(values)}
+            post_transitions[name][stage][group] = {'values':np.array(values)}
             
     # calculate statistics and print out results
     title = f'{name} rate changes directly after Sleep Phase Change'
-    functions.calc_statistics(post_transition[name])
-    fig, axs = plotting.lineplot_table(post_transition[name], title, xlabel='epochs', ylabel=name)
-    plotting.print_table(post_transition[name], title) 
-
-for stage in range(6):
-    ax = axs.flatten()[stage]
-
+    functions.calc_statistics(post_transitions[name])
+    n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl')))
+    fig, axs = plotting.lineplot_table(post_transitions[name], title, xlabel='epochs', 
+                                       ylabel=name, n=n)
+    plotting.print_table(post_transitions[name], title) 
 
 ################################################
 ################################################
-#%% Pizza 2015: transition indices
+#%% Pizza 2015: transition indices + own indices
 ################################################
 ################################################
 
-descriptors = [ 'Sleep Sequences N2-SWS-REM/N2-REM/W-REM', 'Sequences W-S', 'Sequences W-NR-R', 'Sequences N1-NR-R']
+descriptors = ['Starting Sequences \nN1-N2-SWS-REM / N2-REM / SOREM / Other', 
+               'Starting Sequences \nSWS-REM / N2-REM / SOREM',
+               'Sequences W-S', 'Sequences W-NR-R', 'Sequences N1-NR-R']
 
 pizza2015 = {name:{'nt1':{}, 'control':{}} for name in descriptors}
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group)
 
     # Sleep Stage Sequences (see Pizza 2015)
-    values = list([functions.sleep_stage_sequence(h) for h in subset.get_hypnos(only_sleeptime=True)])
-    pizza2015['Sleep Sequences N2-SWS-REM/N2-REM/W-REM'][group]['values'] = values
+    values = list([functions.starting_sequence_pizza(h) for h in subset.get_hypnos(only_sleeptime=True)])
+    pizza2015['Starting Sequences \nN1-N2-SWS-REM / N2-REM / SOREM / Other'][group]['values'] = values
+  
+    # Sleep Stage Sequences (own definition, see functions.py)
+    values = list([functions.starting_sequence(h) for h in subset.get_hypnos(only_sleeptime=True)])
+    pizza2015['Starting Sequences \nSWS-REM / N2-REM / SOREM'][group]['values'] = values
     
     # Sleep Stage Sequences tW-Si (see Pizza 2015)
     values = np.array(list([functions.transition_index(h, [0]) for h in subset.get_hypnos()]))
@@ -335,8 +356,8 @@ functions.calc_statistics(pizza2015)
 
 # plot distributions for the two groups and print out table
 plotting.print_table(pizza2015, 'Sleep transition indices' ) 
-plotting.distplot_table(pizza2015, 'Sleep transition indices', columns=2)
-
+plotting.distplot_table(pizza2015, 'Sleep transition indices', columns=2, 
+                        xlabel=[*['Nr of Starting Sequence']*2, *3*['Nr of occurence / h']])
 
 
 #%% Transition possibilities and compare between groups
@@ -344,19 +365,27 @@ descriptors = list(permutations([0,1,2,4], 2)) # all state transitions that are 
 descriptors.extend([(2,3), (3,2)])
 
 transitions = {name:{'nt1':{}, 'control':{}} for name in descriptors}
-import stimer
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group)
     for pair in descriptors:
         values = [len(functions.search_sequences(p.get_hypno(), np.array(pair))) for p in subset]
-        transitions[pair][group]['values'] = values
+        nr_transitions = [np.count_nonzero(np.diff(p.get_hypno(only_sleeptime=True))) for p in subset]
+        transitions[pair][group]['values'] = np.array(values)/nr_transitions
+        
+        # comment this in for transitions / hour
+        # tst = [len(p.get_hypno(only_sleeptime=True))/120 for p in subset]
+        # transitions[pair][group]['values'] = np.array(values)/np.array(tst)
+       
+        # comment this in for total number of transitions
+        # transitions[pair][group]['values'] = np.array(values)/np.array(tst)
+         
+       
         
 # calculate mean, std and p values for the values above
 functions.calc_statistics(transitions)
-plotting.distplot_table(transitions, 'Number of transitions', columns=3)
-plotting.print_table(transitions, 'Number of transitions' ) 
-
-#####################################
+plotting.distplot_table(transitions, '% of transitions of total transitions', columns=3, 
+                        xlabel='% of all transitions', ylabel='count')
+plotting.print_table(transitions, '% of transitions of total transitions' ) 
 
 #%% Features for different sleep stages: HF/LF, HRV, etc
 

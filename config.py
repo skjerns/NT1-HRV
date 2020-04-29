@@ -48,8 +48,8 @@ def get_dropbox_location():
     return personal_dbox_path
 
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# USER SPECIFIC CONFIGURATION
+###############################
+#%% USER SPECIFIC CONFIGURATION
 ###############################
 username = getpass.getuser().lower()  # your login name
 host     = platform.node().lower()    # the name of this computer
@@ -76,12 +76,6 @@ else:
     'please set user specific information in config.py')
 
 
-
-
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# USER SPECIFIC CONFIGURATION
-###############################
     
 try: 
     sys.path.append(documents)
@@ -96,9 +90,9 @@ except:
 root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''
 
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# SOME GENERAL LOOKUP TABLES AND VARIABLES
-##########################################
+############################################
+#%% GENERAL LOOKUP TABLES AND VARIABLES
+############################################
 
 ecg_channel = 'ECG I'
 max_age_diff = 3 # maximum age difference to make a matching
@@ -241,10 +235,12 @@ channel_mapping = {  # this is the mapping to streamline channel names of differ
            'Airflow':'Flow Patient',
            'Flow':'Flow Patient',
            'Lage':'Body',
+           'Body position':'Body',
            'Beweg.':'Accelerometer',
            'Summe Effort':'Effort',
            'Licht':'Lux Ambient',
-           'Druck Flow':'Druck Flow',
+           'Druck Flow':'Pressure',
+           'Druck': 'Pressure',
            'Microphone':'Microphone',
            'Akku':'Akku'
            }

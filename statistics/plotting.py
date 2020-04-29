@@ -47,7 +47,7 @@ writer.margin = 2
 
 
 def lineplot_table(table, title, columns=3, rows=None, save_to=None, 
-                   xlabel=None, ylabel=None):
+                   xlabel=None, ylabel=None, n=-1):
     """plot a table as figure and save to png
     
     a table is defined as a dictionary with 3 or 4 levels and has the following
@@ -75,12 +75,13 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
     for i, descriptor in enumerate(table): 
         ax = axs[i]
         for group in ['nt1', 'control']:
-            values_nt1 = table[descriptor][group]['values']
-            x = np.arange(values_nt1.shape[-1]) + (0 if group=='nt1' else 0.035*values_nt1.shape[-1])
+            values = table[descriptor][group]['values']
+            x = np.arange(values.shape[-1]) + (0 if group=='nt1' else 0.035*values.shape[-1])
             # mean values of feature
-            y_mean = np.nanmean(values_nt1, 0)
+            y_mean = np.nanmean(values, 0)
             # upper std
-            sem = stats.sem(values_nt1, 0)
+            sem = stats.sem(values, 0, nan_policy='omit')
+            # sem = np.std(values, 0)
             # lower std
             # err_kws = {'x':x, 'y1':y1, 'y2':y2, 'alpha':0.2, 'color':c[group]}
             # sns.pointplot(x=x, y=y_mean, ax=ax, c=c[group])
@@ -94,12 +95,12 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
             descriptor = '-'.join([str(cfg.num2stage[d]) for d in descriptor])
         if not isinstance(descriptor, str): 
             descriptor=str(descriptor)
-        ax.set_title(descriptor)
+        ax.set_title(descriptor + f' | values = {len(values)}')
         ax.legend(['NT1', 'Control'])
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         
-    plt.suptitle(title, y=1)
+    plt.suptitle(title + f' n = {n}', y=1)
     plt.pause(0.01)
     plt.tight_layout() 
     
@@ -109,7 +110,8 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
     return fig, axs
 
 
-def distplot_table(table, title, columns=3, rows=None, save_to=None):
+def distplot_table(table, title, columns=3, rows=None, save_to=None, 
+                   xlabel=None, ylabel=None):
     """plot distribution plot of a table and save to png
     
     a table is defined as a dictionary with 3 or 4 levels and has the following
@@ -123,6 +125,12 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None):
     alternatively with subvars:
         dictionary['variable name']['subvarname']['group1/group2']['values'] = [0,5,2,3,4, ...]
     """
+    
+    if not isinstance(xlabel, list): xlabel=[xlabel]*len(table)
+    if not isinstance(ylabel, list): ylabel=[ylabel]*len(table)
+    assert len(xlabel) == len(table)
+    assert len(ylabel) == len(table)
+
     n_plots = len(table)
 
     if rows is None:
@@ -136,11 +144,29 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None):
         ax = axs[i]
         values_nt1 = table[descriptor]['nt1']['values']
         values_cnt = table[descriptor]['control']['values']
-        bins = min(15, len(np.unique(values_nt1)), len(np.unique(values_cnt)))
-        try: sns.distplot(values_nt1,bins=bins, ax=ax)
+        n_bins = min(15, max(len(np.unique(values_nt1)), len(np.unique(values_cnt))))
+        vmin, vmax = min(np.min(values_nt1), np.min(values_cnt)), max(np.max(values_nt1), np.max(values_cnt))
+        bins = np.linspace(vmin, vmax, n_bins+1)
+        second_ax = ax.twinx()
+        try: 
+            sns.distplot(values_nt1, bins=bins, ax=ax, norm_hist=False, kde=False)
+            
+            #Plotting kde without hist on the second Y axis
+            sns.distplot(values_nt1, ax=second_ax, kde=True, hist=False)
+            #Removing Y ticks from the second axis
+            second_ax.set_yticks([])
+        except: pass    
+        try: 
+            sns.distplot(values_cnt, bins=bins, ax=ax, norm_hist=False, kde=False)
+            #Plotting kde without hist on the second Y axis
+            sns.distplot(values_cnt, ax=second_ax, kde=True, hist=False)
+            #Removing Y ticks from the second axis
+            second_ax.set_yticks([])
         except: pass
-        try: sns.distplot(values_cnt,bins=bins, ax=ax)
-        except: pass
+        second_ax.set_ylim([0, second_ax.get_ylim()[1]*1.5])
+        
+        # plot with small offset of 0.05
+        ax.set_xlim([vmin-(vmax-vmin)*0.05,  vmax+(vmax-vmin)*0.05])
         
         p_val = plotting.format_p_value(table[descriptor]['p'], bold=False)
         # convert sleep stage to stage name if necessary
@@ -151,8 +177,10 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None):
         if not isinstance(descriptor, str): descriptor=str(descriptor)
         ax.set_title(descriptor + f' - p {p_val}')
         ax.legend(['NT1', 'Control'])
+        ax.set_xlabel(xlabel[i])
+        ax.set_ylabel(ylabel[i])
         
-    plt.suptitle(title, y=1)
+    plt.suptitle(title + f' n = {len(values_nt1)+len(values_cnt)}', y=1)
     plt.pause(0.01)
     plt.tight_layout() 
     

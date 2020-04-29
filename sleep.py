@@ -92,7 +92,8 @@ class SleepSet():
     
     def __getitem__(self, key):
         """
-        grant access to the set with slices and indices and keys
+        grant access to the set with slices and indices and keys,
+        as well as with patient codes
         """
         # if it's one item: return this one item
         if type(key)==slice:
@@ -101,6 +102,12 @@ class SleepSet():
             items = [self.patients.__getitem__(i) for i in key]
         elif str(type(key)())=='0': # that means it is an int
             return self.patients[key]
+        # this means we want to access via code, eg '123_456'
+        elif isinstance(key, str) and key.count('_')==1:
+            for p in self:
+                if hasattr(p, 'code') and p.code==key:
+                    return p
+            raise KeyError(f'Patient {key} not found')
         else:
             raise KeyError('Unknown key type:{}, {}'.format(type(key), key))
         return SleepSet(items)
@@ -146,26 +153,46 @@ class SleepSet():
     
     def summary(self):
         """print a detailed summary of the items in this set"""
+        from prettytable import PrettyTable
+
+        # a meta function to filter both groups in one call
+        filter_both = lambda ss, func: (len(ss.filter(lambda x: func(x) and x.group=='nt1')), \
+                                       len(ss.filter(lambda x: func(x) and x.group=='control')))
+
         n_all = len(self)
-        n_nt1 = len(self.filter(lambda x: x.group=='nt1'))
-        n_cnt = len(self.filter(lambda x:  x.group=='control'))
-        n_nt1_m = len(self.filter(lambda x: x.group=='nt1' and x.match!=''))
-        n_cnt_m = len(self.filter(lambda x:  x.group=='control' and x.match!=''))
-        n_ecg = len(self.filter(lambda x: 'ECG' in x))
-        n_eeg = len(self.filter(lambda x: 'EEG' in x))
-        n_emg = len(self.filter(lambda x: 'EMG' in x))
-        n_eog = len(self.filter(lambda x: 'EOG' in x))
-        n_lage = len(self.filter(lambda x: 'Body' in x.channels))
-        n_thorax = len(self.filter(lambda x: 'thorax' in x))
-        
-        s = f'{n_all} Patients, {n_nt1} NT1 ({n_nt1_m} matched), {n_cnt} controls ({n_cnt_m} matched)\n'
-        s += '\nECG:\t' + ("all" if n_all==n_ecg else f"{n_ecg}/{n_all}")
-        s += '\nEEG:\t' + ("all" if n_all==n_eeg else f"{n_eeg}/{n_all}")
-        s += '\nEMG:\t' + ("all" if n_all==n_emg else f"{n_emg}/{n_all}")
-        s += '\nEOG:\t' + ("all" if n_all==n_eog else f"{n_eog}/{n_all}")
-        s += '\nLage:\t' + ("all" if n_all==n_lage else f"{n_lage}/{n_all}")
-        s += '\nThorax\t' + ("all" if n_all==n_thorax else f"{n_thorax}/{n_all}")
-        print(s)
+        n_both = filter_both(self, lambda x: True)
+        n_matched = filter_both(self, lambda x: x.match!='')
+        n_ecg = filter_both(self,lambda x: 'ECG' in x)
+        n_eeg = filter_both(self,lambda x: 'EEG' in x)
+        n_emg = filter_both(self,lambda x: 'EMG' in x)
+        n_lage = filter_both(self,lambda x: 'Body' in x.channels)
+        n_thorax = filter_both(self,lambda x: 'thorax' in x) 
+        n_ecg200 = filter_both(self,lambda x: 'ECG' in x and int(x.ecg.sampleRate)==200)
+        n_ecg256 = filter_both(self,lambda x: 'ECG' in x and int(x.ecg.sampleRate)==256)
+        n_ecg512 = filter_both(self,lambda x: 'ECG' in x and int(x.ecg.sampleRate)==512)
+        n_ecgother = filter_both(self,lambda x: 'ECG' in x and int(x.ECG.sampleRate) not in [200,256,512])
+        n_feats = filter_both(self,lambda x: 'feats' in x and len(x.feats)>0)
+        n_hypno = filter_both(self,lambda x: len(x.get_hypno())>0)     
+               
+        print()
+        t = PrettyTable(['Name', 'NT1', 'Control', 'Comment'])
+        t.align['Name'] = 'l'
+        t.align['Comment'] = 'l'
+        t.add_row(['Group', *n_both, f'total: {n_all}'])
+        t.add_row(['Matched', *n_matched, f'total: {n_all-sum(n_matched)}'])
+        t.add_row(['Has ECG',*n_ecg, f'missing: {n_all-sum(n_ecg)}'])
+        t.add_row(['Has EEG', *n_eeg, f'missing: {n_all-sum(n_eeg)}'])
+        # t.add_row(['Has EMG', *n_emg, f'missing: {n_all-sum(n_emg)}'])
+        t.add_row(['Has Body', *n_lage, f'missing: {n_all-sum(n_lage)}'])
+        t.add_row(['Has Thorax', *n_thorax, f'missing: {n_all-sum(n_thorax)}'])
+        t.add_row(['ECG 200 Hz', *n_ecg200, f'total: {sum(n_ecg200)}'])
+        t.add_row(['ECG 256 Hz', *n_ecg256, f'total: {sum(n_ecg256)}'])
+        t.add_row(['ECG 512 Hz', *n_ecg512, f'total: {sum(n_ecg512)}'])
+        t.add_row(['ECG other', *n_ecgother, f'total: {sum(n_ecgother)}'])        
+        t.add_row(['Has feats', *n_feats, f'missing: {n_all-sum(n_feats)}'])   
+        t.add_row(['Has hypno', *n_hypno, f'missing: {n_all-sum(n_hypno)}'])   
+        print(t)
+
         
         
         
@@ -370,6 +397,7 @@ class Patient(Unisens):
                                         squeeze=False)
             axs = axs.flatten()
             file = ospath.join(self._folder, '/plots/', f'plot_{"_".join(channels)}.png')
+            
             for i, channel in enumerate(channels):
                 if channel in self:
                     entry =  self[channel]
@@ -410,7 +438,8 @@ class Patient(Unisens):
             plt.pause(0.01)
             plt.tight_layout()
             plt.pause(0.01)
-            plt.savefig(file)
             os.makedirs(os.path.dirname(file), exist_ok=True)
+            plt.savefig(file)
+            
 
         return file

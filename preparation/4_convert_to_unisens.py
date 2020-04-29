@@ -48,7 +48,7 @@ loadmat = memory.cache(mat73.loadmat)
 def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                skip_exist=False):
     pass
-#%%
+#%% Setup
     if tqdm_desc is None:  tqdm_desc=lambda x: None
     dtype = np.int16
     code = ospath.basename(edf_file)[:-4]
@@ -74,11 +74,11 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.age = attribs[code].get('age', -1)
     u.match = attribs[code].get('match', '')
     u.channels = str(', '.join(header['channels']))
-    #%%####################
-    #### add ECG ##########
+    #%% #### add ECG ##########
+    ########################
     tqdm_desc(f'{code}: Reading ECG')
     if not 'ECG' in u or overwrite:
-        signals, shead, header = read_edf(edf_file, ch_names='ECG I', digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names='ECG I', digital=True, verbose=False)
         signals[:,0:2]  = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -100,12 +100,12 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         u.duration = len(signals.squeeze())//shead[0]['sample_rate']
         u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30  
 
-    #%%####################
-    #### add EEG ##########
+    #%%#### add EEG ##########
+    ##############################
     tqdm_desc(f'{code}: Reading EEG')
     if not 'EEG' in u or overwrite:
         chs = sleep_utils.infer_eeg_channels(all_labels)
-        signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True, verbose=False)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -122,12 +122,12 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EEG.bin', parent=u).set_data(**attrib)
 
-    #%%####################
-    #### add EOG #########
+    #%%## add EOG #########
+    #######################
     if not 'EOG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EOG')
         chs = sleep_utils.infer_eog_channels(all_labels)
-        signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True, verbose=False)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -144,13 +144,13 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EOG.bin', parent=u).set_data(**attrib)
  
-    #%%####################
-    #### add EMG #########
+    #%%#### add EMG #########
+    
     if not 'EMG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EMG')
         chs = sleep_utils.infer_emg_channels(all_labels)
         if chs!=[]: # fix for 888_49272
-            signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True)
+            signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True, verbose=False)
             signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
             
             pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -166,12 +166,13 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                         'dmin': dmin,'dmax': dmax,
                         'pmin': pmin, 'pmax': pmax}
             SignalEntry(id='EMG.bin', parent=u).set_data(**attrib)
-    
-    #%%####################
-    #### add Thorax #########
+            
+    #######################################
+    #%%add Thorax #########
+    ######################
     if not 'thorax' in u or overwrite:
         tqdm_desc(f'{code}: Reading Thorax')
-        signals, shead, header = read_edf(edf_file, ch_names=['Thorax'], digital=True)
+        signals, shead, header = read_edf(edf_file, ch_names=['Thorax'], digital=True, verbose=False)
         signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -187,9 +188,32 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'dmin': dmin,'dmax': dmax,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='thorax.bin', parent=u).set_data(**attrib)
+        
+    #######################################    
+    #%% add Body / Lagesensor #########
+    ########################################
+    if (not 'body' in  u or overwrite) and 'Body' in all_labels:
+        tqdm_desc(f'{code}: Reading Body')
+        signals, shead, header = read_edf(edf_file, ch_names=['Body'], digital=True, verbose=False)
+        signals[:,0:2] = np.min(signals), np.max(signals) # trick for viewer automatic scaling
+        
+        pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+        dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
+        
+        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+        attrib={'data': signals.astype(dtype), 
+                    'sampleRate': shead[0]['sample_rate'],
+                    'comment': 'Lagesensor',
+                    'ch_names': 'body',
+                    'lsbValue': 1,
+                    'baseline': 0,
+                    'unit': 'uV',
+                    'dmin': dmin,'dmax': dmax,
+                    'pmin': pmin, 'pmax': pmax}
+        SignalEntry(id='body.bin', parent=u).set_data(**attrib)
 
-    #%%####################
-    #### add annotations #######
+    #%% add annotations #######
+    ################################
     if not 'annotations' in u or overwrite:
         annotations = header['annotations']
         if annotations!=[]:
@@ -197,8 +221,8 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
             annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
  
-    #%%####################
-    #### add rest #######
+    #%%#### add rest #######
+    ############################
     for file in add_files:
         if file.endswith('_arousals.txt'):
             if  'arousals' in u and not overwrite: continue
@@ -270,7 +294,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
 
     u.save()
 
-#%%
+#%% main
 if __name__=='__main__':
     from joblib import Parallel, delayed
     documents = cfg.documents
@@ -281,5 +305,5 @@ if __name__=='__main__':
     # stimer.start('unisens')
     # for edf_file in files:
     #     to_unisens(edf_file, unisens_folder=unisens_folder, skip_exist=True)
-    Parallel(n_jobs=4, verbose=10)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder,skip_exist=True) for edf_file in files) 
+    Parallel(n_jobs=4, verbose=60)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder,skip_exist=True) for edf_file in files) 
     # to_unisens(edf_file, unisens_folder=unisens_folder)
