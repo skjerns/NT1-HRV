@@ -347,7 +347,7 @@ class Patient(Unisens):
     
     def get_feat(self, name, only_sleeptime=False, cache=True):
         if isinstance(name, int):
-            name = 'feats/' + config.feats_mapping[name] + '.csv'
+            name = 'feats/' + config.mapping_feats[name] + '.csv'
             
         if cache and hasattr(self, f'{name}'):
             feat = self.__dict__[f'{name}']

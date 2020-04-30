@@ -11,7 +11,7 @@ from scipy import stats
 
 # create empty dummy functions
 _locals = locals()
-for key, name in cfg.feats_mapping.items():
+for key, name in cfg.mapping_feats.items():
     _locals[name] = lambda *args, **kwargs:  False
 
 def dummy(ecg, **kwargs):

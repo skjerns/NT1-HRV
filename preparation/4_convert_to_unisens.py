@@ -24,7 +24,6 @@ These meta attributes will be added:
 """
 import config as cfg
 import mat73
-import pyedflib
 from unisens import SignalEntry, EventEntry, ValuesEntry
 from sleep import CustomEntry
 from pyedflib import highlevel
@@ -200,16 +199,19 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
         
+        comment = 'Lagesensor: 1 = Bauchlage, 2 = aufrecht, 3 = links, 4 = rechts,' \
+                  '5 = aufrecht (Kopfstand), 6 = Rückenlage'
+        
         lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
         attrib={'data': signals.astype(dtype), 
                     'sampleRate': shead[0]['sample_rate'],
-                    'comment': 'Lagesensor',
                     'ch_names': 'body',
                     'lsbValue': 1,
                     'baseline': 0,
                     'unit': 'uV',
                     'dmin': dmin,'dmax': dmax,
-                    'pmin': pmin, 'pmax': pmax}
+                    'pmin': pmin, 'pmax': pmax,
+                    'comment': comment}
         SignalEntry(id='body.bin', parent=u).set_data(**attrib)
 
     #%% add annotations #######

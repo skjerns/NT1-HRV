@@ -110,6 +110,8 @@ plt.close('all')
 stimer.start('All calculations')
 
 ss = SleepSet(cfg.folder_unisens, readonly=True)
+ss = ss.filter(lambda x: 'body' in x) # only use matched participants
+[s.body.sampleRate for s in ss]
 # ss = ss.filter(lambda x: x.match!='') # only use matched participants
 ss = ss.filter(lambda x: len(x.get_hypno())>0) # filter out patients with no hypnogram
 p = ss[1]
@@ -423,7 +425,7 @@ for feat in tqdm(features, desc='Calculating features'):
         for group in 'nt1', 'control':
             subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
             # get all values
-            values = [p.get_feat(cfg.feats_mapping[feat], only_sleeptime=True, cache=True) for p in subset]
+            values = [p.get_feat(cfg.mapping_feats[feat], only_sleeptime=True, cache=True) for p in subset]
             # combine values with masks
             values = [np.mean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage])]
             table2[feat][stage][group] = {'values':values}

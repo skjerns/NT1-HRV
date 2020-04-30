@@ -17,7 +17,7 @@ import ospath
 from tqdm import tqdm
 from pyedflib.highlevel import read_edf_header
 
-ch_mapping = cfg.channel_mapping
+ch_mapping = cfg.mapping_channels
 
 missing = set()
 if __name__ == '__main__':
@@ -25,7 +25,7 @@ if __name__ == '__main__':
     for dataset in cfg.datasets.values():
         files.extend(ospath.list_files(dataset, exts='edf', subfolders=True))
     
-    ch_mapping = cfg.channel_mapping
+    ch_mapping = cfg.mapping_channels
     
     for file in tqdm(files):
         channels = read_edf_header(file)['channels']

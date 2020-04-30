@@ -16,7 +16,7 @@ from pyedflib import highlevel
 folder = "Z:/NT1-HRV-data"
 new_folder = ospath.join(folder, "new")
 os.makedirs(new_folder, exist_ok=True)
-mapping = config.channel_mapping
+mapping = config.mapping_channels
 
 
 files = ospath.list_files(folder, exts='edf')

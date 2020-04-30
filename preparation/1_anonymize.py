@@ -30,7 +30,7 @@ documents = cfg.documents # contains the path to the nt1-hrv-documents folder in
 # Settings for Channel 
 # Renaming
 #######################
-ch_mapping = cfg.channel_mapping
+ch_mapping = cfg.mapping_channels
 
 #%%#############
 ## Actual code
@@ -43,7 +43,7 @@ def anonymize_and_streamline(dataset_folder, target_folder, threads=False):
     This function loads the edfs of a folder and
     1. removes their birthdate and patient name
     2. renames the channels to standardized channel names
-    3. saves the files in another folder with a non-identifyable 
+    3. saves the files in another folder with a non-identifyable code
     4. verifies that the new files have the same content as the old
     """
     to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']

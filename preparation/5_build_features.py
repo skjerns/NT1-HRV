@@ -36,7 +36,7 @@ def extract_features(patient):
     rr = patient.rr.get_times()
     
     
-    for nr, name in cfg.feats_mapping.items():
+    for nr, name in cfg.mapping_feats.items():
         id = f'feats/{name}.csv'
         if id in patient: patient.remove_entry(id)
         data = features.__dict__[name](ecg=ecg, rr=rr, kubios=kubios, sfreq=sfreq)
@@ -55,7 +55,7 @@ if __name__=='__main__':
     miss = []
     ss = SleepSet(unisens_folder, readonly=False)
     patient = ss[1]
-    for patient in tqdm(ss):
+    for patient in tqdm(ss, desc='Extracting features'):
         if not 'feats' in patient:
             miss.append(patient.code)
             continue

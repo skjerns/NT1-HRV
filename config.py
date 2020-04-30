@@ -103,11 +103,19 @@ stage2num = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'RE
 num2stage = {0:'WAKE', 1:'S1', 2:'S2', 3:'SWS', 4:'REM', 5:'Artefact'}
 
 
+# Mapping from numers to body position for somnoscreen
+mapping_body = {1: 'face down', 
+                2: 'upright', 
+                3: 'left', 
+                4: 'right',
+                5: 'upside down',
+                6: 'face up'}
+
 
 # Features mapping to names
 # The names should be used to store and access the features in Unisens
 # The dictionary is case insensitive
-feats_mapping = {1:  'mean_HR',
+mapping_feats = {1:  'mean_HR',
                  2:  'mean_RR',
                  3:  'detrend_mean_RR',
                  4:  'SDNN',
@@ -162,11 +170,11 @@ feats_mapping = {1:  'mean_HR',
                  }
 
 
-feats_mapping.update( {v: k for k, v in feats_mapping.items()}) # reverse as well
-feats_mapping = CaseInsensitiveDict(feats_mapping)
+mapping_feats.update( {v: k for k, v in mapping_feats.items()}) # reverse as well
+mapping_feats = CaseInsensitiveDict(mapping_feats)
 
 
-channel_mapping = {  # this is the mapping to streamline channel names of different recordings
+mapping_channels = {  # this is the mapping to streamline channel names of different recordings
            'C4:A1':     'EEG C4-A1',
            'C3:A2':     'EEG C3-A2',
            'F4:A1':     'EEG F4-A1',
