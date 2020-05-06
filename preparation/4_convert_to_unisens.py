@@ -196,23 +196,26 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         signals, shead, header = read_edf(edf_file, ch_names=['Body'], digital=True, verbose=False)
         signals[:,0:2] = np.min(signals), np.max(signals) # trick for viewer automatic scaling
         
-        pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
-        dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
+        if np.ptp(signals)<10: # we have some weird body positions that we cant decode
+            
         
-        comment = 'Lagesensor: 1 = Bauchlage, 2 = aufrecht, 3 = links, 4 = rechts,' \
-                  '5 = aufrecht (Kopfstand), 6 = Rückenlage'
-        
-        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-        attrib={'data': signals.astype(dtype), 
-                    'sampleRate': shead[0]['sample_rate'],
-                    'ch_names': 'body',
-                    'lsbValue': 1,
-                    'baseline': 0,
-                    'unit': 'uV',
-                    'dmin': dmin,'dmax': dmax,
-                    'pmin': pmin, 'pmax': pmax,
-                    'comment': comment}
-        SignalEntry(id='body.bin', parent=u).set_data(**attrib)
+            pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
+            dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
+            
+            comment = 'Lagesensor: 1 = Bauchlage, 2 = aufrecht, 3 = links, 4 = rechts,' \
+                      '5 = aufrecht (Kopfstand), 6 = Rückenlage'
+            
+            lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+            attrib={'data': signals.astype(dtype), 
+                        'sampleRate': shead[0]['sample_rate'],
+                        'ch_names': 'body',
+                        'lsbValue': 1,
+                        'baseline': 0,
+                        'unit': 'uV',
+                        'dmin': dmin,'dmax': dmax,
+                        'pmin': pmin, 'pmax': pmax,
+                        'comment': comment}
+            SignalEntry(id='body.bin', parent=u).set_data(**attrib)
 
     #%% add annotations #######
     ################################
@@ -226,6 +229,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     #%%#### add rest #######
     ############################
     for file in add_files:
+        #%% add arousals
         if file.endswith('_arousals.txt'):
             if  'arousals' in u and not overwrite: continue
             lines = misc.read_csv(file, convert_nums=True)
@@ -241,7 +245,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             arousal_event = EventEntry('arousals.csv', parent=u)
             arousal_event.set_data(data, comment=f'Arousal appearance epoch, name is lengths in seconds', 
                                  sampleRate=1/30, contentClass='Arousal', typeLength=1)
-        
+        #%% add hypnogram
         elif file.endswith('txt'):
             if  'hypnogram' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Hypnogram')
@@ -252,7 +256,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             hypno_entry = EventEntry(id='hypnogram.csv', parent=u)
             hypno_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
-            
+        
         elif file.endswith('.hypno'):
             if  'hypnogram_old' in u and not overwrite: continue
             hypno = sleep_utils.read_hypnogram(file)
@@ -262,7 +266,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             hypno_old_entry = EventEntry(id='hypnogram_old.csv', parent=u)
             hypno_old_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
-
+        #%% add kubios
         elif file.endswith('mat'):     
             if  'feats.pkl' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Kubios')
@@ -277,12 +281,13 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                   
             feats_entry = CustomEntry('feats.pkl', parent=u)
             feats_entry.set_data(HRV, comment='pickle dump of the kubios created features file', fileType='pickle')
-
+        #%% add artefact
         elif file.endswith('npy'):
             if  'artefacts' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading artefacts')
             art = np.load(file).ravel()
             u.epochs_art = len(art)//2
+            u.artefact_percentage = np.mean(art)
             times = np.arange(len(art))
             art = np.vstack([times, art]).T
             artefact_entry = ValuesEntry(id='artefacts.csv', parent=u)
@@ -304,8 +309,6 @@ if __name__=='__main__':
     unisens_folder = cfg.folder_unisens
     
     files = ospath.list_files(data, exts=['edf'])
-    # stimer.start('unisens')
-    # for edf_file in files:
-    #     to_unisens(edf_file, unisens_folder=unisens_folder, skip_exist=True)
-    Parallel(n_jobs=4, verbose=60)(delayed(to_unisens)(edf_file, unisens_folder=unisens_folder,skip_exist=True) for edf_file in files) 
-    # to_unisens(edf_file, unisens_folder=unisens_folder)
+
+    Parallel(n_jobs=4, batch_size=1)(delayed(to_unisens)(
+        edf_file, unisens_folder=unisens_folder, skip_exist=True) for edf_file in tqdm(files, desc='Converting'))

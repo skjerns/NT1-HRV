@@ -16,7 +16,7 @@ from pytablewriter import TableWriterFactory, HtmlTableWriter
 from pytablewriter.style import Style
 import plotting
 sns.set(style='whitegrid')
-#%% settings
+### settings
 
 
 report_dir = os.path.join(cfg.documents, 'reports')
@@ -43,8 +43,9 @@ writer.max_workers = 1
 writer.column_styles = [Style(align="left")] + [Style(align="center")]*10
 writer.margin = 2
 
-#%%
-
+############################
+#####   CODE   #############
+############################
 
 def lineplot_table(table, title, columns=3, rows=None, save_to=None, 
                    xlabel=None, ylabel=None, n=-1):
@@ -137,15 +138,20 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
         size = (int(np.ceil(n_plots/columns)), columns)
     if columns is None:
         size = (rows, int(np.ceil(n_plots/rows)))
-                    
+              
     fig, axs = plt.subplots(*size)
     axs = axs.flatten()
     for i, descriptor in enumerate(table): 
         ax = axs[i]
-        values_nt1 = table[descriptor]['nt1']['values']
-        values_cnt = table[descriptor]['control']['values']
+        values_nt1 = table[descriptor]['nt1'].get('values',[])
+        values_cnt = table[descriptor]['control'].get('values',[])
+        if sum(~np.isnan(values_nt1))==0 or sum(~np.isnan(values_cnt))==0: 
+            ax.text(0.5, 0.5, 'No Data', ha='center')
+            ax.set_title(descriptor)
+            continue
         n_bins = min(15, max(len(np.unique(values_nt1)), len(np.unique(values_cnt))))
-        vmin, vmax = min(np.min(values_nt1), np.min(values_cnt)), max(np.max(values_nt1), np.max(values_cnt))
+        vmin = min(np.nanmin(values_nt1), np.nanmin(values_cnt))
+        vmax = max(np.nanmax(values_nt1), np.nanmax(values_cnt))
         bins = np.linspace(vmin, vmax, n_bins+1)
         second_ax = ax.twinx()
         try: 
@@ -175,12 +181,12 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
         if isinstance(descriptor, tuple):
             descriptor = '-'.join([str(cfg.num2stage[d]) for d in descriptor])
         if not isinstance(descriptor, str): descriptor=str(descriptor)
-        ax.set_title(descriptor + f' - p {p_val}')
+        ax.set_title(descriptor + f' - n = {len(values_nt1)+len(values_cnt)} - p {p_val}')
         ax.legend(['NT1', 'Control'])
         ax.set_xlabel(xlabel[i])
         ax.set_ylabel(ylabel[i])
         
-    plt.suptitle(title + f' n = {len(values_nt1)+len(values_cnt)}', y=1)
+    plt.suptitle(title + f' | n = {len(values_nt1)+len(values_cnt)}', y=1)
     plt.pause(0.01)
     plt.tight_layout() 
     
@@ -248,6 +254,8 @@ def print_table_with_subvars(table, title):
     writer.headers = ["Variable", "Subvar", "NT1", "Control", "p"]
     
     for name, subtable in table.items():
+        if name in [0,1,2,3,4,5]:
+            name = cfg.num2stage[name]
         matrix+= [[fbold(name)]]
         for subvar in subtable:
 

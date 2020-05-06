@@ -314,13 +314,27 @@ class Patient(Unisens):
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
             data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
         return data
-
-    def get_eeg(self, only_sleeptime=False):
-        data = self['eeg.bin'].get_data().squeeze()
+    
+    def get_signal(self, name='eeg', stage=None, only_sleeptime=False):
+        """
+        get values of a SignalEntry
+        
+        :name name of the SignalEntry
+        :param stage: only return values for this sleep stage
+        :param only_sleeptime: only get values after first sleep until last sleep epoch 
+        """
+        
+        data = self[f'{name}.bin'].get_data().squeeze()
+        sfreq = int(self[name].sampleRate)
+        
         if only_sleeptime:
-            sfreq = int(self.eeg.sampleRate)
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
             data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
+            
+        if stage is not None: 
+            hypno = self.get_hypno(only_sleeptime=only_sleeptime)
+            mask = np.repeat(hypno, sfreq*30)==stage
+            data = data[mask[:len(data)]]
         return data
     
     def get_arousals(self, only_sleeptime=False):

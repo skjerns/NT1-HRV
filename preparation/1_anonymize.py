@@ -117,12 +117,12 @@ def anonymize_and_streamline(old_file, target_folder):
 
     # also copy additional file information ie hypnograms and kubios files
     old_dir = ospath.dirname(old_file)
-    old_name = old_name.replace('_m', '').replace('_w', '') # remove gender from weitere nt1 patients
-    add_files = ospath.list_files(old_dir, patterns=[f'{old_name}*txt', f'{old_name}*dat', f'{old_name}*mat'])
+    pattern = old_name.replace('_m', '').replace('_w', '') # remove gender from weitere nt1 patients
+    add_files = ospath.list_files(old_dir, patterns=[f'{pattern}*txt', f'{pattern}*dat', f'{pattern}*mat'])
     for add_file in add_files: 
         # e.g. .mat or .npy etc etc
         new_add_file = ospath.join(target_folder, 
-                                   ospath.basename(add_file.replace(old_name, new_name)))
+                                   ospath.basename(add_file.replace(pattern, new_name)))
         if ospath.exists(new_add_file):continue
         # hypnograms will be copied to .hypno
         try:

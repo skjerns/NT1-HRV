@@ -48,10 +48,10 @@ def get_attribs():
     nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1'}] for c in nt1] 
     
     
-    all = control + nt1
-    all = dict([[mappings[x[0]],x[1]] for x in all]) # convert to codified version
-    for c in all: all[c].update({'match':matching.get(c,'')})
-    return dict(all)
+    all_subjects = control + nt1
+    all_subjects = dict([[mappings[x[0]],x[1]] for x in all_subjects]) # convert to codified version
+    for c in all_subjects: all_subjects[c].update({'match':matching.get(c,'')})
+    return dict(all_subjects)
 
 def codify(filename): 
     """

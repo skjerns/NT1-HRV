@@ -31,6 +31,8 @@ def calc_statistics(table):
     
     for descriptor in table:
         if 'nt1' in table[descriptor]: # only one level
+            if 0 in (len(table[descriptor]['nt1']), len(table[descriptor]['control'])):
+                continue
             values_nt1 = table[descriptor]['nt1']['values']
             values_cnt = table[descriptor]['control']['values']
             try:

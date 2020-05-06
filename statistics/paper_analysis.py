@@ -115,7 +115,7 @@ ss = ss.filter(lambda x: 'body' in x) # only use matched participants
 # ss = ss.filter(lambda x: x.match!='') # only use matched participants
 ss = ss.filter(lambda x: len(x.get_hypno())>0) # filter out patients with no hypnogram
 p = ss[1]
-stop
+# stop
 #%%### Van Meijden 2015 Table 1
 
 descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
@@ -452,5 +452,58 @@ plotting.print_table_with_subvars(table2, 'feats')
 # plt.tight_layout()
 
 
+#########################
+#%% Body position changes
+#########################
+
+body_positions = [cfg.mapping_body[x] for x in range(1,7)]
+table_body = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in body_positions}
+table_body = {name:{'nt1':{}, 'control':{}} for name in body_positions}
+
+for pos in body_positions:
+    for group in ['nt1', 'control']:
+        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4')
+        
+        
+        values = [np.nanmean((p.get_signal('body', only_sleeptime=True)==cfg.mapping_body[pos])) for i,p in enumerate(subset)]
+
+        values = [v for v in values if v]
+        table_body[pos][group]['values'] = values
+
+
+functions.calc_statistics(table_body)
+plotting.distplot_table(table_body, 'Distribution of body positions', xlabel='ration spent in this position', ylabel='episodes spent in this position')
+
+#########################
+#%% Body position per sleep stage changes
+#########################
+
+body_positions = [cfg.mapping_body[x] for x in range(1,7)]
+body_positions.remove('upside down') # silly you, sleeping like a bat
+
+table_body = {stage:{name:{'nt1':{}, 'control':{}} for name in body_positions} for stage in range(5)}
+
+
+for stage in tqdm(range(5), desc=f'Body position'):
+    for pos in body_positions:
+        for group in ['nt1', 'control']:
+            subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4')
+            p=subset[0]
+            
+            values = [np.nanmean(p.get_signal('body', only_sleeptime=True, stage=stage)==cfg.mapping_body[pos]) for p in subset]
+            # values = [v for v in values if v>0]
+            table_body[stage][pos][group]['values'] = values
+
+
+    functions.calc_statistics(table_body[stage])
+    plotting.distplot_table(table_body[stage], f'Body positions in stage {cfg.num2stage[stage]}',
+                                      xlabel='Ratio of this position in this stage',
+                                      ylabel='Number of patients with this ratio')
+    
+plotting.print_table_with_subvars(table_body, f'Body positions in stages')
+
+
+
+#%%
 stimer.stop('All calculations')
 

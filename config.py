@@ -110,6 +110,8 @@ mapping_body = {1: 'face down',
                 4: 'right',
                 5: 'upside down',
                 6: 'face up'}
+# reverse as well
+mapping_body.update( {v: k for k, v in mapping_body.items()})
 
 
 # Features mapping to names
