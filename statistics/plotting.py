@@ -140,7 +140,9 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
         size = (rows, int(np.ceil(n_plots/rows)))
               
     fig, axs = plt.subplots(*size)
-    axs = axs.flatten()
+        
+    axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs] 
+    
     for i, descriptor in enumerate(table): 
         ax = axs[i]
         values_nt1 = table[descriptor]['nt1'].get('values',[])
@@ -171,6 +173,7 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
         except: pass
         second_ax.set_ylim([0, second_ax.get_ylim()[1]*1.5])
         
+        if vmax<=1: vmax=1
         # plot with small offset of 0.05
         ax.set_xlim([vmin-(vmax-vmin)*0.05,  vmax+(vmax-vmin)*0.05])
         
@@ -185,6 +188,7 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
         ax.legend(['NT1', 'Control'])
         ax.set_xlabel(xlabel[i])
         ax.set_ylabel(ylabel[i])
+        ax.set_xlim(0,1)
         
     plt.suptitle(title + f' | n = {len(values_nt1)+len(values_cnt)}', y=1)
     plt.pause(0.01)

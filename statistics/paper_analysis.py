@@ -110,12 +110,11 @@ plt.close('all')
 stimer.start('All calculations')
 
 ss = SleepSet(cfg.folder_unisens, readonly=True)
-ss = ss.filter(lambda x: 'body' in x) # only use matched participants
-[s.body.sampleRate for s in ss]
-# ss = ss.filter(lambda x: x.match!='') # only use matched participants
+# ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
+ss = ss.filter(lambda x: x.match!='') # only use matched participants
 ss = ss.filter(lambda x: len(x.get_hypno())>0) # filter out patients with no hypnogram
 p = ss[1]
-# stop
+stop
 #%%### Van Meijden 2015 Table 1
 
 descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
@@ -146,7 +145,7 @@ for group in ['nt1', 'control']:
     
     # Sleep efficiency
     values = np.array([len(p.get_hypno(only_sleeptime=True)) for p in subset])
-    values = values / table1['TST'][group]['values']
+    values =  table1['TST'][group]['values'] / values*2
     table1['sleep efficiency'][group]['values'] = values
    
     # S1 latency in minutes
@@ -472,7 +471,7 @@ for pos in body_positions:
 
 
 functions.calc_statistics(table_body)
-plotting.distplot_table(table_body, 'Distribution of body positions', xlabel='ration spent in this position', ylabel='episodes spent in this position')
+plotting.distplot_table(table_body, 'Distribution of body positions', xlabel='ration spent in this position', ylabel='epochs spent in this position')
 
 #########################
 #%% Body position per sleep stage changes
@@ -499,10 +498,25 @@ for stage in tqdm(range(5), desc=f'Body position'):
     plotting.distplot_table(table_body[stage], f'Body positions in stage {cfg.num2stage[stage]}',
                                       xlabel='Ratio of this position in this stage',
                                       ylabel='Number of patients with this ratio')
+ 
+
     
 plotting.print_table_with_subvars(table_body, f'Body positions in stages')
 
+#%% nr of position changes
 
+features = ['Total position changes']
+table_body_changes = {name:{'nt1':{}, 'control':{}} for name in features}
+
+for name in features:
+    for group in ['nt1', 'control']:
+        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4')
+        values = [np.count_nonzero(np.diff(p.get_signal('body', only_sleeptime=True))) for p in subset]
+        table_body_changes[name][group]['values'] = values
+        
+functions.calc_statistics(table_body_changes)
+plotting.print_table(table_body_changes, f'Total body position changes')
+plotting.distplot_table(table_body_changes, f'Total body position changes', columns=1)
 
 #%%
 stimer.stop('All calculations')

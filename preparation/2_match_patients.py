@@ -9,11 +9,12 @@ csv files for nt1 and controls
 """
 import ospath
 import config as cfg
+import misc
 
 def read_subjects(file):
     with open(file, 'r', encoding='utf8') as f:
       entries = f.read().strip()
-     
+
     entries = entries.split('\n')
     entries = [entry for entry in entries if not entry.startswith('#')]
     entries = [p.split(';') for p in entries]
@@ -29,74 +30,91 @@ def read_csv(file):
     entry_dict = dict({p[0].strip():p[1].strip() for p in entries})
     return entry_dict
 
-
-if __name__ == '__main__':  
-    documents = cfg.documents
-    datasets = [ospath.join(documents, 'mapping_' + d + '.csv') for d in cfg.datasets]
+#%% main
+if __name__ == '__main__':      
+    # get the mappings from names to codes
+    mappings = misc.get_mapping()
     
-    mappings = {}
-    for dataset in datasets: 
-        mappings.update(read_csv(dataset))
+    # get the list of all subjects and controls
+    patients_all = read_subjects(cfg.patients_csv)
+    controls_all = read_subjects(cfg.controls_csv)
     
-    patients_csv = ospath.join(documents, 'subjects_nt1.csv')
-    controls_csv = ospath.join(documents, 'subjects_control.csv')
-
-    patients_all = read_subjects(patients_csv)
-    controls_all = read_subjects(controls_csv)
+    # ignore these items when creating the matching
+    to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']
 
     controls = controls_all.copy()
     patients = patients_all.copy()
     
-    csv_string = '#Patient Name; Patient Code; Patient Gender; Patient Age; Control Name; Control Code; Control Gender; Control Age; Difference'
-    max_age_diff = cfg.max_age_diff
     
     matches = []
-    used_controls = ['A5941', 'A3558', 'B0007', 'B0025', 'A9308', 'B0045']
-    for i in range(max_age_diff+1):
-        match = {}
-        for p_name, attr in list(patients.items()):
-            p_age    = attr['age'].strip()
-            p_gender = attr['gender'].lower()
-            for c_name, attr in controls.items():
-                c_age    = attr['age'].strip()
-                c_gender = attr['gender'].lower()
-                if c_gender!=p_gender:
-                    continue
-                diff = abs(int(p_age)-int(c_age))
-                if diff>i:
-                    continue
-                print('{} matches to {} with {} diff'.format(p_name, c_name, diff))
-                match[p_name] = c_name
-                used_controls.append(c_name)
-                del patients[p_name]
-                del controls[c_name]
-                break
-        matches.append(match)
-        if len(match)!=0:
-            csv_string += '\n#\n#+-{} age difference, {} matchings\n'.format(i, len(match))
-            for patient, control in match.items():
-                patient_mapping = mappings[patient]
-                control_mapping = mappings[control]
-                p_gender = patients_all[patient]['gender']
-                p_age    = patients_all[patient]['age']
-                c_gender = controls_all[control]['gender']
-                c_age    = controls_all[control]['age']
-                csv_string += f'{patient};{patient_mapping}; {p_gender}; {p_age}; {control}; {control_mapping}; {c_gender}; {c_age};{i}\n'
-   
-    csv_string += '\n#No matching\n'
-    for p_name, attr in list(patients.items()):
-        p_age    = attr['age']
-        p_gender = attr['gender'].lower()
-        p_code   = mappings[patient]
-        csv_string+=f'{p_name}; {p_code}; {p_gender}; {p_age};;;;;99\n'
-        
-    csv_string += '\n#Already used controls\n'
-    for c in used_controls:
-        csv_string += f'{c};;;;;;;;99\n'
-    matching_csv = ospath.join(documents, 'matching.csv')
     
-    with open(matching_csv, 'w') as f:
-        f.write(csv_string)
+    # iteratively go through all age differences and try to find matches
+    # within that range. This way we should get an somewhat optimal matching
+    for i in range(cfg.max_age_diff+1):
+        matches_i = []
+        for p_name, attrs in patients.copy().items():
+            
+            # if this file is absolutely broken, discard it (no eeg and no ecg).
+            if p_name in to_discard: continue
+            # retrieve attributes
+            p_gender = attrs['gender'].strip().lower()
+            p_age = int(attrs['age'])
+            p_code = mappings[p_name]
+            
+            # loop through all controls and check if we find a match
+            for c_name, attrs in controls.copy().items():
+                # if this file is absolutely broken, discard it (no eeg and no ecg).
+                if c_name in to_discard: continue
+                # retrieve attributes
+                c_gender = attrs['gender'].strip().lower()
+                c_age = int(attrs['age'].strip())
+                c_code = mappings[c_name]
+                
+                # gender doesnt match? skip
+                if c_gender!=p_gender: continue 
+            
+                # if age diff is within the wanted age range i we have a match
+                age_diff = abs(p_age-c_age)
+                if age_diff > i: continue
+                matches_i.append(f'{p_name}; {p_code}; {p_gender}; {p_age}; {c_name}; {c_code}; {c_gender}; {c_age}; {age_diff}')
+                # now delete both items from the list of patients and controls
+                # so that we dont match them again and stop the loop
+                controls.pop(c_name)
+                patients.pop(p_name)
+                break
+        matches.append(matches_i)
+    
+            
+    # now we loop over all patients that did not get any match
+    # 'patients' should have all of those left in it
+    not_matched = []
+    for p_name, attrs in patients.copy().items():
+        # if this file is absolutely broken, discard it (no eeg and no ecg).
+        if p_name in to_discard: continue
+        p_gender = attrs['gender'].strip().lower()
+        p_age = int(attrs['age'])
+        not_matched.append(f'{p_name}; {p_code}; {p_gender}; {p_age} ; ; ; ; ;99')
+        
+    
+    # now we create the csv_string that we will write to a file:
+    lines = ['#Patient Name; Patient Code; Patient Gender; Patient Age; Control Name; Control Code; Control Gender; Control Age; Difference']
+    for diff, match_i in enumerate(matches): #last one
+        lines += [''] # add empty line before each new age diff section
+        lines += [f'# +-{diff} age difference, {len(match_i)} matchings']
+        lines.extend(match_i)
+    
+    lines += ['']
+    lines += [f'# No match for {len(not_matched)} patients']
+    lines += not_matched
+
+    # now we add all controls that are in the project
+    lines += ['']
+    lines += ['# Already used controls']
+    for c_name in controls_all:
+        lines += [f'{c_name};;;;;;;;99']
+        
+    matching_csv = ospath.join(cfg.documents, 'matching.csv')
+    misc.write_csv(matching_csv, lines)
         
         
         

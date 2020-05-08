@@ -45,12 +45,12 @@ def anonymize_and_streamline(old_file, target_folder):
     4. verifies that the new files have the same content as the old
     """
     # load the two csvs with the edfs that we dont process and where the ECG is upside down
-    to_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']
+    pre_coding_discard = [line[0] for line in misc.read_csv(cfg.edfs_discard) if line[2]=='1']
     to_invert = [line[0] for line in misc.read_csv(cfg.edfs_invert)]
 
     # Here we read the list of controls and patients with their age and gender
-    mappings = misc.read_csv(cfg.controls)
-    mappings.extend(misc.read_csv(cfg.patients))
+    mappings = misc.read_csv(cfg.controls_csv)
+    mappings.extend(misc.read_csv(cfg.patients_csv))
     mappings = dict([[name, {'gender':gender, 'age':age}] for name, gender, age in mappings])
 
     # old name is the personalized file without file extension, e.g. thomas_smith(1)
@@ -62,7 +62,7 @@ def anonymize_and_streamline(old_file, target_folder):
     # this avoids half-written files that cannot be read later
     tmp_name = tempfile.TemporaryFile().name
 
-    if old_name in to_discard:
+    if old_name in pre_coding_discard:
         print('EDF is marked as corrupt and will be discarded')
         return
     

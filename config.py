@@ -62,8 +62,8 @@ if dropbox:
     matching = ospath.join(documents, 'matching.csv')
     edfs_invert = ospath.join(documents, 'edfs_invert.csv')
     edfs_discard = ospath.join(documents, 'edfs_discard.csv')
-    controls =  ospath.join(documents, 'subjects_control.csv')
-    patients =  ospath.join(documents, 'subjects_nt1.csv')
+    controls_csv =  ospath.join(documents, 'subjects_control.csv')
+    patients_csv =  ospath.join(documents, 'subjects_nt1.csv')
 
 if username == 'nd269' and host=='ess-donatra':
     USER_VAR = 'test123'

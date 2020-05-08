@@ -197,7 +197,6 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         signals[:,0:2] = np.min(signals), np.max(signals) # trick for viewer automatic scaling
         
         if np.ptp(signals)<10: # we have some weird body positions that we cant decode
-            
         
             pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
             dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -216,7 +215,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                         'pmin': pmin, 'pmax': pmax,
                         'comment': comment}
             SignalEntry(id='body.bin', parent=u).set_data(**attrib)
-
+    
     #%% add annotations #######
     ################################
     if not 'annotations' in u or overwrite:

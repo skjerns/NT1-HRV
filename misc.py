@@ -37,13 +37,10 @@ def get_attribs():
     """get the attributes of the patients etc"""
     mappings = get_mapping()
     matching = get_matching()
-    control_csv = os.path.join(config.documents, 'subjects_control.csv')
-    nt1_csv = os.path.join(config.documents, 'subjects_nt1.csv')
     
-    control = utils.read_csv(control_csv)
-    nt1 = utils.read_csv(nt1_csv)
+    control = utils.read_csv(config.control_csv)
+    nt1 = utils.read_csv(config.patients_csv)
     
-
     control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control'}] for c in control] 
     nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1'}] for c in nt1] 
     
