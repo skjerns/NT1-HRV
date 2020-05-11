@@ -114,7 +114,7 @@ ss = SleepSet(cfg.folder_unisens, readonly=True)
 ss = ss.filter(lambda x: x.match!='') # only use matched participants
 ss = ss.filter(lambda x: len(x.get_hypno())>0) # filter out patients with no hypnogram
 p = ss[1]
-stop
+# stop
 #%%### Van Meijden 2015 Table 1
 
 descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
@@ -259,7 +259,7 @@ for group in ['nt1', 'control']:
         ax.set_xlabel('minutes')
         ax.set_ylabel('total # of epochs')
         ax.legend(['nt1', 'control'])
-n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl')))
+n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl') and not x.ecg_broken=='False'))
 plt.suptitle(f'Number of sleep phases for different phase lengths, n={n}')
 
 # calculate statistics and print out results
@@ -279,7 +279,7 @@ post_transitions = {feat:{stage:{} for stage in range(6)} for feat in features}
 for name in features:
     for stage in range(6):
         for group in ['nt1', 'control']:
-            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
+            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and not x.ecg_broken=='True')
             values = []
             
             for p in subset:
@@ -395,7 +395,7 @@ table2 = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name i
 masks = {'nt1':{}, 'control':{}}
 
 for group in ['nt1', 'control']:
-    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
+    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and not x.ecg_broken=='True')
     phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
     phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
     
@@ -422,7 +422,7 @@ for feat in tqdm(features, desc='Calculating features'):
     if feat=='n_epochs':continue
     for stage in range(5):
         for group in 'nt1', 'control':
-            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
+            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and not x.ecg_broken=='True')
             # get all values
             values = [p.get_feat(cfg.mapping_feats[feat], only_sleeptime=True, cache=True) for p in subset]
             # combine values with masks
@@ -461,7 +461,9 @@ table_body = {name:{'nt1':{}, 'control':{}} for name in body_positions}
 
 for pos in body_positions:
     for group in ['nt1', 'control']:
-        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4')
+        # filter out all where they or their match has no body position
+        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4' and
+                           'body' in ss[x.match])
         
         
         values = [np.nanmean((p.get_signal('body', only_sleeptime=True)==cfg.mapping_body[pos])) for i,p in enumerate(subset)]

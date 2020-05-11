@@ -47,7 +47,7 @@ loadmat = memory.cache(mat73.loadmat)
 def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                skip_exist=False):
     pass
-#%% Setup
+#%% create unisens
     if tqdm_desc is None:  tqdm_desc=lambda x: None
     dtype = np.int16
     code = ospath.basename(edf_file)[:-4]
@@ -73,9 +73,20 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.age = attribs[code].get('age', -1)
     u.match = attribs[code].get('match', '')
     u.channels = str(', '.join(header['channels']))
+        
+    # if the ECG/EEG is broken, mark it
+    edfs_ecg_broken = [p[1] for p in misc.read_csv(cfg.edfs_discard) if p[3]=='1']
+    edfs_eeg_broken = [p[1] for p in misc.read_csv(cfg.edfs_discard) if p[4]=='1']
+    
+    # we need to see if the eeg/emg of this file can be used
+    # if one of them is broken we also remove its match from analysis
+    u.ecg_broken = (code in edfs_ecg_broken) or (u.match in edfs_ecg_broken)
+    u.eeg_broken = (code in edfs_eeg_broken) or (u.match in edfs_eeg_broken)
+
     #%% #### add ECG ##########
     ########################
     tqdm_desc(f'{code}: Reading ECG')
+
     if not 'ECG' in u or overwrite:
         signals, shead, header = read_edf(edf_file, ch_names='ECG I', digital=True, verbose=False)
         signals[:,0:2]  = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
@@ -311,3 +322,5 @@ if __name__=='__main__':
 
     Parallel(n_jobs=4, batch_size=1)(delayed(to_unisens)(
         edf_file, unisens_folder=unisens_folder, skip_exist=True) for edf_file in tqdm(files, desc='Converting'))
+
+    

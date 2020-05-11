@@ -33,20 +33,26 @@ def get_matching():
     return dict(matching)
 
 def get_attribs():
-    import config
     """get the attributes of the patients etc"""
+    import config
+
     mappings = get_mapping()
     matching = get_matching()
+    pre_coding_discard = [line[0] for line in read_csv(config.edfs_discard) if line[2]=='1']
     
-    control = utils.read_csv(config.control_csv)
+    
+    control = utils.read_csv(config.controls_csv)
     nt1 = utils.read_csv(config.patients_csv)
     
     control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control'}] for c in control] 
     nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1'}] for c in nt1] 
     
     
+    
     all_subjects = control + nt1
-    all_subjects = dict([[mappings[x[0]],x[1]] for x in all_subjects]) # convert to codified version
+    all_subjects = dict([[mappings[x[0]],x[1]] for x in all_subjects if x[0] not in pre_coding_discard]) # convert to codified version
+    
+    # reverse mapping as well
     for c in all_subjects: all_subjects[c].update({'match':matching.get(c,'')})
     return dict(all_subjects)
 
