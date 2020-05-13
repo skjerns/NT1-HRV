@@ -36,7 +36,7 @@ from datetime import datetime
 from tqdm import tqdm
 from joblib import Memory
 import stimer
-
+import subprocess
 
 #%% We use memory to massively speed up these computations
 memory = Memory(cfg.folder_cache, verbose=0)
@@ -312,15 +312,23 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.save()
 
 #%% main
+
 if __name__=='__main__':
     from joblib import Parallel, delayed
     documents = cfg.documents
     data = cfg.folder_edf
     unisens_folder = cfg.folder_unisens
     
-    files = ospath.list_files(data, exts=['edf'])
-
-    Parallel(n_jobs=4, batch_size=1)(delayed(to_unisens)(
-        edf_file, unisens_folder=unisens_folder, skip_exist=True) for edf_file in tqdm(files, desc='Converting'))
-
+    mat_files = ospath.list_files(data, exts=['mat'])
     
+    files = ospath.list_files(data, exts=['edf'])
+    
+    execute = True
+    if len(mat_files)<len(files):
+        answer = input(f'{len(files)-len(mat_files)} edf files have no MAT file. '
+                  f'Please copy .mat-files to folder. \nContinue anyway? (Y/N)\n')
+        if not 'Y' in answer.upper():
+            execute = False
+    if execute:
+        Parallel(n_jobs=4, batch_size=1)(delayed(to_unisens)(
+            edf_file, unisens_folder=unisens_folder, skip_exist=True) for edf_file in tqdm(files, desc='Converting'))

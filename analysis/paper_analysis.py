@@ -96,25 +96,28 @@ import functions
 from functions import arousal_transitions
 import numpy as np
 import config as cfg
-import scipy.stats as stats 
+import scipy
+import scipy.signal as signal
 from sleep import SleepSet
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import plotting
+import ospath
 from itertools import permutations 
 
 
 plt.close('all')
 
 stimer.start('All calculations')
-
-ss = SleepSet(cfg.folder_unisens, readonly=True)
+files = ospath.list_folders(cfg.folder_unisens)
+stimer.start()
+ss = SleepSet(files, readonly=True)
+stimer.stop()
 # ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
-ss = ss.filter(lambda x: x.match!='') # only use matched participants
-ss = ss.filter(lambda x: len(x.get_hypno())>0) # filter out patients with no hypnogram
+# ss = ss.stratify() # only use matched participants
 p = ss[1]
-# stop
+stop
 #%%### Van Meijden 2015 Table 1
 
 descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
@@ -271,7 +274,7 @@ for i, stage in enumerate([1,2,3,4]):
     minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
     ax.axvline(minmean, linestyle='dashed', linewidth=2, c='black')
     
-#%% Van Meijden 2015 Figure 3: Change after transition
+#%% Van Meijden 2015 Figure 3: Feat Change after transition
 
 features = ['mean_HR', 'LF', 'HF', 'LF_HF']
 post_transitions = {feat:{stage:{} for stage in range(6)} for feat in features} 
@@ -279,11 +282,11 @@ post_transitions = {feat:{stage:{} for stage in range(6)} for feat in features}
 for name in features:
     for stage in range(6):
         for group in ['nt1', 'control']:
-            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and not x.ecg_broken=='True')
+            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and x.ecg_broken==False)
             values = []
             
             for p in subset:
-                hypno = p.get_hypno()
+                hypno = p.get_hypno(only_sleeptime=True)
                 # get the phase sequence, the lengths of the phase, 
                 # and their start in the hypnogram
                 stages, lengths, idxs = functions.sleep_phase_sequence(hypno)
@@ -294,8 +297,8 @@ for name in features:
                 minmean = int(minmean*2)
                 minmean = 16
                 phase_starts = np.where(np.logical_and(stages==stage, lengths>minmean))[0]
-                feat = p.get_feat(name)
-                artefacts = p.get_artefacts()
+                feat = p.get_feat(name, only_sleeptime=True)
+                artefacts = p.get_artefacts(only_sleeptime=True)
                 for start in phase_starts:
                     bool_idx = np.zeros(len(feat), dtype=bool)
                     bool_idx[idxs[start]: idxs[start]+lengths[start]] = True
@@ -315,6 +318,7 @@ for name in features:
 
 ################################################
 ################################################
+
 #%% Pizza 2015: transition indices + own indices
 ################################################
 ################################################
@@ -395,7 +399,7 @@ table2 = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name i
 masks = {'nt1':{}, 'control':{}}
 
 for group in ['nt1', 'control']:
-    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and not x.ecg_broken=='True')
+    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and x.ecg_broken==False)
     phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
     phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
     
@@ -422,7 +426,7 @@ for feat in tqdm(features, desc='Calculating features'):
     if feat=='n_epochs':continue
     for stage in range(5):
         for group in 'nt1', 'control':
-            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and not x.ecg_broken=='True')
+            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and x.ecg_broken==False)
             # get all values
             values = [p.get_feat(cfg.mapping_feats[feat], only_sleeptime=True, cache=True) for p in subset]
             # combine values with masks
@@ -459,12 +463,15 @@ body_positions = [cfg.mapping_body[x] for x in range(1,7)]
 table_body = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in body_positions}
 table_body = {name:{'nt1':{}, 'control':{}} for name in body_positions}
 
+# filter out all where they or their match has no body position
+# stratify to have one match for each nt1
+subset_body = ss.filter(lambda x: 'body' in x and x.body.sampleRate==4).stratify()
+
 for pos in body_positions:
     for group in ['nt1', 'control']:
-        # filter out all where they or their match has no body position
-        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4' and
-                           'body' in ss[x.match])
         
+        subset = subset_body.filter(lambda x: x.group==group)
+        subset.stratify() # make sure we have equal number in both sets
         
         values = [np.nanmean((p.get_signal('body', only_sleeptime=True)==cfg.mapping_body[pos])) for i,p in enumerate(subset)]
 
@@ -488,7 +495,7 @@ table_body = {stage:{name:{'nt1':{}, 'control':{}} for name in body_positions} f
 for stage in tqdm(range(5), desc=f'Body position'):
     for pos in body_positions:
         for group in ['nt1', 'control']:
-            subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4')
+            subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate==4)
             p=subset[0]
             
             values = [np.nanmean(p.get_signal('body', only_sleeptime=True, stage=stage)==cfg.mapping_body[pos]) for p in subset]
@@ -512,7 +519,7 @@ table_body_changes = {name:{'nt1':{}, 'control':{}} for name in features}
 
 for name in features:
     for group in ['nt1', 'control']:
-        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate=='4')
+        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate==4)
         values = [np.count_nonzero(np.diff(p.get_signal('body', only_sleeptime=True))) for p in subset]
         table_body_changes[name][group]['values'] = values
         

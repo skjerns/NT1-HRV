@@ -77,6 +77,10 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
         ax = axs[i]
         for group in ['nt1', 'control']:
             values = table[descriptor][group]['values']
+            if len(values)==0:
+                ax.clear()
+                ax.text(0.5, 0.5, 'No Data', ha='center')
+                break
             x = np.arange(values.shape[-1]) + (0 if group=='nt1' else 0.035*values.shape[-1])
             # mean values of feature
             y_mean = np.nanmean(values, 0)
@@ -88,7 +92,8 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
             # sns.pointplot(x=x, y=y_mean, ax=ax, c=c[group])
             ax.errorbar(x, y_mean, yerr=sem, c=c[group], fmt='-o', alpha=0.7)
 
-        
+        n_nt1 = len(table[descriptor]['nt1']['values'])
+        n_cnt = len(table[descriptor]['control']['values'])
         # convert sleep stage to stage name if necessary
         if descriptor in [0,1,2,3,4,5]: 
             descriptor = cfg.num2stage[descriptor]
@@ -96,7 +101,7 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
             descriptor = '-'.join([str(cfg.num2stage[d]) for d in descriptor])
         if not isinstance(descriptor, str): 
             descriptor=str(descriptor)
-        ax.set_title(descriptor + f' | values = {len(values)}')
+        ax.set_title(descriptor + f' | values = {n_cnt+n_nt1} ({n_nt1}/{n_cnt})')
         ax.legend(['NT1', 'Control'])
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)

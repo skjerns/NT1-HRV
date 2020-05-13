@@ -8,20 +8,18 @@ todo: check length of hypno and features
 """
 import config
 import logging as log
-import tqdm as tqdm
+from tqdm import tqdm
 import numpy as np
 import ospath
 import os
 import re
-from tqdm import tqdm
 import time
+import stimer
 import sleep_utils
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
-import matplotlib
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.filters import gaussian_filter1d
-
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
@@ -52,8 +50,11 @@ class SleepSet():
         assert isinstance(patient_list, list), 'patient_list must be type list'
         self.patients = []
         
+        # return if list is empty
+        if len(patient_list)==0: return None
+        
         # must be either Patients or strings to make patients from.
-        all_patients = all([isinstance(x, Patient) for x in patient_list])
+        all_patients = all(['Patient' in str(type(x)) for x in patient_list])
         all_strings = all([isinstance(x, str) for x in patient_list])
         assert all_patients or all_strings, \
             "patient_list must be either strings or Patients"
@@ -62,7 +63,6 @@ class SleepSet():
             patient_list = sorted(patient_list, key=natsort_key)
             
         tqdm_loop = tqdm if all_strings else lambda x, *args,**kwargs: x
-        
         for patient in tqdm_loop(patient_list, desc='Loading Patients'):
             try:
                 patient = Patient(patient, readonly=readonly)
@@ -88,6 +88,15 @@ class SleepSet():
         iterate through all patients in this set
         """
         return self.patients.__iter__()
+    
+    def __contains__(self, key):
+        if 'Patient' in str(type(key)):
+            key = key.code
+        try:
+            self[key]
+            return True
+        except:
+            return False
     
     
     def __getitem__(self, key):
@@ -143,6 +152,27 @@ class SleepSet():
             raise ValueError(f'patient must be or Patient, is {type(patient)}')
         return self
     
+    def stratify(self, filter=lambda x:True):
+        """
+        Return the subset where each patient has a match.
+        After stratification, there should be an equal number of 
+        nt1 and controls in the subset and each patient should have exactly
+        one match
+        An additional filter can be applied on the fly.
+        
+        :param filter: an additional filter lambda to be applied
+        returns two SleepSets: NT1 and Matches
+        """
+        subset = self.filter(filter)
+        new_set = SleepSet([])
+        for p in subset:
+            if p.match in subset:
+                new_set.add(p)
+        assert len(new_set.filter(lambda x: x.group=='nt1')) == len(new_set.filter(lambda x: x.group=='control'))
+        return new_set
+    
+        
+
     def get_feats(self, name):
         feats = [p.get_feat(name) for p in self]
         return np.hstack(feats)
@@ -192,9 +222,6 @@ class SleepSet():
         t.add_row(['Has feats', *n_feats, f'missing: {n_all-sum(n_feats)}'])   
         t.add_row(['Has hypno', *n_hypno, f'missing: {n_all-sum(n_hypno)}'])   
         print(t)
-
-        
-        
         
     def print(self):
         """pretty-print all containing patients in a list"""
@@ -214,14 +241,14 @@ class Patient(Unisens):
         """
         If this patient is initialized with a Patient, just return this Patient
         """
-        if isinstance(folder, Patient): return folder
+        if 'Patient' in str(type(folder)): return folder
         return object.__new__(cls)
 
     def __repr__(self):
         name = self.attrib.get('code', 'unkown')
         sfreq = int(self.attrib.get('sampling_frequency', -1))
         seconds = int(self.attrib.get('duration', 0))
-        length = time.strftime('%H:%M:%S', time.gmtime(seconds))
+        length = time.strftime('%H:%M', time.gmtime(seconds))
         gender = self.attrib.get('gender', '')
         age = self.attrib.get('age', -1)
         
@@ -229,8 +256,8 @@ class Patient(Unisens):
             nfeats = len(self['feats'])
         else:
             nfeats = 'None'
-        return f'Patient({name}, {length} , {sfreq} Hz, {nfeats} feats, '\
-               f'{gender} {age} y)'
+        return f'Patient({name} ({self.group}), {length}, {sfreq} Hz, {nfeats} feats, '\
+               f'{gender} {age}y)'
     
     def __str__(self):
         return repr(self)
@@ -240,12 +267,6 @@ class Patient(Unisens):
         if not 'autosave' in kwargs: kwargs['autosave'] = False
         super().__init__(folder, convert_nums=True, *args, **kwargs)
 
-    def __len__(self):
-        """
-        returns the length of this PSG in seconds
-        """
-        seconds = int(len(self.data)//(self.sfreq))
-        return seconds
          
         
     def get_artefacts(self, only_sleeptime=False,
