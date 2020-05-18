@@ -12,6 +12,7 @@ significance_test = stats.mannwhitneyu
 significance_test = stats.ttest_ind
 
 
+
 def calc_statistics(table):
     """
     Calculates statistics such as mean, std and p value for a table
@@ -27,11 +28,13 @@ def calc_statistics(table):
         dictionary['variable name']['subvarname']['group1/group2']['values'] = [0,5,2,3,4, ...]
 
     """
-    
-    
     for descriptor in table:
         if 'nt1' in table[descriptor]: # only one level
-            if 0 in (len(table[descriptor]['nt1']), len(table[descriptor]['control'])):
+            if len(table[descriptor]['nt1'])==0 or len(table[descriptor]['control'])==0\
+               or len(table[descriptor]['nt1']['values'])==0 or len(table[descriptor]['control']['values'])==0:
+                table[descriptor]['p'] = '-'
+                table[descriptor]['mean'] = np.nan
+                table[descriptor]['std'] = np.nan
                 continue
             values_nt1 = table[descriptor]['nt1']['values']
             values_cnt = table[descriptor]['control']['values']
@@ -39,21 +42,13 @@ def calc_statistics(table):
                 table[descriptor]['p'] = stats.mannwhitneyu(values_nt1, values_cnt).pvalue
             except:
                 table[descriptor]['p'] = '-'
+                
             for group in ['nt1', 'control']:
                 table[descriptor][group]['mean'] = np.nanmean(table[descriptor][group]['values'])
                 table[descriptor][group]['std'] = np.nanstd(table[descriptor][group]['values'])
+                
         else: # with subvariables / dividede by stages
-            for subvar in table[descriptor]:
-                values_nt1 = table[descriptor][subvar]['nt1']['values']
-                values_cnt = table[descriptor][subvar]['control']['values']
-                try:
-                    table[descriptor][subvar]['p'] = significance_test(values_nt1, values_cnt).pvalue
-                except:
-                    table[descriptor][subvar]['p'] = '-'
-                for group in ['nt1', 'control']:
-                    table[descriptor][subvar][group]['mean'] = np.nanmean(table[descriptor][subvar][group]['values'])
-                    table[descriptor][subvar][group]['std'] = np.nanstd(table[descriptor][subvar][group]['values'])
-
+            calc_statistics(table[descriptor])
 
 def sleep_phase_sequence(hypno):
     """

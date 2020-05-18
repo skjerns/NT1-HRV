@@ -232,6 +232,10 @@ class SleepSet():
     
 class Patient(Unisens):
     """
+    attributes
+        self.sleep_onset  = onset of first non-W and non-5 in seconds
+        self.sleep_offset = last sleep stage in seconds
+    
     A Patient contains the data of one unisens data structure.
     It facilitates the automated extraction of features, loading of data
     and hypnogram as well as visualization of the record, plus statistical
@@ -277,8 +281,8 @@ class Patient(Unisens):
         have an artefact.
         
         block_window_length 0 will only get the annotated artefacts as boolean array
-        block_window_length 1 will get the same boolean array but with each neighbour
-        seconds block_window_length/2 blocked as well. Kind of like a cellular automata ;-)
+        block_window_length 1 will get the same boolean array but with each neighbour seconds 
+        block_window_length/2 blocked as well. Kind of like a cellular automata ;-)
         """
         if hasattr(self, '_artefacts_cache'):
             data = self._artefacts_cache

@@ -90,7 +90,6 @@ Notes:
 
 @author: Simon Kern
 """
-import sys
 import stimer
 import functions
 from functions import arousal_transitions
@@ -115,9 +114,9 @@ stimer.start()
 ss = SleepSet(files, readonly=True)
 stimer.stop()
 # ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
-# ss = ss.stratify() # only use matched participants
+ss = ss.stratify() # only use matched participants
 p = ss[1]
-stop
+# stop
 #%%### Van Meijden 2015 Table 1
 
 descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
@@ -236,7 +235,7 @@ plotting.print_table(table1, 'Sleep Stage Parameters')
 table1.pop('gender') # remove this, can't be plotted appropriately
 plotting.distplot_table(table1, 'Sleep Stage Parameters', ylabel='counts')
 
-#%% Van Meijden 2015 Figure 2, Mean episode length
+#%% Mean episode length Van Meijden 2015 Figure 2, 
 stage_means = dict(zip(range(6), [{'control':{}, 'nt1':{}} for _ in range(6)]))
 fig, axs = plt.subplots(2, 2)
 
@@ -282,7 +281,7 @@ post_transitions = {feat:{stage:{} for stage in range(6)} for feat in features}
 for name in features:
     for stage in range(6):
         for group in ['nt1', 'control']:
-            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and x.ecg_broken==False)
+            subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
             values = []
             
             for p in subset:
@@ -293,17 +292,17 @@ for name in features:
                 # get all indices where we have the given stage with longer
                 # period than the mean stage length
                 minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+                minmean = int(minmean)
                 # we need it in epoch notation, so *2
-                minmean = int(minmean*2)
-                minmean = 16
                 phase_starts = np.where(np.logical_and(stages==stage, lengths>minmean))[0]
                 feat = p.get_feat(name, only_sleeptime=True)
-                artefacts = p.get_artefacts(only_sleeptime=True)
+                artefacts = p.get_artefacts(only_sleeptime=True, block_window_length=300)
                 for start in phase_starts:
                     bool_idx = np.zeros(len(feat), dtype=bool)
                     bool_idx[idxs[start]: idxs[start]+lengths[start]] = True
                     feat_values = feat[idxs[start]: idxs[start]+lengths[start]]
-                    artefacts = artefacts[idxs[start]: idxs[start]+lengths[start]]
+                    artefacts = artefacts[idxs[start]: idxs[start]+lengths[start]]==False
+                    artefacts = (artefacts==False)[:minmean]
                     values.append(feat_values[:minmean]) # only take %minmean% epochs
                     
             post_transitions[name][stage][group] = {'values':np.array(values)}
@@ -392,67 +391,6 @@ plotting.distplot_table(transitions, '% of transitions of total transitions', co
                         xlabel='% of all transitions', ylabel='count')
 plotting.print_table(transitions, '% of transitions of total transitions' ) 
 
-#%% Features for different sleep stages: HF/LF, HRV, etc
-
-features = ['LF', 'HF', 'LF_HF', 'mean_HR', 'RMSSD', 'pNN50']
-table2 = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in features}
-masks = {'nt1':{}, 'control':{}}
-
-for group in ['nt1', 'control']:
-    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and x.ecg_broken==False)
-    phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
-    phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
-    
-    
-    for stage in range(5):
-        ##### here we filter out which epochs are elegible for analysis
-        # only take epochs that are longer than the mean epoch length
-        minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
-        mask_length = [np.array(l)>minmean for l in phase_lengths]
-        # onlt take epochs of the given stage
-        mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
-        # only take epochs with no artefacts surrounding 300 seconds
-        mask_art = [p.get_artefacts(only_sleeptime=True, block_window_length=300)==False for p in subset]
-        assert all([len(x)==len(y) for x,y in zip(mask_length, mask_stage)])
-        assert all([len(x)==len(y)  for x,y in zip(mask_length, mask_art)])
-        # create a signel mask
-        mask = [np.logical_and.reduce((x,y,z)) for x,y,z in zip(mask_length, mask_stage, mask_art)]
-        masks[group][stage] = mask
-        print(f'{stage}: {np.mean([np.mean(x) for x in mask])}')
-
-    
-
-for feat in tqdm(features, desc='Calculating features'):
-    if feat=='n_epochs':continue
-    for stage in range(5):
-        for group in 'nt1', 'control':
-            subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl') and x.ecg_broken==False)
-            # get all values
-            values = [p.get_feat(cfg.mapping_feats[feat], only_sleeptime=True, cache=True) for p in subset]
-            # combine values with masks
-            values = [np.mean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage])]
-            table2[feat][stage][group] = {'values':values}
-
-functions.calc_statistics(table2)
-plotting.print_table_with_subvars(table2, 'feats')
-
-
-# plot feature distribution
-# n_plots = len(descriptors[1:])
-# fig, axs = plt.subplots(int(np.ceil(n_plots/3)), 3)
-# axs = axs.flatten()
-# for i, descriptor in enumerate(descriptors): 
-#     ax = axs[i]
-#     values_nt1 = table1[descriptor]['nt1']['values']
-#     values_cnt = table1[descriptor]['control']['values']
-#     sns.distplot(values_nt1, ax=ax)
-#     sns.distplot(values_cnt, ax=ax)
-#     p = plotting.format_p_value(table1[descriptor]['p'], bold=False)
-#     ax.set_title(descriptor + f' p {p}')
-#     ax.legend(['NT1', 'Control'])
-    
-# plt.suptitle('Overview Sleep Parameter Distribution')
-# plt.tight_layout()
 
 
 #########################
@@ -527,6 +465,52 @@ functions.calc_statistics(table_body_changes)
 plotting.print_table(table_body_changes, f'Total body position changes')
 plotting.distplot_table(table_body_changes, f'Total body position changes', columns=1)
 
-#%%
+
+
+#%% Features for different sleep stages: HF/LF, HRV, etc
+
+features = ['LF', 'HF', 'LF_HF', 'mean_HR', 'RMSSD', 'pNN50']
+table_features = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in features}
+masks = {'nt1':{}, 'control':{}}
+
+for group in ['nt1', 'control']:
+    subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
+
+    phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
+    phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
+    
+    for stage in range(5):
+        
+        ##### here we filter out which epochs are elegible for analysis
+        # only take epochs that are longer than the mean epoch length
+        minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+        mask_length = [np.array(l)>minmean for l in phase_lengths]
+        # onlt take epochs of the given stage
+        mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
+        # only take epochs with no artefacts surrounding 300 seconds
+        mask_art = [p.get_artefacts(only_sleeptime=True, block_window_length=300)==False for p in subset]
+        assert all([len(x)==len(y) for x,y in zip(mask_length, mask_stage)])
+        assert all([len(x)==len(y)  for x,y in zip(mask_length, mask_art)])
+        # create a singel mask
+        mask = [np.logical_and.reduce((x,y,z)) for x,y,z in zip(mask_length, mask_stage, mask_art)]
+        masks[group][stage] = mask    
+
+for feat in tqdm(features, desc='Calculating features'):
+    for stage in range(5):
+        for group in 'nt1', 'control':
+            subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
+            # get all values
+            values = [p.get_feat(cfg.mapping_feats[feat], only_sleeptime=True, cache=True) for p in subset]
+            # combine values with masks
+            values = [np.mean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage]) if len(v[m[:len(v)]])!=0]
+            table_features[feat][stage][group] = {'values':values}
+    functions.calc_statistics(table_features[feat])
+    plotting.distplot_table(table_features[feat], f'Mean {feat} during sleep stages')
+    
+# plotting.print_table_with_subvars(table_features, 'feats')
+
+
+#%% end
+
 stimer.stop('All calculations')
 

@@ -116,7 +116,11 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     if not 'EEG' in u or overwrite:
         chs = sleep_utils.infer_eeg_channels(all_labels)
         signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True, verbose=False)
-        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
+        if isinstance(signals, list): 
+            signals = np.atleast_2d(signals[0])
+            chs = chs[0]
+        # trick for viewer automatic scaling
+        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) 
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
         
@@ -138,8 +142,11 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         tqdm_desc(f'{code}: Reading EOG')
         chs = sleep_utils.infer_eog_channels(all_labels)
         signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True, verbose=False)
-        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
-        
+        if isinstance(signals, list): 
+            signals = np.atleast_2d(signals[0])
+            chs = chs[0]
+        # trick for viewer automatic scaling
+        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) 
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
         
@@ -161,8 +168,11 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         chs = sleep_utils.infer_emg_channels(all_labels)
         if chs!=[]: # fix for 888_49272
             signals, shead, header = read_edf(edf_file, ch_names=chs, digital=True, verbose=False)
-            signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
-            
+            if isinstance(signals, list): 
+                signals = np.atleast_2d(signals[0])
+                chs = chs[0]
+            # trick for viewer automatic scaling
+            signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) 
             pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
             dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
             
@@ -183,7 +193,8 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     if not 'thorax' in u or overwrite:
         tqdm_desc(f'{code}: Reading Thorax')
         signals, shead, header = read_edf(edf_file, ch_names=['Thorax'], digital=True, verbose=False)
-        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
+        # trick for viewer automatic scaling
+        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) 
         
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -205,8 +216,8 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     if (not 'body' in  u or overwrite) and 'Body' in all_labels:
         tqdm_desc(f'{code}: Reading Body')
         signals, shead, header = read_edf(edf_file, ch_names=['Body'], digital=True, verbose=False)
-        signals[:,0:2] = np.min(signals), np.max(signals) # trick for viewer automatic scaling
-        
+        signals[:,0:2] = np.percentile(signals, 10), np.percentile(signals,90) 
+            
         if np.ptp(signals)<10: # we have some weird body positions that we cant decode
         
             pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
@@ -282,6 +293,12 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             tqdm_desc(f'{code}: Reading Kubios')
             mat = loadmat(file)
             HRV = mat['Res']['HRV']
+            tvWindow = mat['Res']['HRV']['Param']['tvWindow']
+            tvWindowShift = mat['Res']['HRV']['Param']['tvWindowShift']
+            if tvWindow!=30:
+                print(f'WARNING, tvWindow (Kubios) is not 30 but {tvWindow} for {code}')
+            if tvWindowShift!=30:
+                print(f'WARNING, tvWindowShift (Kubios) is not 30 but {tvWindowShift} for {code}')
             startsecond = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
             T_RR = HRV['Data']['T_RR'].squeeze() - startsecond
             T_RR = list(zip(T_RR, ['RR']*len(T_RR)))
@@ -330,5 +347,5 @@ if __name__=='__main__':
         if not 'Y' in answer.upper():
             execute = False
     if execute:
-        Parallel(n_jobs=4, batch_size=1)(delayed(to_unisens)(
+        Parallel(n_jobs=1, batch_size=4)(delayed(to_unisens)(
             edf_file, unisens_folder=unisens_folder, skip_exist=True) for edf_file in tqdm(files, desc='Converting'))

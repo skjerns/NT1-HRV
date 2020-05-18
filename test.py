@@ -11,10 +11,29 @@ import tempfile
 import ospath
 import numpy as np
 import pickle
+import features
 from unisens import SignalEntry, ValuesEntry, EventEntry
 from sleep import Patient, SleepSet
 import sleep_utils
 import matplotlib.pyplot as plt
+
+
+class TestFeatures(unittest.TestCase):
+    
+    def setUp(self):
+        pass
+        
+    def tearDown(self):
+        pass
+    
+    def test_extraction(self): 
+        pad = True
+        sfreq = 1
+        wsize = 60
+        signal = np.arange(90)
+        steps = 30
+        windows = features.extract_windows(signal, sfreq, wsize, steps, pad)
+        assert windows.shape==(3,60)
 
 class TestUtils(unittest.TestCase):
     
@@ -113,7 +132,7 @@ class TestPatient(unittest.TestCase):
         self.p.get_hypno()
         arousals1 = self.p.get_arousals()
         ecg1 = self.p.get_ecg()
-        eeg1 = self.p.get_eeg()
+        eeg1 = self.p.get_signal('eeg')
         art1 = self.p.get_artefacts()
         
         onset = self.p.sleep_onset
@@ -125,7 +144,7 @@ class TestPatient(unittest.TestCase):
         hypno2 = self.p.get_hypno(only_sleeptime=True)
         arousals2 = self.p.get_arousals(only_sleeptime=True)
         ecg2 = self.p.get_ecg(only_sleeptime=True)
-        eeg2 = self.p.get_eeg(only_sleeptime=True)
+        eeg2 = self.p.get_signal('eeg', only_sleeptime=True)
         art2 = self.p.get_artefacts(only_sleeptime=True)      
 
         

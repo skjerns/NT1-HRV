@@ -92,8 +92,8 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
             # sns.pointplot(x=x, y=y_mean, ax=ax, c=c[group])
             ax.errorbar(x, y_mean, yerr=sem, c=c[group], fmt='-o', alpha=0.7)
 
-        n_nt1 = len(table[descriptor]['nt1']['values'])
-        n_cnt = len(table[descriptor]['control']['values'])
+        n_nt1 = np.sum(~np.isnan(table[descriptor]['nt1']['values']))
+        n_cnt = np.sum(~np.isnan(table[descriptor]['control']['values']))
         # convert sleep stage to stage name if necessary
         if descriptor in [0,1,2,3,4,5]: 
             descriptor = cfg.num2stage[descriptor]
@@ -156,44 +156,50 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
             ax.text(0.5, 0.5, 'No Data', ha='center')
             ax.set_title(descriptor)
             continue
+        
         n_bins = min(15, max(len(np.unique(values_nt1)), len(np.unique(values_cnt))))
+        
         vmin = min(np.nanmin(values_nt1), np.nanmin(values_cnt))
         vmax = max(np.nanmax(values_nt1), np.nanmax(values_cnt))
+        
         bins = np.linspace(vmin, vmax, n_bins+1)
         second_ax = ax.twinx()
         try: 
             sns.distplot(values_nt1, bins=bins, ax=ax, norm_hist=False, kde=False)
-            
             #Plotting kde without hist on the second Y axis
             sns.distplot(values_nt1, ax=second_ax, kde=True, hist=False)
             #Removing Y ticks from the second axis
             second_ax.set_yticks([])
-        except: pass    
+        except Exception as e: print(e)  
         try: 
             sns.distplot(values_cnt, bins=bins, ax=ax, norm_hist=False, kde=False)
             #Plotting kde without hist on the second Y axis
             sns.distplot(values_cnt, ax=second_ax, kde=True, hist=False)
             #Removing Y ticks from the second axis
             second_ax.set_yticks([])
-        except: pass
+        except Exception as e: print(e)
         second_ax.set_ylim([0, second_ax.get_ylim()[1]*1.5])
-        
-        if vmax<=1: vmax=1
-        # plot with small offset of 0.05
-        ax.set_xlim([vmin-(vmax-vmin)*0.05,  vmax+(vmax-vmin)*0.05])
-        
+                
         p_val = plotting.format_p_value(table[descriptor]['p'], bold=False)
         # convert sleep stage to stage name if necessary
+        n_nt1 = np.sum(~np.isnan(table[descriptor]['nt1']['values']))
+        n_cnt = np.sum(~np.isnan(table[descriptor]['control']['values']))
         if descriptor in [0,1,2,3,4,5]: 
             descriptor = cfg.num2stage[descriptor]
         if isinstance(descriptor, tuple):
             descriptor = '-'.join([str(cfg.num2stage[d]) for d in descriptor])
         if not isinstance(descriptor, str): descriptor=str(descriptor)
-        ax.set_title(descriptor + f' - n = {len(values_nt1)+len(values_cnt)} - p {p_val}')
+
+        ax.set_title(descriptor + f' - n = {n_cnt+n_nt1} ({n_nt1}/{n_cnt}) - p {p_val}')
         ax.legend(['NT1', 'Control'])
         ax.set_xlabel(xlabel[i])
         ax.set_ylabel(ylabel[i])
-        ax.set_xlim(0,1)
+        if vmax<=1:
+            ax.set_xlim(0,1)
+        else:
+            ax.set_xlim([vmin-(vmax-vmin)*0.05,  vmax+(vmax-vmin)*0.05])
+
+        
         
     plt.suptitle(title + f' | n = {len(values_nt1)+len(values_cnt)}', y=1)
     plt.pause(0.01)

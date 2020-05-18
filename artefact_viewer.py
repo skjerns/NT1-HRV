@@ -63,6 +63,9 @@ class ECGPlotter():
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
             rrs = mat['Res']['HRV']['Data']['T_RR'] - self.starttime
+            rrorig = mat['Res']['HRV']['Data']['T_RRorig'] - self.starttime
+
+            corr = mat['Res']['HRV']['Data']['RRcorrtimes'] - self.starttime
             art = mat['Res']['HRV']['TimeVar']['Artifacts']
         except:
             raise FileNotFoundError('Mat file not found.')            
@@ -72,12 +75,14 @@ class ECGPlotter():
             self.artefacts = np.load(artefacts_file)
         else:
             art = np.nan_to_num(art, nan=99)
-            self.artefacts = np.repeat(art>self.threshold, repeats=2, axis=0).T
+            self.artefacts = np.repeat(art>self.threshold, repeats=2, axis=0).T.reshape([-1,2])
             self.detect_flatline()
             
         self.kubios_art = np.nan_to_num(art.squeeze())
         self.mat = mat
+        self.rrorig = rrorig.squeeze()
         self.rrs = rrs.squeeze()
+        self.corr = corr.squeeze()
 
         self.file = edf_file
         self.mat_file = mat_file
@@ -89,7 +94,7 @@ class ECGPlotter():
     
     def __init__(self, edf_file, mat_file=None, page=0, 
                  interval=30, nrows=4, ncols=4, no_autosave=True):
-        plt.rcParams['keymap.save'].remove('s')
+        # plt.rcParams['keymap.save'].remove('s')
         self.c_okay = (1, 1, 1, 1)       # background coloring of accepted
         self.c_art = (1, 0.8, 0.4, 0.2)  # background coloring of artefact
         self.threshold = 5
@@ -137,6 +142,24 @@ class ECGPlotter():
         rr = rr-sec*self.sfreq
         return rr, yy
     
+    def get_rrorig(self, plot_nr, plotdata):
+        sec = (self.page*self.gridsize+plot_nr)*self.interval
+        idx_start = np.searchsorted(self.rrorig, sec)
+        idx_stop  = np.searchsorted(self.rrorig, sec+self.interval)
+        rr = (self.rrorig[idx_start:idx_stop]*self.sfreq)
+        yy = self.data[rr.round().astype(int)]
+        rr = rr-sec*self.sfreq
+        return rr, yy
+    
+    def get_corr(self, plot_nr, plotdata):
+        sec = (self.page*self.gridsize+plot_nr)*self.interval
+        idx_start = np.searchsorted(self.corr, sec)
+        idx_stop  = np.searchsorted(self.corr, sec+self.interval)
+        corr = (self.corr[idx_start:idx_stop]*self.sfreq)
+        yy = self.data[corr.round().astype(int)]
+        corr = corr-sec*self.sfreq
+        return corr, yy
+    
     def update(self):
         gridsize = self.gridsize
         page = self.page
@@ -154,13 +177,22 @@ class ECGPlotter():
             ax  = self.axs[i]
             ax.clear()
             ax.set_facecolor((1,1,1,1))   
+            
+            rrorig, yy = self.get_rrorig(i, plotdata)
+            ax.scatter(rrorig, yy*1.1 , marker='x', color='g', linewidth=2,alpha=0.7)
+            
+            corr, yy = self.get_corr(i, plotdata)
+            ax.scatter(corr, yy*1.3 , marker='o', color='b', linewidth=1,alpha=0.7)
+            
             rr, yy = self.get_rrs(i, plotdata)
-            ax.plot(plotdata, linewidth=0.5)
             ax.scatter(rr, yy , marker='x', color='r', linewidth=0.5,alpha=0.7)
+
+            ax.plot(plotdata, linewidth=0.5)
             ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(
                     self.kubios_art[page*gridsize+i]),fontsize=8)            
             xmin, middle, xmax = self._get_xlims(ax)
-            ax.axvline(middle, color='gray', linewidth=0.65)     
+            ax.axvline(middle, color='gray', linewidth=0.65) 
+            print(self.artefacts.shape)
             if self.artefacts[page*gridsize+i][0]:
                 ax.axvspan(xmin, middle, facecolor=self.c_art, zorder=-100)
             if self.artefacts[page*gridsize+i][1]:
@@ -283,9 +315,9 @@ if __name__=='__main__':
     parser.add_argument('-mat', '--mat_file', type=str,
                          help='A link to an mat-file created by Kubios.'
                               'It contains the RRs and the artefact annotation')
-    parser.add_argument('-nrows', type=int, default=4,
+    parser.add_argument('-nrows', type=int, default=2,
                          help='Number of rows to display in the viewer')
-    parser.add_argument('-ncols', type=int, default=4,
+    parser.add_argument('-ncols', type=int, default=2,
                          help='Number of columns to display in the viewer')
     parser.add_argument('-page', type=int, default=0,
                          help='At which page (epoch*gridsize) to start the viewer')
