@@ -35,7 +35,6 @@ def extract_features(patient):
     sfreq = patient.ECG.sampleRate
     rr = patient.rr.get_times()
     
-    
     for nr, name in cfg.mapping_feats.items():
         id = f'feats/{name}.csv'
         if id in patient: patient.remove_entry(id)
@@ -44,7 +43,6 @@ def extract_features(patient):
         data = list(zip(np.arange(0, len(data)), data))
         feat = ValuesEntry(id=id, parent=feats._folder)
         feat.set_data(data, sampleRate=1/30)
-        feat.seg_len = kubios['Param']['Length_Segment']
         feats.add_entry(feat, stack=False)
     patient.save()
     

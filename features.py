@@ -7,14 +7,71 @@ Created on Tue Mar 24 12:57:00 2020
 import config as cfg
 import numpy as np
 import scipy
+from datetime import datetime
 from scipy import stats
 
-# create empty dummy functions
-_locals = locals()
-for key, name in cfg.mapping_feats.items():
-    _locals[name] = lambda *args, **kwargs:  False
+# # create empty dummy functions
+# _locals = locals()
+# for key, name in cfg.mapping_feats.items():
+#     _locals[name] = lambda *args, **kwargs:  False
+   
     
+
+
+
+def dummy(ecg, **kwargs):
+    """
+    each function here should be named exactly as the feature 
+    name in config.features_mapping.
+    Like this the feature extraction can be done automatically.
+    The function can accept the following parameters:
+        
+    ecg, rr, kubios
     
+    all functions should accept **kwargs that are ignored.
+    """
+    
+def HR(RR):
+    pass
+    
+# 1 
+
+def mean_HR(kubios, **kwargs):
+    data = kubios['TimeVar']['mean_HR']
+    return data.squeeze()
+
+# 2
+def mean_RR(kubios, **kwargs):
+    data = kubios['TimeVar']['mean_RR']
+    return data.squeeze()
+
+# 4
+def RMSSD(kubios, **kwargs):
+    data = kubios['TimeVar']['RMSSD']
+    return data.squeeze()
+
+# 6
+def pNN50(kubios, **kwargs):
+    data = kubios['TimeVar']['pNNxx']
+    return data.squeeze()
+
+# 10
+def LF(kubios, **kwargs):
+    data = kubios['TimeVar']['LF_power']
+    return data.squeeze()
+
+# 11
+def HF(kubios, **kwargs):
+    data = kubios['TimeVar']['HF_power']
+    return data.squeeze()
+
+# 12
+def LF_HF(kubios, **kwargs):
+    data = kubios['TimeVar']['LF_power']/kubios['TimeVar']['HF_power']
+    return data.squeeze()
+
+
+
 def _window_view(a, window, steps = None, axis = None, readonly = True):
         """
         Create a windowed view over `n`-dimensional input that uses an 
@@ -117,53 +174,73 @@ def extract_windows(signal, sfreq, wsize, steps=None, pad=True):
         assert n_steps == len(windows), 'unequal sizes'
     return windows
 
-def dummy(ecg, **kwargs):
-    """
-    each function here should be named exactly as the feature 
-    name in config.features_mapping.
-    Like this the feature extraction can be done automatically.
-    The function can accept the following parameters:
+
+def extract_RR_windows(T_RR, RR, wsize, steps=None, pad=True):
+    """ 
+    Extract windows from a list of RR intervals of a given window size 
+    with striding steps. The windows are centered around the step borders.
+    E.g. step=30, the first window will be centered around second 15,
+    iff padding is activated.
+    
+    :param T_RR: the peak locations
+    :param RR: a list of differences between RR peaks, e.g. [1.4, 1.5, 1.4]
+    :param wsize:  the size of the window
+    :param stride: stepsize of the window extraction. If None, stride=wsize
+    :param pad:    whether to pad the array such that there are exactly 
+                   len(signal)//stride windows (e.g. same as hypnogram)
+    """ 
+    windows = []
+    
+    # last detected peak should give roughly the recording length.
+    # however, this is not always true, ie with a flat line at the end
+    record_len = int(T_RR[-1])
+    
+    # this array gives us the position of the RR at second x
+    # e.g. seconds_idxs[5] will return the RR indices starting at second 5.
+    second_idxs = []
+    c = 0 
+    for i in range(record_len):
+        while i>=T_RR[c]:
+            c+=1
+        second_idxs.append(c)
+    second_idxs = np.array(second_idxs)
+    
+    
+    assert record_len==len(second_idxs), f'record len={record_len}, but seconds array is {len(second_idxs)}'
+
+    
+    # pad left and right by reflecting the array to have
+    # the same number of windows as e.g. hypnogram annotations
+    # if pad: 
+    #     # this is how much we need
+    #     pad_len = (wsize//2-steps//2)
+    #     # take first pad_len RR values and reflect them back.
+    #     pad_l = RR[:np.argmax(seconds>pad_len)][::-1]
+    #     pad_r = RR[-np.argmax(seconds>pad_len):][::-1]
+    #     RR = np.hstack([pad_l, RR, pad_r])
+    #     cumsum = np.cumsum(RR)
+    #     # divide by stepsize to know for each index to which 
+    #     # window it belongs
+    #     windows = cumsum//1
+    
+    # these are the centers of the windows, exactly between two step boundaries
+    n_windows = int(record_len//steps)-wsize//steps+1
+    for i in range(n_windows):
+        # get RR values for this window
+        idx_start = second_idxs[i*steps]
+        idx_end = second_idxs[i*steps+wsize]
+        wRR = RR[idx_start:idx_end]
+        windows.append(wRR)
         
-    ecg, rr, kubios
+        
     
-    all functions should accept **kwargs that are ignored.
-    """
-    
-def HR(RR):
-    pass
-    
-# 1 
-
-def mean_HR(kubios, **kwargs):
-    data = kubios['TimeVar']['mean_HR']
-    return data.squeeze()
-
-# 2
-def mean_RR(kubios, **kwargs):
-    data = kubios['TimeVar']['mean_RR']
-    return data.squeeze()
-
-# 4
-def RMSSD(kubios, **kwargs):
-    data = kubios['TimeVar']['RMSSD']
-    return data.squeeze()
-
-# 6
-def pNN50(kubios, **kwargs):
-    data = kubios['TimeVar']['pNNxx']
-    return data.squeeze()
-
-# 10
-def LF(kubios, **kwargs):
-    data = kubios['TimeVar']['LF_power']
-    return data.squeeze()
-
-# 11
-def HF(kubios, **kwargs):
-    data = kubios['TimeVar']['HF_power']
-    return data.squeeze()
-
-# 12
-def LF_HF(kubios, **kwargs):
-    data = kubios['TimeVar']['LF_power']/kubios['TimeVar']['HF_power']
-    return data.squeeze()
+if __name__=='__main__':
+    from sleep import Patient
+    p = Patient('Z:/NT1-HRV-unisens/009_08813')
+    data = p.feats.get_data()['Data']
+    RR = data['RR']
+    T_RR = data['T_RR']
+    start = datetime.strptime(p.timestampStart,'%Y-%m-%dT%H:%M:%S')
+    T_RR -= (start.second + start.minute*60 + start.hour*3600)
+    wsize = 300
+    steps = 30
