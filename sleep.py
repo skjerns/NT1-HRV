@@ -16,11 +16,14 @@ import re
 import time
 import stimer
 import sleep_utils
+import features
+from functools import wraps
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.filters import gaussian_filter1d
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
+
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
@@ -28,9 +31,22 @@ def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     
 
 
+def error_handle(func):
+    """
+    a small wrapper that will print the Patient folder
+    in case an error appears in the wrapped class method
+    """
+    @wraps(func)
+    def print_error_wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except Exception as e:
+            print(f'## [{type(e).__name__}]  {self} ({self._folder})')
+            raise e
+    print_error_wrapper.__doc__ = func.__doc__
+    return print_error_wrapper
+        
 
-        
-        
 class SleepSet():
     """
     A SleepSet is a container for several Patients, where each Patient
@@ -71,7 +87,7 @@ class SleepSet():
                 print('Error in', patient)
                 raise e
         return None
-        
+    
     def __repr__(self):
         n_patients = len(self)
         
@@ -82,7 +98,7 @@ class SleepSet():
 
         return f'SleepSet({n_patients} Patients, {n_control} Control, '\
                f'{n_nt1} NT1)'
-        
+               
     def __iter__(self):
         """
         iterate through all patients in this set
@@ -121,11 +137,9 @@ class SleepSet():
             raise KeyError('Unknown key type:{}, {}'.format(type(key), key))
         return SleepSet(items)
     
-    
     def __len__(self):
         """return the number of patients in this set"""
         return len(self.patients)
-    
     
     def filter(self, function):
         p_true = []
@@ -138,7 +152,6 @@ class SleepSet():
                 print(f'Can\'t filter {code}: {e}')
             
         return SleepSet(p_true)
-    
     
     def add(self, patient):
         """
@@ -166,13 +179,12 @@ class SleepSet():
         subset = self.filter(filter)
         new_set = SleepSet([])
         for p in subset:
-            if p.match in subset:
+            if p.__dict__.get('match', 'notfound') in subset:
                 new_set.add(p)
         assert len(new_set.filter(lambda x: x.group=='nt1')) == len(new_set.filter(lambda x: x.group=='control'))
         return new_set
     
         
-
     def get_feats(self, name):
         feats = [p.get_feat(name) for p in self]
         return np.hstack(feats)
@@ -222,7 +234,7 @@ class SleepSet():
         t.add_row(['Has feats', *n_feats, f'missing: {n_all-sum(n_feats)}'])   
         t.add_row(['Has hypno', *n_hypno, f'missing: {n_all-sum(n_hypno)}'])   
         print(t)
-        
+     
     def print(self):
         """pretty-print all containing patients in a list"""
         s = '['
@@ -241,6 +253,7 @@ class Patient(Unisens):
     and hypnogram as well as visualization of the record, plus statistical
     analysis. Many of its subfunctions are inherited from Unisens
     """
+    
     def __new__(cls, folder=None, *args, **kwargs):
         """
         If this patient is initialized with a Patient, just return this Patient
@@ -273,45 +286,73 @@ class Patient(Unisens):
 
          
         
-    def get_artefacts(self, only_sleeptime=False,
-                      block_window_length=15):
+    @error_handle
+    def extract_feature(self, name, wsize, step, only_sleeptime=False):
+        """Create a feature with the given parameters for this Patient
+        Warning: Recalculation of frequency based feature can take a long 
+        time
+        """
+
+        
+        
+    @error_handle
+    def get_RR(self, offset=False):
+        """
+        Retrieve the RR peaks and the T_RR, which is their respective positions
+        
+        returns: (T_RR, RR)
+        """
+        if offset: raise NotImplementedError
+        
+        if hasattr(self, '_cache_RR'):
+            log.debug('Loading cached RR')
+            # already loaded within this session
+            T_RR, RR = self._cache_RR
+        
+        elif 'feats/RR.npy' in self.feats and 'feats/T_RR.npy' in self.feats:
+            log.debug('Loading saved RR')
+            # previously loaded
+            RR = self.feats.RR.get_data()
+            T_RR = self.feats.T_RR.get_data()  
+            self._cache_RR = (T_RR, RR)
+
+        else:
+            log.debug('extracting RR from pkl-file')
+            # never loaded, need to extract
+            data = self['feats.pkl'].get_data()['Data']
+            T_RR = data['T_RR'] - self.startsec
+            RR = data['RR']
+            self._cache_RR = (T_RR, RR)
+            _readonly = self._readonly
+            self._readonly = False
+            CustomEntry('feats/RR.npy', parent=self.feats).set_data(RR)
+            CustomEntry('feats/T_RR.npy', parent=self.feats).set_data(T_RR)
+            self._readonly = _readonly
+        assert len(T_RR)==len(RR)+1, 'T_RR does not fit to RR, seems wrong. {len(T_RR)}!={len(RR)+1}'
+        return T_RR, RR
+    
+    
+    @error_handle
+    def get_artefacts(self, only_sleeptime=False, wsize=30, step=None):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
         have an artefact.
-        
-        block_window_length 0 will only get the annotated artefacts as boolean array
-        block_window_length 1 will get the same boolean array but with each neighbour seconds 
-        block_window_length/2 blocked as well. Kind of like a cellular automata ;-)
         """
-        if hasattr(self, '_artefacts_cache'):
-            data = self._artefacts_cache
+        cache = f'_cache_art_{only_sleeptime}_{wsize}_{step}'
+        if hasattr(self, cache):
+            return self.__dict__[cache]
         else:
-            try:
-                data = list(zip(*self['artefacts'].get_data()))[1]  
-            except:
-                data = np.zeros(self.epochs_hypno*2)
-            self._artefacts_cache = data
-            
-        data = np.array(data, dtype=bool)
-        
-        # now repeat to get on a per-second-basis
-        data = np.repeat(data, 15)
-        
-        if only_sleeptime:
-            if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            data = data[self.sleep_onset:self.sleep_offset]
-            
-        block_window_length -= 15 # substract window middle
-        if block_window_length>0:
-            data = binary_dilation(data, structure=[True,True,True], 
-                                   iterations=block_window_length)
-        
-        # we are very strict. If there is a single second of artefact, 
-        # we discard the whole epoch.
-        data = data.reshape([-1,30]).max(1)
-        return data
-
+            T_RR, RR = self.get_RR()
+            stimer.start()
+            art = features.artefact_detection(T_RR, RR, wsize, step)
+            if only_sleeptime:
+                if not hasattr(self, 'sleep_onset'): self.get_hypno()
+                art = art[self.sleep_onset//step:self.sleep_offset//step]
+            self.__dict__[cache] = art
+        return art
+    
+    @error_handle
     def get_hypno(self, only_sleeptime=False, cache=True):
         
         if cache and hasattr(self, '_hypno'):
@@ -330,7 +371,7 @@ class Patient(Unisens):
             hypno = hypno[self.sleep_onset//30:self.sleep_offset//30]
         return hypno
     
-     
+    @error_handle
     def get_ecg(self, only_sleeptime=False):
         data = self['ecg.bin'].get_data().squeeze()
         
@@ -340,6 +381,7 @@ class Patient(Unisens):
             data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
         return data
     
+    @error_handle
     def get_signal(self, name='eeg', stage=None, only_sleeptime=False):
         """
         get values of a SignalEntry
@@ -362,6 +404,7 @@ class Patient(Unisens):
             data = data[mask[:len(data)]]
         return data
     
+    @error_handle
     def get_arousals(self, only_sleeptime=False):
         """return epochs in which an arousal has taken place"""
         try:
@@ -383,18 +426,44 @@ class Patient(Unisens):
             data = data-self.sleep_onset//30
         return data
     
-    
-    def get_feat(self, name, only_sleeptime=False, cache=True):
+    @error_handle
+    def get_feat(self, name, only_sleeptime=False, wsize=30, step=None, 
+                 offset=0, cache=True, only_clean=True):
+        """
+        Returns the given feature with the chosen parameters
+        """
+        if offset: raise NotImplementedError
+        if step is None: step = wsize
         if isinstance(name, int):
-            name = 'feats/' + config.mapping_feats[name] + '.csv'
-            
-        if cache and hasattr(self, f'{name}'):
-            feat = self.__dict__[f'{name}']
-        else:      
-            
-            feat = np.array(self.feats[name].get_data())[:,1]
-            self.__dict__[f'{name}'] = feat
-            
+            name =  config.mapping_feats[name]
+        
+        feat_name = f'feats/{name}-{int(wsize)}-{int(step)}-{int(offset)}.npy'
+        
+        # if cached, reload this cached version
+        if cache and hasattr(self, f'_cache_{feat_name}'):
+            feat = self.__dict__[f'_cache_{feat_name}']
+        # if not cached, but already computed, lead computed version
+        elif feat_name in self.feats:      
+            feat = self.feats[feat_name].get_data()
+        # not computed, compute this feature now.  
+        else:
+            # receive RRs to calculate feature on
+            T_RR, RR = self.get_RR()
+            feat_func = features.__dict__[name]
+            RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize, step=step)
+            feat = np.array(feat_func(RR_windows))
+            _readonly = self._readonly
+            self._readonly = False
+            CustomEntry(feat_name, parent=self.feats).set_data(feat)
+            self._readonly = _readonly
+          
+        # save for caching purposes
+        if cache: self.__dict__[f'_cache_{feat_name}'] = feat 
+
+        if only_clean:
+            art = self.get_artefacts(only_sleeptime=only_sleeptime, wsize=wsize, step=step)
+            feat[art] = [np.nan] * sum(art)
+
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
             feat = feat[self.sleep_onset//30:self.sleep_offset//30]
@@ -404,6 +473,7 @@ class Patient(Unisens):
         
     
     """creates a unisens.xml that shows only the features"""
+    @error_handle
     def write_features_to_unisens(self):
         u = Unisens(folder=self._folder, filename='features.xml')
         
@@ -420,7 +490,7 @@ class Patient(Unisens):
         u.save()
         
 
-    
+    @error_handle
     def plot(self, channels='eeg', hypnogram=True, axs=None):
         with plt.style.context('default'):
             hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)

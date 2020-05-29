@@ -62,11 +62,13 @@ class ECGPlotter():
         
         try:
             mat = mat73.loadmat(mat_file, verbose=False)
-            rrs = mat['Res']['HRV']['Data']['T_RR'] - self.starttime
+            rr = mat['Res']['HRV']['Data']['RR']
+            trrs = mat['Res']['HRV']['Data']['T_RR'] - self.starttime
             rrorig = mat['Res']['HRV']['Data']['T_RRorig'] - self.starttime
-
             corr = mat['Res']['HRV']['Data']['RRcorrtimes'] - self.starttime
             art = mat['Res']['HRV']['TimeVar']['Artifacts']
+            altered = trrs[np.where(np.diff(trrs)!=rr)[0]]
+            
         except:
             raise FileNotFoundError('Mat file not found.')            
 
@@ -80,8 +82,9 @@ class ECGPlotter():
             
         self.kubios_art = np.nan_to_num(art.squeeze())
         self.mat = mat
+        self.altered = altered.squeeze()
         self.rrorig = rrorig.squeeze()
-        self.rrs = rrs.squeeze()
+        self.trrs = trrs.squeeze()
         self.corr = corr.squeeze()
 
         self.file = edf_file
@@ -91,10 +94,11 @@ class ECGPlotter():
         
         self.save()
 
-    
+    #%% init
     def __init__(self, edf_file, mat_file=None, page=0, 
                  interval=30, nrows=4, ncols=4, no_autosave=True):
         # plt.rcParams['keymap.save'].remove('s')
+        self.flipped = False
         self.c_okay = (1, 1, 1, 1)       # background coloring of accepted
         self.c_art = (1, 0.8, 0.4, 0.2)  # background coloring of artefact
         self.threshold = 5
@@ -135,21 +139,30 @@ class ECGPlotter():
         
     def get_rrs(self, plot_nr, plotdata):
         sec = (self.page*self.gridsize+plot_nr)*self.interval
-        idx_start = np.searchsorted(self.rrs, sec)
-        idx_stop  = np.searchsorted(self.rrs, sec+self.interval)
-        rr = (self.rrs[idx_start:idx_stop]*self.sfreq)
-        yy = self.data[rr.round().astype(int)]
-        rr = rr-sec*self.sfreq
-        return rr, yy
+        idx_start = np.searchsorted(self.trrs, sec)
+        idx_stop  = np.searchsorted(self.trrs, sec+self.interval)
+        trr = (self.trrs[idx_start:idx_stop]*self.sfreq)
+        yy = self.data[trr.round().astype(int)]
+        trr = trr-sec*self.sfreq
+        return trr, yy
+
+    def get_altered(self, plot_nr, plotdata):
+        sec = (self.page*self.gridsize+plot_nr)*self.interval
+        idx_start = np.searchsorted(self.altered, sec)
+        idx_stop  = np.searchsorted(self.altered, sec+self.interval)
+        trr = (self.altered[idx_start:idx_stop]*self.sfreq)
+        yy = self.data[trr.round().astype(int)]
+        trr = trr-sec*self.sfreq
+        return trr, yy
     
     def get_rrorig(self, plot_nr, plotdata):
         sec = (self.page*self.gridsize+plot_nr)*self.interval
         idx_start = np.searchsorted(self.rrorig, sec)
         idx_stop  = np.searchsorted(self.rrorig, sec+self.interval)
-        rr = (self.rrorig[idx_start:idx_stop]*self.sfreq)
-        yy = self.data[rr.round().astype(int)]
-        rr = rr-sec*self.sfreq
-        return rr, yy
+        trr = (self.rrorig[idx_start:idx_stop]*self.sfreq)
+        yy = self.data[trr.round().astype(int)]
+        trr = trr-sec*self.sfreq
+        return trr, yy
     
     def get_corr(self, plot_nr, plotdata):
         sec = (self.page*self.gridsize+plot_nr)*self.interval
@@ -160,6 +173,7 @@ class ECGPlotter():
         corr = corr-sec*self.sfreq
         return corr, yy
     
+    #%% update view
     def update(self):
         gridsize = self.gridsize
         page = self.page
@@ -178,14 +192,17 @@ class ECGPlotter():
             ax.clear()
             ax.set_facecolor((1,1,1,1))   
             
-            rrorig, yy = self.get_rrorig(i, plotdata)
-            ax.scatter(rrorig, yy*1.1 , marker='x', color='g', linewidth=2,alpha=0.7)
+            rraltered, yy = self.get_altered(i, plotdata)
+            ax.scatter(rraltered, yy*1.2 , marker='o', color='g', linewidth=2,alpha=0.7)
+                       
+            # rrorig, yy = self.get_rrorig(i, plotdata)
+            # ax.scatter(rrorig, yy*1.1 , marker='x', color='g', linewidth=2,alpha=0.7)
             
             corr, yy = self.get_corr(i, plotdata)
             ax.scatter(corr, yy*1.3 , marker='o', color='b', linewidth=1,alpha=0.7)
             
-            rr, yy = self.get_rrs(i, plotdata)
-            ax.scatter(rr, yy , marker='x', color='r', linewidth=0.5,alpha=0.7)
+            trr, yy = self.get_rrs(i, plotdata)
+            ax.scatter(trr, yy , marker='x', color='r', linewidth=0.5,alpha=0.7)
 
             ax.plot(plotdata, linewidth=0.5)
             ax.text(0,ax.get_ylim()[1]+50,'{:.1f}%'.format(
@@ -202,6 +219,7 @@ class ECGPlotter():
             
         title = '{}\n{}/{}'.format(os.path.basename(self.file), 
                                   page, self.max_page)
+        title += ' - flipped'*self.flipped
         print('loading batch {}'.format(title))
 
         plt.suptitle(title)
@@ -221,7 +239,7 @@ class ECGPlotter():
         middle = ((xmax-xmin)//2)+xmin
         return xmin, middle, xmax
     
-    
+    #%% key press
     def key_press(self, event):
         
         
@@ -252,6 +270,10 @@ class ECGPlotter():
             self.page += 1
         elif event.key=='left':
                 self.page -= 1
+        elif event.key=='u':
+            self.data = -self.data
+            print('flipping u/d')
+            self.flipped = not self.flipped
         else:
             print(helpstr)
             print('unknown key {}'.format(event.key))
@@ -307,14 +329,14 @@ class ECGPlotter():
             print('unknown button', event.button)
         plt.pause(0.001)
     
-
+#%% main
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Load the visualizer for artefacts')
     parser.add_argument('-edf', '--edf_file', type=str,
                          help='A link to an edf-file. The channel ECG I  needs to be present.')
     parser.add_argument('-mat', '--mat_file', type=str,
                          help='A link to an mat-file created by Kubios.'
-                              'It contains the RRs and the artefact annotation')
+                              'It contains the trrs and the artefact annotation')
     parser.add_argument('-nrows', type=int, default=2,
                          help='Number of rows to display in the viewer')
     parser.add_argument('-ncols', type=int, default=2,
@@ -342,5 +364,3 @@ if __name__=='__main__':
     plt.show(block=True)
 
 
-
-# %%

@@ -31,9 +31,30 @@ def extract_features(patient):
     kubios = patient.feats.get_data()
     feats = patient.feats
     
+    RR = kubios['Data']['RR']
+    T_RR = kubios['Data']['T_RR'] - patient.startsec
+    
+    #TODO find a better location for these settings
+    wsize = 30
+    step = 30
+    
+    windows = features.extract_RR_windows(T_RR, RR, wsize=wsize, step=step)
+    artefacts = features.artefact_detection(RR,T_RR, wsize=wsize, step=step)
+    
+    ## add artefacts to the main entry
+    art_entry = CustomEntry('artefacts.npy')
+    art_entry.set_data(artefacts)
+    patient.epochs_artefacts = len(artefacts)
+    patient.artefact_percentage = np.mean(artefacts)
+    patient.add_entry(art_entry)
+    
+    ## actual feature calculation
     ecg = patient.ECG.get_data()
     sfreq = patient.ECG.sampleRate
-    rr = patient.rr.get_times()
+    RR = patient.rr.get_times()
+    
+    # 
+    hrvanalysis.get_frequency_domain_features(windows)
     
     for nr, name in cfg.mapping_feats.items():
         id = f'feats/{name}.csv'

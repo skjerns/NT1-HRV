@@ -73,6 +73,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.age = attribs[code].get('age', -1)
     u.match = attribs[code].get('match', '')
     u.channels = str(', '.join(header['channels']))
+    u.startsec = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
         
     # if the ECG/EEG is broken, mark it
     edfs_ecg_broken = [p[1] for p in misc.read_csv(cfg.edfs_discard) if p[3]=='1']
@@ -293,32 +294,24 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             tqdm_desc(f'{code}: Reading Kubios')
             mat = loadmat(file)
             HRV = mat['Res']['HRV']
-            tvWindow = mat['Res']['HRV']['Param']['tvWindow']
-            tvWindowShift = mat['Res']['HRV']['Param']['tvWindowShift']
-            if tvWindow!=30:
-                print(f'WARNING, tvWindow (Kubios) is not 30 but {tvWindow} for {code}')
-            if tvWindowShift!=30:
-                print(f'WARNING, tvWindowShift (Kubios) is not 30 but {tvWindowShift} for {code}')
             startsecond = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
-            T_RR = HRV['Data']['T_RR'].squeeze() - startsecond
-            T_RR = list(zip(T_RR, ['RR']*len(T_RR)))
-            if not 'RR' in u:
-                rr_entry = EventEntry(id='RR.csv', parent=u)
-                rr_entry.set_data(T_RR, ch_names='RR')
-                  
+
             feats_entry = CustomEntry('feats.pkl', parent=u)
             feats_entry.set_data(HRV, comment='pickle dump of the kubios created features file', fileType='pickle')
+        
+        
         #%% add artefact
-        elif file.endswith('npy'):
-            if  'artefacts' in u and not overwrite: continue
-            tqdm_desc(f'{code}: Reading artefacts')
-            art = np.load(file).ravel()
-            u.epochs_art = len(art)//2
-            u.artefact_percentage = np.mean(art)
-            times = np.arange(len(art))
-            art = np.vstack([times, art]).T
-            artefact_entry = ValuesEntry(id='artefacts.csv', parent=u)
-            artefact_entry.set_data(art, sampleRate=1/15, dataType='int16')
+        ############ removed artefact detection and calculated from kubios above
+        # elif file.endswith('npy'):
+        #     if  'artefacts' in u and not overwrite: continue
+        #     tqdm_desc(f'{code}: Reading artefacts')
+        #     art = np.load(file).ravel()
+        #     u.epochs_art = len(art)//2
+        #     u.artefact_percentage = np.mean(art)
+        #     times = np.arange(len(art))
+        #     art = np.vstack([times, art]).T
+        #     artefact_entry = ValuesEntry(id='artefacts.csv', parent=u)
+        #     artefact_entry.set_data(art, sampleRate=1/15, dataType='int16')
             
         elif file.endswith('.edf'):
             pass
@@ -347,5 +340,5 @@ if __name__=='__main__':
         if not 'Y' in answer.upper():
             execute = False
     if execute:
-        Parallel(n_jobs=1, batch_size=4)(delayed(to_unisens)(
-            edf_file, unisens_folder=unisens_folder, skip_exist=True) for edf_file in tqdm(files, desc='Converting'))
+        Parallel(n_jobs=5, batch_size=4)(delayed(to_unisens)(
+            edf_file, unisens_folder=unisens_folder, skip_exist=False, overwrite=False) for edf_file in tqdm(files, desc='Converting'))

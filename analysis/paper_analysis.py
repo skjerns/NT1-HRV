@@ -18,7 +18,7 @@ Participants:
 
 Calculations:
     Cardiovascular:
-    - the mean HR of each epoch was calculated
+e    - the mean HR of each epoch was calculated
     - HR, HRV, resp. freq var. for each sleep stage 
     - low frequency (LF; 0.04–0.15 Hz) power via FFT (sympathetical activity)
     - high frequency (HF; 0.15–0.4 Hz) power via FFT (vagal activity)
@@ -116,6 +116,7 @@ stimer.stop()
 # ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
 ss = ss.stratify() # only use matched participants
 p = ss[1]
+
 # stop
 #%%### Van Meijden 2015 Table 1
 
