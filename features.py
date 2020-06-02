@@ -2,8 +2,11 @@
 """
 Created on Tue Mar 24 12:57:00 2020
 
-@author: nd269
+RR_windows contains RR intervals in milliseconds!
+
+@author: Simon Kern
 """
+import logging as log
 import config as cfg
 import numpy as np
 import scipy
@@ -12,95 +15,181 @@ from scipy import stats
 import hrvanalysis
 from joblib.memory import Memory
 
-
-# # create empty dummy functions
-# _locals = locals()
-# for key, name in cfg.mapping_feats.items():
-#     _locals[name] = lambda *args, **kwargs:  False
-
-# cache call to hrvanalysis, as
+### caching dir to prevent recomputation of reduntant functions
+if hasattr(cfg, 'folder_cache'):
+    print(f'caching enabeld in features.py to {cfg.folder_cache}')
+    # memory = Memory(cfg.folder_cache, verbose=0)
+    memory = Memory(None, verbose=0)
+else:
+    print('caching disabled in features.py')
+    memory = Memory(None, verbose=0)
+###################################################
 
     
-def dummy(ecg, **kwargs):
+def dummy(RR_windows, **kwargs):
     """
     each function here should be named exactly as the feature 
     name in config.features_mapping.
     Like this the feature extraction can be done automatically.
     The function can accept the following parameters:
         
-    ecg, rr, kubios
+    RR_windows: a list of windows with RR intervals denoted in SECONDS 
+    
+    IMPORTANT: Note that RRs are in SECONDS not MILLISECONDS
+               and need to be converted if necessary inside the feature funcs
     
     all functions should accept **kwargs that are ignored.
     """
     pass
     
+    diff_nni = np.diff(nn_intervals)
+    length_int = len(nn_intervals)
+
+    # Basic statistics
+    mean_nni = np.mean(nn_intervals)
+    median_nni = np.median(nn_intervals)
+    range_nni = max(nn_intervals) - min(nn_intervals)
+
+    sdsd = np.std(diff_nni)
+    rmssd = np.sqrt(np.mean(diff_nni ** 2))
+
+    nni_50 = sum(np.abs(diff_nni) > 50)
+    pnni_50 = 100 * nni_50 / length_int
+    nni_20 = sum(np.abs(diff_nni) > 20)
+    pnni_20 = 100 * nni_20 / length_int
+
+    # Feature found on github and not in documentation
+    cvsd = rmssd / mean_nni
+
+    # Features only for long term recordings
+    sdnn = np.std(nn_intervals, ddof=1)  # ddof = 1 : unbiased estimator => divide std by n-1
+    cvnni = sdnn / mean_nni
+
+    
     
 # 1  
-def HR(RR_windows):
-    """
-    Mean heart rate of one window
-    
-    :param RR: A list of several RR interval array.
-               Each array contains the RR intervals of a specific time window
-               That means of a window of e.g. 30 seconds or 60 seconds
-    
-    """
-    assert isinstance(RR_windows, (list, np.ndarray))
-    if isinstance(RR_windows, np.ndarray): 
-        assert RR_windows.ndim==2, 'Must be 2D'
-    HRs = []
+def mean_HR(RR_windows):
+    feat = []
     for wRR in RR_windows:
-        seconds = np.sum(wRR)
-        n_peaks = len(wRR)
-        if seconds<=0:
+        if len(wRR)<2:
             HR = np.nan
         else:
-            HR = n_peaks/seconds*60
-        HRs.append(HR)
-    return HRs
+            HR = len(wRR)/np.sum(wRR)*60
+        feat.append(HR)
+    return np.array(feat)
 
 # 2
 def mean_RR(RR_windows):
-    assert isinstance(RR_windows, (list, np.ndarray))
-    if isinstance(RR_windows, np.ndarray): 
-        assert RR_windows.ndim==2, 'Must be 2D'
-    mRRs = []
+    feat = []
     for wRR in RR_windows:
-        if len(wRR)==0:
+        if len(wRR)<1:
             mRR = np.nan
         else:
             mRR = np.mean(wRR)
-        mRRs.append(mRR)
-    return mRRs
-
+        feat.append(mRR)
+    return np.array(feat)
 
 
 # 4
-def RMSSD(kubios, **kwargs):
-    data = kubios['TimeVar']['RMSSD']
-    return data.squeeze()
+def RMSSD(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            RNSSD = np.nan
+        else:
+            diffRR = np.diff(wRR)
+            RNSSD = np.sqrt(np.mean(diffRR ** 2))
+        feat.append(RNSSD)
+    return np.array(feat)
 
 # 6
-def pNN50(kubios, **kwargs):
-    data = kubios['TimeVar']['pNNxx']
-    return data.squeeze()
+def pNN50(RR_windows):
+    return pNNXX(RR_windows, XX=50)
+
+def SDNN(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<1:
+            SDNN = np.nan
+        else:
+            SDNN = np.std(wRR)
+        feat.append(SDNN)
+    return np.array(feat)
+
+def SDSD(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            SDSD = np.nan
+        else:
+            diffRR = np.diff(wRR)
+            SDSD = np.std(diffRR)
+        feat.append(SDSD)
+    return np.array(feat)
+
 
 # 10
-def LF(kubios, **kwargs):
-    data = kubios['TimeVar']['LF_power']
-    return data.squeeze()
-
+def LF(RR_windows):
+    feat = get_frequency_domain_features(RR_windows)['lf']
+    return np.array(feat)
 # 11
-def HF(kubios, **kwargs):
-    data = kubios['TimeVar']['HF_power']
-    return data.squeeze()
+def HF(RR_windows):
+    feat = get_frequency_domain_features(RR_windows)['hf']
+    return np.array(feat)
 
 # 12
-def LF_HF(kubios, **kwargs):
-    data = kubios['TimeVar']['LF_power']/kubios['TimeVar']['HF_power']
-    return data.squeeze()
+def LF_HF(RR_windows):
+    feat = get_frequency_domain_features(RR_windows)['lf_hf_ratio']
+    return np.array(feat)
+   
+def pNNXX(RR_windows, XX=50):
+    """
+    Calculate the pNN index for a given millisecond interval difference
+    pNN50 is the percentage of successive beats that differ more than 50ms
+    """
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            pNN50 = np.nan
+        else:
+            diffRR = np.diff(wRR)
+            pNN50 = ((diffRR>(XX/1000)).sum()/len(diffRR))*100
+        feat.append(pNN50)
+    return np.array(feat)
 
+@memory.cache
+def get_frequency_domain_features(RR_windows):
+    """
+    Calculate frequency domain features of this RR.
+    This function is being cached as it computes a bunch of features
+    at the same time 
+    
+    returns
+    {    'lf': 0.0,
+         'hf': 0.0,
+         'lf_hf_ratio': nan,
+         'lfnu': nan,
+         'hfnu': nan,
+         'total_power': 0.0,
+         'vlf': 0.0}
+    """ 
+    assert isinstance(RR_windows, (list, np.ndarray))
+    if isinstance(RR_windows, np.ndarray): 
+        assert RR_windows.ndim==2, 'Must be 2D'
+        
+    if any([np.any(wRR>1000) for wRR in RR_windows if len(wRR)>0]):
+        log.warn('Values seem to be in ms instead of seconds! Algorithm migh fail.')
+        
+    feats = { x:[] for x in ['lf', 'hf', 'lf_hf_ratio', 'lfnu', 'hfnu', 'total_power', 'vlf']}
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            for key, val in feats.items(): feats[key].append(np.nan)
+        else:
+            mRR = hrvanalysis.get_frequency_domain_features(wRR*1000)
+            for key, val in mRR.items(): feats[key].append(val)
+    return feats
 
+#%% other functions
 
 def _window_view(a, window, step = None, axis = None, readonly = True):
         """
@@ -220,7 +309,6 @@ def extract_RR_windows(T_RR, RR, wsize, step=None, pad=True,
                    len(signal)//stride windows (e.g. same as hypnogram)
     """ 
     
-    
     # last detected peak should give roughly the recording length.
     # however, this is not always true, ie with a flat line at the end
     if T_RR[0]>1000: 
@@ -325,7 +413,7 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
             art.append(True)
             continue
         else:
-            diff = np.where(w_RR_pre!=w_RRi_post)[0]
+            diff = np.where(not np.isclose(w_RR_pre, w_RRi_post))[0]
             # 5. special case, are they consecutive or not?
             if len(diff)==3:
                 # are the consecutive? Then the summary of their distance should be 3
@@ -353,13 +441,12 @@ if __name__=='__main__':
     kubios = p.feats.get_data()['Data']
     RR = kubios['RR']
     T_RR = kubios['T_RR']-p.startsec
-    wsize = 30
+    wsize = 300
     step = None
     artefact_detection(RR,T_RR, wsize, step)
-    windows = extract_RR_windows(T_RR, RR, wsize)
-    
-    
+    RR_windows = extract_RR_windows(T_RR, RR, wsize, step=30)
     ## testing RR window extraction
+
     # from sleep import Patient
     # p = Patient('Z:/NT1-HRV-unisens/009_08813')
     # data = p.feats.get_data()['Data']

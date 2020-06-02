@@ -22,7 +22,7 @@ def extract_from_mat(folder=None, overwrite=False):
     print('Converting files in ', folder)
     files = ospath.list_files(folder, exts='hrv.mat')
     for old_file in tqdm(files):
-        tmp_file = tempfile.TemporaryFile().name
+        tmp_file = tempfile.TemporaryFile(prefix='remove_ecg_from_mat').name
         new_file = os.path.splitext(old_file)[0] + '_small.mat'
         
         if os.path.exists(new_file) and not overwrite:

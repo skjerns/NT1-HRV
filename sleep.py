@@ -17,9 +17,9 @@ import time
 import stimer
 import sleep_utils
 import features
-from functools import wraps
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
+from boltons.funcutils import wraps
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.filters import gaussian_filter1d
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
@@ -266,14 +266,15 @@ class Patient(Unisens):
         sfreq = int(self.attrib.get('sampling_frequency', -1))
         seconds = int(self.attrib.get('duration', 0))
         length = time.strftime('%H:%M', time.gmtime(seconds))
-        gender = self.attrib.get('gender', '')
+        gender = self.attrib.get('gender', 'nogender')
+        group = self.attrib.get('group','nogroup')
         age = self.attrib.get('age', -1)
         
         if 'feats' in  self:
             nfeats = len(self['feats'])
         else:
             nfeats = 'None'
-        return f'Patient({name} ({self.group}), {length}, {sfreq} Hz, {nfeats} feats, '\
+        return f'Patient({name} ({group}), {length}, {sfreq} Hz, {nfeats} feats, '\
                f'{gender} {age}y)'
     
     def __str__(self):
@@ -283,16 +284,6 @@ class Patient(Unisens):
         if isinstance(folder, Patient): return None
         if not 'autosave' in kwargs: kwargs['autosave'] = False
         super().__init__(folder, convert_nums=True, *args, **kwargs)
-
-         
-        
-    @error_handle
-    def extract_feature(self, name, wsize, step, only_sleeptime=False):
-        """Create a feature with the given parameters for this Patient
-        Warning: Recalculation of frequency based feature can take a long 
-        time
-        """
-
         
         
     @error_handle
@@ -329,27 +320,58 @@ class Patient(Unisens):
             CustomEntry('feats/T_RR.npy', parent=self.feats).set_data(T_RR)
             self._readonly = _readonly
         assert len(T_RR)==len(RR)+1, 'T_RR does not fit to RR, seems wrong. {len(T_RR)}!={len(RR)+1}'
+        # last but not least we convert the RRs to milliseconds.
         return T_RR, RR
     
     
     @error_handle
-    def get_artefacts(self, only_sleeptime=False, wsize=30, step=None):
+    def get_artefacts(self, only_sleeptime=False, wsize=30, step=None,
+                      offset=0, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
         have an artefact.
         """
-        cache = f'_cache_art_{only_sleeptime}_{wsize}_{step}'
-        if hasattr(self, cache):
-            return self.__dict__[cache]
+        if offset: raise NotImplementedError
+        if step is None: step = wsize
+        
+        # this is th artefact name including the parameters
+        # this way we can store several versions of the artefacts
+        # calculated for different parameters.
+        art_name = f'artefacts-{int(wsize)}-{int(step)}-{int(offset)}.npy'
+        
+        ### now some caching tricks to speed up loading of features
+        # if cached, reload this cached version
+        if cache and hasattr(self, f'_cache_{art_name}'):
+            art = self.__dict__[f'_cache_{art_name}']
+            
+        # if not cached, but already computed, load computed version
+        elif art_name in self:      
+            art = self.feats[art_name].get_data()
+            
+        # else: not computed and not cached, compute this feature now.  
         else:
+            # receive RRs to calculate artefacts on this
             T_RR, RR = self.get_RR()
-            stimer.start()
-            art = features.artefact_detection(T_RR, RR, wsize, step)
-            if only_sleeptime:
-                if not hasattr(self, 'sleep_onset'): self.get_hypno()
-                art = art[self.sleep_onset//step:self.sleep_offset//step]
-            self.__dict__[cache] = art
+            
+            art = np.array(features.artefact_detection(T_RR,RR, wsize, step))
+            # we need to change the readability of this Patient
+            # to store newly created features.
+            _readonly = self._readonly
+            self._readonly = False
+            entry = CustomEntry(art_name, parent=self).set_data(art)
+            # also save the parameters just in case
+            entry.wsize = wsize
+            entry.step = step
+            entry.offset = offset
+            self._readonly = _readonly
+          
+        # save for caching purposes
+        if cache: self.__dict__[f'_cache_{art_name}'] = art 
+
+        if only_sleeptime:
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            art = art[self.sleep_onset//step:self.sleep_offset//step]
         return art
     
     @error_handle
@@ -430,31 +452,54 @@ class Patient(Unisens):
     def get_feat(self, name, only_sleeptime=False, wsize=30, step=None, 
                  offset=0, cache=True, only_clean=True):
         """
-        Returns the given feature with the chosen parameters
+        Returns the given feature with the chosen parameters.
+        
+        ## Features:
+        On-the-fly-calculation:
+            If the feature is not yet computed we copmute it.
+        Caching: 
+            Features will be kept in memory to reload them quickly.
         """
         if offset: raise NotImplementedError
         if step is None: step = wsize
         if isinstance(name, int):
             name =  config.mapping_feats[name]
+        assert name in features.__dict__, \
+            f'{name} is not present in features.py. Please check feature name'
         
+        # this is th feature name including the parameters
+        # this way we can store several versions of the features
+        # calculated for different parameters.
         feat_name = f'feats/{name}-{int(wsize)}-{int(step)}-{int(offset)}.npy'
         
+        ### now some caching tricks to speed up loading of features
         # if cached, reload this cached version
         if cache and hasattr(self, f'_cache_{feat_name}'):
             feat = self.__dict__[f'_cache_{feat_name}']
-        # if not cached, but already computed, lead computed version
+            
+        # if not cached, but already computed, load computed version
         elif feat_name in self.feats:      
             feat = self.feats[feat_name].get_data()
-        # not computed, compute this feature now.  
+            
+        # else: not computed and not cached, compute this feature now.  
         else:
             # receive RRs to calculate feature on
             T_RR, RR = self.get_RR()
+            RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize, 
+                                                     step=step, pad = True)
+            # retrieve the function handle from functions.py
+            # there should be a function with this name present there.
             feat_func = features.__dict__[name]
-            RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize, step=step)
             feat = np.array(feat_func(RR_windows))
+            # we need to change the readability of this Patient
+            # to store newly created features.
             _readonly = self._readonly
             self._readonly = False
-            CustomEntry(feat_name, parent=self.feats).set_data(feat)
+            entry = CustomEntry(feat_name, parent=self.feats).set_data(feat)
+            # also save the parameters just in case
+            entry.wsize = wsize
+            entry.step = step
+            entry.offset = offset
             self._readonly = _readonly
           
         # save for caching purposes
@@ -466,9 +511,8 @@ class Patient(Unisens):
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            feat = feat[self.sleep_onset//30:self.sleep_offset//30]
+            feat = feat[self.sleep_onset//step:self.sleep_offset//step]
         return feat
-    
 
         
     

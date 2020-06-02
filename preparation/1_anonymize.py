@@ -60,7 +60,7 @@ def anonymize_and_streamline(old_file, target_folder):
     
     # use a temporary file to write and then move it, 
     # this avoids half-written files that cannot be read later
-    tmp_name = tempfile.TemporaryFile().name
+    tmp_name = tempfile.TemporaryFile(prefix='anonymize').name
 
     if old_name in pre_coding_discard:
         print('EDF is marked as corrupt and will be discarded')

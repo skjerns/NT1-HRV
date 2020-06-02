@@ -15,7 +15,9 @@ import features
 from unisens import SignalEntry, ValuesEntry, EventEntry
 from sleep import Patient, SleepSet
 import sleep_utils
+from unisens import CustomEntry
 import matplotlib.pyplot as plt
+
 
 
 class TestFeatures(unittest.TestCase):
@@ -36,16 +38,46 @@ class TestFeatures(unittest.TestCase):
         assert windows.shape==(3,60)
         
         
-    def test_HR(self):
-        RR = [np.ones(30), np.ones(60)/2, np.ones(60)*1.5, []]
-        feat = features.HR(RR)
-        self.assertEqual(feat, [60, 120, 40, np.nan])
+    def test_mean_HR(self):
+        RR_windows = [np.ones(30), np.ones(60)/2, np.ones(60)*1.5, []]
+        feat = features.mean_HR(RR_windows)
+        np.testing.assert_array_equal(feat, [60, 120, 40, np.nan])
 
-    def test_meanRR(self):
-        RR = [np.ones(30), np.ones(60)/2, np.ones(60)*1.5, []]
-        feat = features.mean_RR(RR)
-        self.assertEqual(feat, [1, 0.5, 1.5, np.nan])
         
+    def test_meanRR(self):
+        RR_windows = [np.ones(30), np.ones(60)/2, np.ones(60)*1.5, []]
+        feat = features.mean_RR(RR_windows)
+        np.testing.assert_array_equal(feat, [1, 0.5, 1.5, np.nan])
+        
+        
+    def test_RMSSD(self):
+        RR_windows = [np.arange(1,10, 1.5), []]
+        feat = features.RMSSD(RR_windows)
+        np.testing.assert_array_equal(feat, [1.5, np.nan])
+        
+        
+    def test_pNN50(self):
+        RR_windows = [np.arange(1, 2, 0.04), [1, 1.05, 1.1, 1.16, 1.17, 2], np.arange(1, 2, 0.06),  []]
+        feat = features.pNN50(RR_windows)
+        np.testing.assert_array_equal(feat, [0, 80, 100, np.nan])
+        
+    def test_SDNN(self):
+        RR_windows = [np.ones(30), [0, 1],  []]        
+        feat = features.SDNN(RR_windows)
+        np.testing.assert_array_equal(feat, [0, 0.5, np.nan])       
+        
+        
+    def test_LF(self):
+        raise NotImplementedError
+
+    def test_HF(self):
+        raise NotImplementedError
+
+    def test_LF_HF(self):
+        raise NotImplementedError
+
+
+
 class TestUtils(unittest.TestCase):
     
     def setUp(self):
@@ -74,7 +106,7 @@ class TestPatient(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
-        cls.tmpdir = tempfile.mkdtemp(prefix='unisens_')
+        cls.tmpdir = tempfile.mkdtemp(prefix='testpatient_')
         cls.patient_list = [os.path.join(cls.tmpdir, 'u1'), 
                              os.path.join(cls.tmpdir, 'u2')]
         cls.patient_str = []
@@ -94,23 +126,17 @@ class TestPatient(unittest.TestCase):
         times = np.arange(len(hypno))
         hypno = np.vstack([times, hypno]).T
         
-        artefacts = np.zeros(len(hypno)*2, dtype=bool)
-        artefacts[16:22] = True
-        artefacts[28] = True
-        times = np.arange(len(artefacts))
-        artefacts = np.vstack([times, artefacts]).T
-        
-        
+
         arousals = [[7, 5], [20, 2]]
         ecg = np.random.rand(600 * 256)
         eeg = np.random.rand(600 * 256)
         
         SignalEntry('ECG.bin', parent=p).set_data(ecg)
         SignalEntry('EEG.bin', parent=p).set_data(eeg)
-        EventEntry('artefacts.csv', parent=p).set_data(artefacts, samplingRate=1/15)
         EventEntry('hypnogram.csv', parent=p).set_data(hypno, samplingRate=1/30)
         EventEntry('arousals.csv', parent=p).set_data(arousals, samplingRate=1)
         cls.p = p
+        
         
     @classmethod
     def tearDownClass(cls):
@@ -144,7 +170,6 @@ class TestPatient(unittest.TestCase):
         arousals1 = self.p.get_arousals()
         ecg1 = self.p.get_ecg()
         eeg1 = self.p.get_signal('eeg')
-        art1 = self.p.get_artefacts()
         
         onset = self.p.sleep_onset
         offset = self.p.sleep_offset
@@ -156,33 +181,12 @@ class TestPatient(unittest.TestCase):
         arousals2 = self.p.get_arousals(only_sleeptime=True)
         ecg2 = self.p.get_ecg(only_sleeptime=True)
         eeg2 = self.p.get_signal('eeg', only_sleeptime=True)
-        art2 = self.p.get_artefacts(only_sleeptime=True)      
 
-        
         np.testing.assert_array_equal(hypno2, [2]*10 + [3]*3 + [5]*4 + [5] + [2]*4 )
         np.testing.assert_array_equal(arousals2, arousals1-onset//30 )
         np.testing.assert_array_equal(ecg2, ecg1[onset*256:offset*256] )
         np.testing.assert_array_equal(eeg2, eeg1[onset*256:offset*256] )
-        np.testing.assert_array_equal(art2, art1[onset//30:offset//30] )
 
-    def test_artefacts_neighbours(self):
-        hypno1 = self.p.get_hypno()
-        art1 = self.p.get_artefacts()
-        assert sum(art1)==4
-        
-        art = self.p.get_artefacts(block_window_length=30)
-        assert sum(art)==7
- 
-        art = self.p.get_artefacts(block_window_length=45)
-        assert sum(art)==8
-        
-        art = self.p.get_artefacts(block_window_length=46)
-        assert sum(art)==10
-        
-        hypno = self.p.get_hypno(only_sleeptime=True)
-        art = self.p.get_artefacts(only_sleeptime=True)
-        np.testing.assert_array_equal(hypno[art], hypno1[art1]) 
-        
         
     def test_serialize(self)       :
         with open(self.tmpdir + '/asd.pkl', 'wb') as f:   
@@ -192,8 +196,11 @@ class TestPatient(unittest.TestCase):
             pickle.load(f)         
             
           
- 
+#%% main
 if __name__ == '__main__':
     plt.close('all')
+    location = features.memory.location 
+    features.memory.location = None
     unittest.main()
+    features.memory.location = location
     

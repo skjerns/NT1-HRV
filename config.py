@@ -14,21 +14,10 @@ All privacy
 """
 import json
 import os, sys
-from misc import CaseInsensitiveDict
 import ospath
 import getpass
 import platform
 from pathlib import Path
-
-
-# class AttrDict(dict):
-#     """
-#     A dictionary that allows access via attributes
-#     a['entry'] == a.entry
-#     """
-#     def __init__(self, *args, **kwargs):
-#         super(AttrDict, self).__init__(*args, **kwargs)
-#         self.__dict__ = self
 
 
 def get_dropbox_location():
@@ -93,6 +82,10 @@ root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() el
 ############################################
 #%% GENERAL LOOKUP TABLES AND VARIABLES
 ############################################
+
+default_wsize = 300
+default_step  = 30
+default_offset = 0
 
 ecg_channel = 'ECG I'
 max_age_diff = 3 # maximum age difference to make a matching
@@ -173,7 +166,6 @@ mapping_feats = {1:  'mean_HR',
 
 
 mapping_feats.update( {v: k for k, v in mapping_feats.items()}) # reverse as well
-mapping_feats = CaseInsensitiveDict(mapping_feats)
 
 
 mapping_channels = {  # this is the mapping to streamline channel names of different recordings
