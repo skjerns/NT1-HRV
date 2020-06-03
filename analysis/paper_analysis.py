@@ -284,7 +284,6 @@ for name in features:
         for group in ['nt1', 'control']:
             subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
             values = []
-            
             for p in subset:
                 hypno = p.get_hypno(only_sleeptime=True)
                 # get the phase sequence, the lengths of the phase, 
@@ -293,20 +292,19 @@ for name in features:
                 # get all indices where we have the given stage with longer
                 # period than the mean stage length
                 minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
-                minmean = int(minmean)
+                minmean = 16#int(minmean)
                 # we need it in epoch notation, so *2
                 phase_starts = np.where(np.logical_and(stages==stage, lengths>minmean))[0]
-                feat = p.get_feat(name, only_sleeptime=True)
-                artefacts = p.get_artefacts(only_sleeptime=True, block_window_length=300)
+                feat = p.get_feat(name, only_sleeptime=True, wsize=300, step=30)
+                # loop through all phases that are longer than minmean and copy features from there
                 for start in phase_starts:
                     bool_idx = np.zeros(len(feat), dtype=bool)
                     bool_idx[idxs[start]: idxs[start]+lengths[start]] = True
                     feat_values = feat[idxs[start]: idxs[start]+lengths[start]]
-                    artefacts = artefacts[idxs[start]: idxs[start]+lengths[start]]==False
-                    artefacts = (artefacts==False)[:minmean]
+                    if len(feat_values)<minmean: continue
                     values.append(feat_values[:minmean]) # only take %minmean% epochs
-                    
-            post_transitions[name][stage][group] = {'values':np.array(values)}
+
+            post_transitions[name][stage][group] = {'values':np.atleast_2d(values)}
             
     # calculate statistics and print out results
     title = f'{name} rate changes directly after Sleep Phase Change'

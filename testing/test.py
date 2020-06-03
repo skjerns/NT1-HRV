@@ -66,15 +66,37 @@ class TestFeatures(unittest.TestCase):
         feat = features.SDNN(RR_windows)
         np.testing.assert_array_equal(feat, [0, 0.5, np.nan])       
         
-        
-    def test_LF(self):
-        raise NotImplementedError
+    def test_VLF(self):
+        # VlfBand(0.0033, 0.04)
+        fs = 100 # sample rate
+        f = 0.005 # the frequency of the signal
+        x = np.arange(fs*5) # the points on the x axis for plotting
+        # compute the value (amplitude) of the sin wave at the for each sample
+        y = np.sin(2*np.pi*f * (x/fs))
+
+        vlf = features.VLF([y])
+        lf = features.LF([y])
+        hf = features.HF([y])
+
+        self.assertGreater(vlf, lf)
+        self.assertGreater(vlf, hf)
+
 
     def test_HF(self):
-        raise NotImplementedError
+        # HfBand(0.15, 0.40)
+        fs = 1000 # sample rate
+        f = 0.3 # the frequency of the signal
+        x = np.arange(fs*5) # the points on the x axis for plotting
+        # compute the value (amplitude) of the sin wave at the for each sample
+        y = np.sin(2*np.pi*f * (x/fs))
 
-    def test_LF_HF(self):
-        raise NotImplementedError
+        vlf = features.VLF([y])
+        lf = features.LF([y])
+        hf = features.HF([y])
+
+        self.assertGreater(hf, vlf)
+        self.assertGreater(hf, lf)
+
 
 
 
@@ -136,6 +158,7 @@ class TestPatient(unittest.TestCase):
         EventEntry('hypnogram.csv', parent=p).set_data(hypno, samplingRate=1/30)
         EventEntry('arousals.csv', parent=p).set_data(arousals, samplingRate=1)
         cls.p = p
+        cls.f = Patient('xx_xxx')
         
         
     @classmethod
@@ -195,7 +218,11 @@ class TestPatient(unittest.TestCase):
         with open(self.tmpdir + '/asd.pkl', 'rb') as f:   
             pickle.load(f)         
             
-          
+    def test_feature_creation(self)       :
+        self.f
+
+
+
 #%% main
 if __name__ == '__main__':
     plt.close('all')

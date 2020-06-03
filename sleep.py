@@ -347,7 +347,7 @@ class Patient(Unisens):
             
         # if not cached, but already computed, load computed version
         elif art_name in self:      
-            art = self.feats[art_name].get_data()
+            art = self[art_name].get_data()
             
         # else: not computed and not cached, compute this feature now.  
         else:
@@ -506,7 +506,7 @@ class Patient(Unisens):
         if cache: self.__dict__[f'_cache_{feat_name}'] = feat 
 
         if only_clean:
-            art = self.get_artefacts(only_sleeptime=only_sleeptime, wsize=wsize, step=step)
+            art = self.get_artefacts(only_sleeptime=False, wsize=wsize, step=step)
             feat[art] = [np.nan] * sum(art)
 
         if only_sleeptime:

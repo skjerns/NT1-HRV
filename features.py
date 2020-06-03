@@ -18,8 +18,8 @@ from joblib.memory import Memory
 ### caching dir to prevent recomputation of reduntant functions
 if hasattr(cfg, 'folder_cache'):
     print(f'caching enabeld in features.py to {cfg.folder_cache}')
-    # memory = Memory(cfg.folder_cache, verbose=0)
-    memory = Memory(None, verbose=0)
+    memory = Memory(cfg.folder_cache, verbose=0)
+    # memory = Memory(None, verbose=0)
 else:
     print('caching disabled in features.py')
     memory = Memory(None, verbose=0)
@@ -42,33 +42,10 @@ def dummy(RR_windows, **kwargs):
     """
     pass
     
-    diff_nni = np.diff(nn_intervals)
-    length_int = len(nn_intervals)
 
-    # Basic statistics
-    mean_nni = np.mean(nn_intervals)
-    median_nni = np.median(nn_intervals)
-    range_nni = max(nn_intervals) - min(nn_intervals)
-
-    sdsd = np.std(diff_nni)
-    rmssd = np.sqrt(np.mean(diff_nni ** 2))
-
-    nni_50 = sum(np.abs(diff_nni) > 50)
-    pnni_50 = 100 * nni_50 / length_int
-    nni_20 = sum(np.abs(diff_nni) > 20)
-    pnni_20 = 100 * nni_20 / length_int
-
-    # Feature found on github and not in documentation
-    cvsd = rmssd / mean_nni
-
-    # Features only for long term recordings
-    sdnn = np.std(nn_intervals, ddof=1)  # ddof = 1 : unbiased estimator => divide std by n-1
-    cvnni = sdnn / mean_nni
-
-    
     
 # 1  
-def mean_HR(RR_windows):
+def mean_HR(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         if len(wRR)<2:
@@ -79,7 +56,7 @@ def mean_HR(RR_windows):
     return np.array(feat)
 
 # 2
-def mean_RR(RR_windows):
+def mean_RR(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         if len(wRR)<1:
@@ -91,7 +68,7 @@ def mean_RR(RR_windows):
 
 
 # 4
-def RMSSD(RR_windows):
+def RMSSD(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         if len(wRR)<2:
@@ -103,10 +80,10 @@ def RMSSD(RR_windows):
     return np.array(feat)
 
 # 6
-def pNN50(RR_windows):
+def pNN50(RR_windows, **kwargs):
     return pNNXX(RR_windows, XX=50)
 
-def SDNN(RR_windows):
+def SDNN(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         if len(wRR)<1:
@@ -116,7 +93,7 @@ def SDNN(RR_windows):
         feat.append(SDNN)
     return np.array(feat)
 
-def SDSD(RR_windows):
+def SDSD(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         if len(wRR)<2:
@@ -127,22 +104,26 @@ def SDSD(RR_windows):
         feat.append(SDSD)
     return np.array(feat)
 
+def VLF(RR_windows, **kwargs):
+    feat = get_frequency_domain_features(RR_windows)['vlf']
+    return np.array(feat)
+
 
 # 10
-def LF(RR_windows):
+def LF(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['lf']
     return np.array(feat)
 # 11
-def HF(RR_windows):
+def HF(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['hf']
     return np.array(feat)
 
 # 12
-def LF_HF(RR_windows):
+def LF_HF(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['lf_hf_ratio']
     return np.array(feat)
    
-def pNNXX(RR_windows, XX=50):
+def pNNXX(RR_windows, XX=50, **kwargs):
     """
     Calculate the pNN index for a given millisecond interval difference
     pNN50 is the percentage of successive beats that differ more than 50ms
@@ -172,7 +153,8 @@ def get_frequency_domain_features(RR_windows):
          'hfnu': nan,
          'total_power': 0.0,
          'vlf': 0.0}
-    """ 
+    """
+    assert True
     assert isinstance(RR_windows, (list, np.ndarray))
     if isinstance(RR_windows, np.ndarray): 
         assert RR_windows.ndim==2, 'Must be 2D'
@@ -413,7 +395,7 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
             art.append(True)
             continue
         else:
-            diff = np.where(not np.isclose(w_RR_pre, w_RRi_post))[0]
+            diff = np.where(~np.isclose(w_RR_pre, w_RRi_post))[0]
             # 5. special case, are they consecutive or not?
             if len(diff)==3:
                 # are the consecutive? Then the summary of their distance should be 3

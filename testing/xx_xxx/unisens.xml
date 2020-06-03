@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='utf-8'?>
+<unisens age="24" channels="EOG, EOG LOC-A2, EOG ROC-A1, EEG C3, EEG C4, EMG Chin, ECG I, EMG Chin, EMG Chin, Flow Patient, Thorax, Abdomen, Body, Snore, EEG Fz-A1A2, EEG Cz-A1A2, EEG Pz-A1A2, Plethysmogram, SpO2, PulseRate" code="009_08813" comment="" duration="29309" ecg_broken="False" eeg_broken="False" epochs_hypno="975" epochs_signals="976" gender="male" group="control" match="" measurementId="009_08813" sampling_frequency="200" startsec="80996" timestampStart="2008-12-05T22:29:56" version="2.0">
+   <signalEntry baseline="0.499999999996362" dataType="int16" dmax="32767" dmin="-32768.0" id="ECG.bin" lsbValue="0.953658350499733" pmax="31249.0" pmin="-31249.0" sampleRate="200" unit="mV">
+      <binFileFormat endianess="LITTLE" />
+      <channel name="ECG" />
+   </signalEntry>
+   <signalEntry baseline="3.637978807091713e-12" contentClass="EEG" dataType="int16" dmax="32767" dmin="-32767.0" id="EEG.bin" lsbValue="0.09247108371227149" pmax="3030.0" pmin="-3030.0" sampleRate="200" unit="uV">
+      <binFileFormat endianess="LITTLE" />
+      <channel name="EEG Fz-A1A2" />
+      <channel name="EEG C3" />
+   </signalEntry>
+   <signalEntry baseline="0" dataType="int16" dmax="32767" dmin="-32767.0" id="EOG.bin" lsbValue="1" pmax="3030.0" pmin="-3030.0" sampleRate="100" unit="uV">
+      <binFileFormat endianess="LITTLE" />
+      <channel name="EOG LOC-A2" />
+      <channel name="EOG ROC-A1" />
+   </signalEntry>
+   <signalEntry baseline="0" dataType="int16" dmax="32767" dmin="-32767.0" id="EMG.bin" lsbValue="1" pmax="3030.0" pmin="-3030.0" sampleRate="200" unit="uV">
+      <binFileFormat endianess="LITTLE" />
+      <channel name="EMG Chin" />
+      <channel name="EMG Chin" />
+      <channel name="EMG Chin" />
+   </signalEntry>
+   <eventEntry comment="File: 009_08813&#10;Sleep stages 30s epochs." contentClass="Stage" id="hypnogram_old.csv" sampleRate="0.03333333333333333" typeLength="1">
+      <csvFileFormat decimalSeparator="." separator=";" />
+   </eventEntry>
+   <customEntry comment="pickle dump of the kubios created features file" dataType="pickle" fileType="pickle" id="feats.pkl">
+      <customEntry dataType="numpy" id="feats/mean_RR-300-30-0.npy" offset="0" step="30" wsize="300" />
+      <customEntry dataType="numpy" id="feats/HF-300-30-0.npy" offset="0" step="30" wsize="300" />
+   </customEntry>
+</unisens>
