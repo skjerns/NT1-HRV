@@ -15,15 +15,15 @@ from scipy import stats
 import hrvanalysis
 from joblib.memory import Memory
 
-### caching dir to prevent recomputation of reduntant functions
-if hasattr(cfg, 'folder_cache'):
-    print(f'caching enabeld in features.py to {cfg.folder_cache}')
-    memory = Memory(cfg.folder_cache, verbose=0)
-    # memory = Memory(None, verbose=0)
-else:
-    print('caching disabled in features.py')
-    memory = Memory(None, verbose=0)
-###################################################
+# ### caching dir to prevent recomputation of reduntant functions
+# if hasattr(cfg, 'folder_cache'):
+#     print(f'caching enabled in features.py to {cfg.folder_cache}')
+#     memory = Memory(cfg.folder_cache, verbose=0)
+#     # memory = Memory(None, verbose=0)
+# else:
+#     print('caching disabled in features.py')
+#     memory = Memory(None, verbose=99)
+# ###################################################
 
     
 def dummy(RR_windows, **kwargs):
@@ -138,7 +138,6 @@ def pNNXX(RR_windows, XX=50, **kwargs):
         feat.append(pNN50)
     return np.array(feat)
 
-@memory.cache
 def get_frequency_domain_features(RR_windows):
     """
     Calculate frequency domain features of this RR.
@@ -167,9 +166,10 @@ def get_frequency_domain_features(RR_windows):
         if len(wRR)<2:
             for key, val in feats.items(): feats[key].append(np.nan)
         else:
-            mRR = hrvanalysis.get_frequency_domain_features(wRR*1000)
+            mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int))
             for key, val in mRR.items(): feats[key].append(val)
     return feats
+
 
 #%% other functions
 
@@ -364,7 +364,7 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
         flat line once in a while: 659_88640
         todo: look for tiny ecg as well
         
-    The following artefact correction procedure is applied:
+    The following artefact correction procedure is applied on 30s epochs:
         2. If any RR is > 2 (==HR 30, implausible), discard
         3. If n_RRi == 0: Epoch ok.
         4. If n_RRi<=2: Epoch ok. (keep RRi)
@@ -372,12 +372,17 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
         If n_RRi are not consecutive: Epoch ok (keep RRi)
         else: discard
         6. If n_RRi>=4: Discard epoch.
+
+    The following artefact correction procedure is applied on 300s epochs:
+        If more than 5% is corrected: discard
+        else: keep
         
     """
     if step is None: step = wsize
+    assert wsize in [30, 300], 'Currently only 30 and 300 are allowed as artefact window sizes, we didnt define other cases yet.'
 
     idxs = extract_RR_windows(T_RR, np.arange(len(RR)), wsize, step=step)
-
+ 
     # RR_pre is before correction
     # RR_post is after correction (as coming directly from Kubios)
     RR_pre = np.diff(T_RR)
@@ -396,15 +401,20 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
             continue
         else:
             diff = np.where(~np.isclose(w_RR_pre, w_RRi_post))[0]
+            percentage = len(diff)/len(w_RR_pre)
             # 5. special case, are they consecutive or not?
-            if len(diff)==3:
+            if wsize==30 and len(diff)==3:
                 # are the consecutive? Then the summary of their distance should be 3
                 if np.sum(diff)==3:
                     art.append(True)
                     continue
-            if len(diff)>3:
+            elif wsize==30 and len(diff)>3:
                 art.append(True)
                 continue
+            elif wsize==300 and percentage>0.05:
+                art.append(True)
+                continue
+
         # if we reach this far, no artefact has been detected
         art.append(False)
         
@@ -416,28 +426,11 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
 #%% main 
 if __name__=='__main__':
     
-    
+    import stimer
     ## testing flatline detection
     from sleep import Patient
-    p = Patient('Z:/NT1-HRV-unisens/659_60515')
-    kubios = p.feats.get_data()['Data']
-    RR = kubios['RR']
-    T_RR = kubios['T_RR']-p.startsec
+    p = Patient('Z:/NT1-HRV-unisens/006_62843')
+    T_RR, RR = p.get_RR()
     wsize = 300
-    step = None
-    artefact_detection(RR,T_RR, wsize, step)
-    RR_windows = extract_RR_windows(T_RR, RR, wsize, step=30)
-    ## testing RR window extraction
-
-    # from sleep import Patient
-    # p = Patient('Z:/NT1-HRV-unisens/009_08813')
-    # data = p.feats.get_data()['Data']
-    # RR = data['RR']
-    
-    # T_RR = data['T_RR']
-    # start = datetime.strptime(p.timestampStart,'%Y-%m-%dT%H:%M:%S')
-    # T_RR -= (start.second + start.minute*60 + start.hour*3600)
-    # expected_nwin = p.epochs_hypno
-    # wsize = 30
-    # step = 30
-    # pad = False
+    step = 30
+    RR_windows = extract_RR_windows(T_RR, RR, wsize, step=step)

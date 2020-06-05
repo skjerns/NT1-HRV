@@ -15,6 +15,7 @@ import os
 import re
 import time
 import stimer
+import shutil
 import sleep_utils
 import features
 from matplotlib.ticker import FuncFormatter
@@ -28,7 +29,6 @@ from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
             for text in _nsre.split(s)]    
-    
 
 
 def error_handle(func):
@@ -55,7 +55,7 @@ class SleepSet():
     on a whole set of Patients.
     """
     
-    def __init__(self, patient_list:list=None, readonly=True):
+    def __init__(self, patient_list:list=None, readonly=False):
         """
         Load a list of Patients (edf format). Resample if necessary.
         
@@ -287,14 +287,14 @@ class Patient(Unisens):
         
         
     @error_handle
-    def get_RR(self, offset=False):
+    def get_RR(self, offset=True):
         """
         Retrieve the RR peaks and the T_RR, which is their respective positions
         
         returns: (T_RR, RR)
         """
-        if offset: raise NotImplementedError
-        
+        assert isinstance(offset, bool), 'offset must be boolean not int/float'
+
         if hasattr(self, '_cache_RR'):
             log.debug('Loading cached RR')
             # already loaded within this session
@@ -305,7 +305,7 @@ class Patient(Unisens):
             # previously loaded
             RR = self.feats.RR.get_data()
             T_RR = self.feats.T_RR.get_data()  
-            self._cache_RR = (T_RR, RR)
+            self._cache_RR = (T_RR.copy(), RR.copy())
 
         else:
             log.debug('extracting RR from pkl-file')
@@ -313,26 +313,37 @@ class Patient(Unisens):
             data = self['feats.pkl'].get_data()['Data']
             T_RR = data['T_RR'] - self.startsec
             RR = data['RR']
-            self._cache_RR = (T_RR, RR)
+            self._cache_RR = (T_RR.copy(), RR.copy())
             _readonly = self._readonly
             self._readonly = False
             CustomEntry('feats/RR.npy', parent=self.feats).set_data(RR)
             CustomEntry('feats/T_RR.npy', parent=self.feats).set_data(T_RR)
             self._readonly = _readonly
+
+        # the hypnograms from Domino always start at :00 or :30
+        # so we need to check how much 'overhang' there is at the start
+        # and end of the recording and truncate the recording accordingly
+        if offset:
+            start_at = self.startsec%30
+            log.warn('WARNING: didnt implement offset end yet')
+            idx = np.argmax(T_RR>start_at)
+            T_RR = T_RR - int(T_RR[idx])
+            T_RR = T_RR[idx:]
+            RR = RR[idx:]
+
         assert len(T_RR)==len(RR)+1, 'T_RR does not fit to RR, seems wrong. {len(T_RR)}!={len(RR)+1}'
-        # last but not least we convert the RRs to milliseconds.
         return T_RR, RR
     
     
     @error_handle
     def get_artefacts(self, only_sleeptime=False, wsize=30, step=None,
-                      offset=0, cache=True):
+                      offset=True, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
         have an artefact.
         """
-        if offset: raise NotImplementedError
+        assert wsize in [30, 300], 'Currently only 30 and 300 are allowed as artefact window sizes, we didnt define other cases yet.'
         if step is None: step = wsize
         
         # this is th artefact name including the parameters
@@ -341,7 +352,7 @@ class Patient(Unisens):
         art_name = f'artefacts-{int(wsize)}-{int(step)}-{int(offset)}.npy'
         
         ### now some caching tricks to speed up loading of features
-        # if cached, reload this cached version
+        # if cached, reload this cached version bv
         if cache and hasattr(self, f'_cache_{art_name}'):
             art = self.__dict__[f'_cache_{art_name}']
             
@@ -352,8 +363,8 @@ class Patient(Unisens):
         # else: not computed and not cached, compute this feature now.  
         else:
             # receive RRs to calculate artefacts on this
-            T_RR, RR = self.get_RR()
-            
+            T_RR, RR = self.get_RR(offset=offset)
+            # calculate artefacts given these RRs.
             art = np.array(features.artefact_detection(T_RR,RR, wsize, step))
             # we need to change the readability of this Patient
             # to store newly created features.
@@ -377,15 +388,15 @@ class Patient(Unisens):
     @error_handle
     def get_hypno(self, only_sleeptime=False, cache=True):
         
-        if cache and hasattr(self, '_hypno'):
-            hypno = self._hypno
+        if cache and hasattr(self, '_cache_hypno'):
+            hypno = self._cache_hypno
         else:
             try:
                 hypno = self['hypnogram.csv'].get_data()
             except:
                 hypno = self['hypnogram_old.csv'].get_data()
             hypno = np.array(list(zip(*hypno))[1])
-            self._hypno = hypno
+            self._cache_hypno = hypno
             
         self.sleep_onset = np.argmax(np.logical_and(hypno>0 , hypno<5))*30
         self.sleep_offset = len(hypno)*30-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])*30
@@ -450,7 +461,7 @@ class Patient(Unisens):
     
     @error_handle
     def get_feat(self, name, only_sleeptime=False, wsize=30, step=None, 
-                 offset=0, cache=True, only_clean=True):
+                 offset=True, cache=True, only_clean=True):
         """
         Returns the given feature with the chosen parameters.
         
@@ -460,7 +471,6 @@ class Patient(Unisens):
         Caching: 
             Features will be kept in memory to reload them quickly.
         """
-        if offset: raise NotImplementedError
         if step is None: step = wsize
         if isinstance(name, int):
             name =  config.mapping_feats[name]
@@ -484,7 +494,7 @@ class Patient(Unisens):
         # else: not computed and not cached, compute this feature now.  
         else:
             # receive RRs to calculate feature on
-            T_RR, RR = self.get_RR()
+            T_RR, RR = self.get_RR(offset=offset)
             RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize, 
                                                      step=step, pad = True)
             # retrieve the function handle from functions.py
@@ -506,7 +516,8 @@ class Patient(Unisens):
         if cache: self.__dict__[f'_cache_{feat_name}'] = feat 
 
         if only_clean:
-            art = self.get_artefacts(only_sleeptime=False, wsize=wsize, step=step)
+            art = self.get_artefacts(only_sleeptime=False, wsize=wsize, step=step,
+                                     offset=offset)
             feat[art] = [np.nan] * sum(art)
 
         if only_sleeptime:
@@ -514,11 +525,38 @@ class Patient(Unisens):
             feat = feat[self.sleep_onset//step:self.sleep_offset//step]
         return feat
 
-        
-    
-    """creates a unisens.xml that shows only the features"""
+
+    @error_handle
+    def reset(self):
+        """
+        Will delete all on-the-fly computed variables
+        and reset all caches.
+        removed will be all extracted features, RR intervals, artefacts
+        """
+        assert not self._readonly, 'Can\'t reset readonly Patient'
+        for var in list(self.__dict__):
+            if var.startswith('_cache'):
+                del self.__dict__[var]
+        for feat in list(self.feats):
+            self.feats.remove_entry(feat.id)
+            if os.path.exists(feat._filename):
+                os.remove(feat._filename)
+        for entry in list(self):
+            if entry.id.startswith('artefacts-'):
+                self.remove_entry(entry.id)
+                if os.path.exists(entry._filename):
+                    os.remove(entry._filename)
+        try:
+            if os.path.isdir(self._folder + '/feats/'):
+                os.rmdir(self._folder + '/feats/')
+        except Exception as e:
+            print(e)
+        self.save()
+        return self
+
     @error_handle
     def write_features_to_unisens(self):
+        """creates a unisens.xml that shows only the features"""
         u = Unisens(folder=self._folder, filename='features.xml')
         
         if 'ecg' in self.feats._parent: 
@@ -581,7 +619,7 @@ class Patient(Unisens):
             axs[-1].xaxis.set_major_formatter(formatter)
             
             if hypnogram:
-                artefacts = self.get_artefacts()
+                artefacts = self.get_artefacts(offset=True)
                 hypno = self.get_hypno()
                 sleep_utils.plot_hypnogram(hypno, ax=axs[-1])
                 for i, is_art in enumerate(artefacts):

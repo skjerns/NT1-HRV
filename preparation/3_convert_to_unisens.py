@@ -306,9 +306,9 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                 if not name in features.__dict__: continue
                 wsize = cfg.default_wsize
                 step = cfg.default_step
-                offset = cfg.default_offset
-                u.get_feat(name, wsize=wsize, step=step, offset=offset)
-            u.get_artefacts(wsize=wsize, step=step, offset=offset)
+                offset = True
+                u.get_feat(name, wsize=wsize, step=step, offset=True)
+            u.get_artefacts(wsize=wsize, step=step, offset=True)
 
         
         
@@ -353,4 +353,4 @@ if __name__=='__main__':
             execute = False
     if execute:
         Parallel(n_jobs=5, batch_size=4)(delayed(to_unisens)(
-            edf_file, unisens_folder=unisens_folder, skip_exist=False, overwrite=False) for edf_file in tqdm(files, desc='Converting'))
+            edf_file, unisens_folder=unisens_folder, skip_exist=True, overwrite=False) for edf_file in tqdm(files, desc='Converting'))

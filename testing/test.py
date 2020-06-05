@@ -11,6 +11,7 @@ import tempfile
 import ospath
 import numpy as np
 import pickle
+import time
 import features
 from unisens import SignalEntry, ValuesEntry, EventEntry
 from sleep import Patient, SleepSet
@@ -125,7 +126,6 @@ class TestUtils(unittest.TestCase):
 
 
 class TestPatient(unittest.TestCase):
-    
     @classmethod
     def setUpClass(cls):
         cls.tmpdir = tempfile.mkdtemp(prefix='testpatient_')
@@ -159,6 +159,10 @@ class TestPatient(unittest.TestCase):
         EventEntry('arousals.csv', parent=p).set_data(arousals, samplingRate=1)
         cls.p = p
         cls.f = Patient('xx_xxx')
+        time.sleep(0.25)
+        if os.path.exists('./'+cls.f._folder + '/feats/'):
+            shutil.rmtree('./'+cls.f._folder + '/feats/')
+        cls.f.reset()
         
         
     @classmethod
@@ -217,17 +221,69 @@ class TestPatient(unittest.TestCase):
             
         with open(self.tmpdir + '/asd.pkl', 'rb') as f:   
             pickle.load(f)         
-            
-    def test_feature_creation(self)       :
-        self.f
 
 
+    def test_artefacts(self):
+        f = self.f
+        art = f.get_artefacts(offset=False)
+        self.assertEqual(len(art), 82)
+        self.assertEqual(sum(art), 22)
+
+        art2 = f.get_artefacts(wsize=300, step=30, offset=False)
+        self.assertEqual(len(art2), 82)
+        self.assertEqual(sum(art2), 48)
+        time.sleep(0.25)
+        self.f.reset()
+        self.assertFalse(os.path.exists(f._folder + '/feats'))
+        self.assertFalse(os.path.exists(f._folder + '/artefacts-30-30-0.npy'))
+        self.assertFalse(os.path.exists(f._folder + '/artefacts-300-30-0.npy'))
+
+
+    def test_feature(self):
+        f = self.f
+        hr = f.get_feat('mean_HR', offset=False)
+
+        self.assertTrue(os.path.exists(f._folder + '/feats/mean_HR-30-30-0.npy'))
+        self.assertTrue(os.path.exists(f._folder + '/artefacts-30-30-0.npy'))
+        np.testing.assert_allclose(f.__dict__['_cache_feats/mean_HR-30-30-0.npy'], hr)
+        del f.__dict__['_cache_feats/mean_HR-30-30-0.npy']
+        hr2 = f.get_feat('mean_HR', offset=False)
+        np.testing.assert_allclose(hr, hr2)
+
+        hr2 = f.get_feat('mean_HR', step=60, offset=False)
+        self.assertEqual(len(hr2), len(hr)//2+1)
+
+        time.sleep(0.25)
+        f.reset()
+        self.assertFalse(os.path.exists(f._folder + '/feats/mean_HR-30-30-0.npy'))
+        self.assertFalse(os.path.exists(f._folder + '/artefacts-30-30-0.npy'))
+
+        files = ospath.list_files(f._folder, subfolders=True)
+        self.assertEqual(len(files), 3)
+
+
+    def test_RRoffset(self):
+        f = self.f
+        T_RR1, RR1 = f.get_RR(offset=False)
+        T_RR2, RR2 = f.get_RR(offset=True)
+
+        assert T_RR1[0]<1
+        assert T_RR1[0]>0
+        assert T_RR2[0]<1
+        assert T_RR2[0]>0
+
+        art1 = f.get_artefacts(offset=False)
+        art2 = f.get_artefacts(offset=True)
+
+        hr1 = f.get_feat('mean_HR', offset=False)
+        hr2 = f.get_feat('mean_HR', offset=True)
+
+        hr3 = f.get_feat('mean_HR', offset=True, only_sleeptime=True)
+        hr4 = f.get_feat('mean_HR', offset=True, only_sleeptime=True, wsize=300, step=30)
+        hr5 = f.get_feat('mean_HR', offset=True, only_sleeptime=True, wsize=300, step=300)
 
 #%% main
 if __name__ == '__main__':
     plt.close('all')
-    location = features.memory.location 
-    features.memory.location = None
     unittest.main()
-    features.memory.location = location
     

@@ -296,6 +296,7 @@ for name in features:
                 # we need it in epoch notation, so *2
                 phase_starts = np.where(np.logical_and(stages==stage, lengths>minmean))[0]
                 feat = p.get_feat(name, only_sleeptime=True, wsize=300, step=30)
+
                 # loop through all phases that are longer than minmean and copy features from there
                 for start in phase_starts:
                     bool_idx = np.zeros(len(feat), dtype=bool)

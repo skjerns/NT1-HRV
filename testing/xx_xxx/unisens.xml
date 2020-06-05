@@ -23,8 +23,5 @@
    <eventEntry comment="File: 009_08813&#10;Sleep stages 30s epochs." contentClass="Stage" id="hypnogram_old.csv" sampleRate="0.03333333333333333" typeLength="1">
       <csvFileFormat decimalSeparator="." separator=";" />
    </eventEntry>
-   <customEntry comment="pickle dump of the kubios created features file" dataType="pickle" fileType="pickle" id="feats.pkl">
-      <customEntry dataType="numpy" id="feats/mean_RR-300-30-0.npy" offset="0" step="30" wsize="300" />
-      <customEntry dataType="numpy" id="feats/HF-300-30-0.npy" offset="0" step="30" wsize="300" />
-   </customEntry>
+   <customEntry comment="pickle dump of the kubios created features file" dataType="pickle" fileType="pickle" id="feats.pkl" />
 </unisens>
