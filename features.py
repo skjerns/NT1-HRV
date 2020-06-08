@@ -252,7 +252,7 @@ def _window_view(a, window, step = None, axis = None, readonly = True):
         return a_view
 
 
-def extract_windows(signal, sfreq, wsize, step=None, pad=True):
+def extract_windows(signal, sfreq, wsize, step=30, pad=True):
     """ 
     Extract windows from a signal of a given window size with striding step
     
@@ -275,7 +275,7 @@ def extract_windows(signal, sfreq, wsize, step=None, pad=True):
         assert n_step == len(windows), 'unequal sizes'
     return windows
 
-def extract_RR_windows(T_RR, RR, wsize, step=None, pad=True, 
+def extract_RR_windows(T_RR, RR, wsize, step=30, pad=True,
                        expected_nwin=None):
     """ 
     Extract windows from a list of RR intervals of a given window size 
@@ -338,8 +338,8 @@ def extract_RR_windows(T_RR, RR, wsize, step=None, pad=True,
     # assert second_idxs[-1]==len(RR)-1
     # these are the centers of the windows, exactly between two step boundaries
     windows = []
-    n_windows = int(len(second_idxs)//step)-wsize//step+1
-    for i in range(n_windows):
+    # n_windows = int(len(second_idxs)//step)-wsize//step+1
+    for i in range(expected_nwin):
         # get RR values for this window
         if i*step>=len(second_idxs) or i*step+wsize>=len(second_idxs):
             windows.append(np.array([]))
@@ -352,7 +352,7 @@ def extract_RR_windows(T_RR, RR, wsize, step=None, pad=True,
     return windows
    
    
-def artefact_detection(T_RR, RR, wsize=30, step=None):
+def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
     """
     Scans RR interval arrays for artefacts.
     
@@ -381,7 +381,7 @@ def artefact_detection(T_RR, RR, wsize=30, step=None):
     if step is None: step = wsize
     assert wsize in [30, 300], 'Currently only 30 and 300 are allowed as artefact window sizes, we didnt define other cases yet.'
 
-    idxs = extract_RR_windows(T_RR, np.arange(len(RR)), wsize, step=step)
+    idxs = extract_RR_windows(T_RR, np.arange(len(RR)), wsize, step=step, expected_nwin=expected_nwin)
  
     # RR_pre is before correction
     # RR_post is after correction (as coming directly from Kubios)

@@ -287,7 +287,7 @@ class Patient(Unisens):
         
         
     @error_handle
-    def get_RR(self, offset=True):
+    def get_RR(self, offset=True, cache=True):
         """
         Retrieve the RR peaks and the T_RR, which is their respective positions
         
@@ -295,7 +295,7 @@ class Patient(Unisens):
         """
         assert isinstance(offset, bool), 'offset must be boolean not int/float'
 
-        if hasattr(self, '_cache_RR'):
+        if cache and hasattr(self, '_cache_RR'):
             log.debug('Loading cached RR')
             # already loaded within this session
             T_RR, RR = self._cache_RR
@@ -321,22 +321,37 @@ class Patient(Unisens):
             self._readonly = _readonly
 
         # the hypnograms from Domino always start at :00 or :30
-        # so we need to check how much 'overhang' there is at the start
-        # and end of the recording and truncate the recording accordingly
+        # e.g. if the recording starts at 05:05:25, the first epoch starts
+        # at 05:05:00, that means 25 seconds are added in the beginning.
+        # therefore we need to add this offset to the beginning.
+        # additionally domino does not count the last epoch if its not full.
+        # generally there seems to be no coherent rule on how Domino
+        # handles the end of the recording. Therefore we tell our algorithm
+        # how many epochs we have in the hypnogram and it will truncate
+        # the features accordingly.
         if offset:
-            start_at = self.startsec%30
-            log.warn('WARNING: didnt implement offset end yet')
-            idx = np.argmax(T_RR>start_at)
-            T_RR = T_RR - int(T_RR[idx])
-            T_RR = T_RR[idx:]
-            RR = RR[idx:]
+            assert self.startsec>0, 'startsec is 0, are you sure this is correct?'
+            start_at = self.startsec//30*30 - self.startsec
+            if start_at>0:
+                log.warn(f'WARNING: positive padding! {self._folder}')
+                idx = np.argmax(T_RR>start_at)
+                T_RR = T_RR - int(T_RR[idx])
+                T_RR = T_RR[idx:]
+                RR = RR[idx:]
+            elif start_at<0:
+                T_RR_pad = list(range(abs(start_at)))
+                RR_pad = [1] * abs(start_at) # dummy RR peaks
+                T_RR += abs(start_at)
+                T_RR = np.hstack([T_RR_pad, T_RR])
+                RR = np.hstack([RR_pad, RR])
+
 
         assert len(T_RR)==len(RR)+1, 'T_RR does not fit to RR, seems wrong. {len(T_RR)}!={len(RR)+1}'
         return T_RR, RR
     
     
     @error_handle
-    def get_artefacts(self, only_sleeptime=False, wsize=30, step=None,
+    def get_artefacts(self, only_sleeptime=False, wsize=30, step=30,
                       offset=True, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
@@ -363,9 +378,10 @@ class Patient(Unisens):
         # else: not computed and not cached, compute this feature now.  
         else:
             # receive RRs to calculate artefacts on this
-            T_RR, RR = self.get_RR(offset=offset)
+            T_RR, RR = self.get_RR(offset=offset, cache=cache)
             # calculate artefacts given these RRs.
-            art = np.array(features.artefact_detection(T_RR,RR, wsize, step))
+            hypno = self.get_hypno(cache=cache)
+            art = np.array(features.artefact_detection(T_RR,RR, wsize, step, expected_nwin=len(hypno)))
             # we need to change the readability of this Patient
             # to store newly created features.
             _readonly = self._readonly
@@ -397,7 +413,12 @@ class Patient(Unisens):
                 hypno = self['hypnogram_old.csv'].get_data()
             hypno = np.array(list(zip(*hypno))[1])
             self._cache_hypno = hypno
-            
+
+        # safety precaution: set first and last epoch to ARTEFACT
+        hypno[0] = 5
+        hypno[-1] = 5
+
+        # calculate the sleep onset and sleep offset seconds.
         self.sleep_onset = np.argmax(np.logical_and(hypno>0 , hypno<5))*30
         self.sleep_offset = len(hypno)*30-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])*30
         if only_sleeptime:
@@ -460,7 +481,7 @@ class Patient(Unisens):
         return data
     
     @error_handle
-    def get_feat(self, name, only_sleeptime=False, wsize=30, step=None, 
+    def get_feat(self, name, only_sleeptime=False, wsize=30, step=30,
                  offset=True, cache=True, only_clean=True):
         """
         Returns the given feature with the chosen parameters.
@@ -494,9 +515,11 @@ class Patient(Unisens):
         # else: not computed and not cached, compute this feature now.  
         else:
             # receive RRs to calculate feature on
-            T_RR, RR = self.get_RR(offset=offset)
-            RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize, 
-                                                     step=step, pad = True)
+            T_RR, RR = self.get_RR(offset=offset, cache=cache)
+            hypno = self.get_hypno(cache=cache)
+            RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize,
+                                                     step=step, pad=True,
+                                                     expected_nwin=len(hypno))
             # retrieve the function handle from functions.py
             # there should be a function with this name present there.
             feat_func = features.__dict__[name]
@@ -521,7 +544,7 @@ class Patient(Unisens):
             feat[art] = [np.nan] * sum(art)
 
         if only_sleeptime:
-            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            if not hasattr(self, 'sleep_onset'): self.get_hypno(cache=cache)
             feat = feat[self.sleep_onset//step:self.sleep_offset//step]
         return feat
 
@@ -548,7 +571,7 @@ class Patient(Unisens):
                     os.remove(entry._filename)
         try:
             if os.path.isdir(self._folder + '/feats/'):
-                os.rmdir(self._folder + '/feats/')
+                shutil.rmtree(self._folder + '/feats/')
         except Exception as e:
             print(e)
         self.save()

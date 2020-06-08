@@ -28,7 +28,10 @@ class TestFeatures(unittest.TestCase):
         
     def tearDown(self):
         pass
-    
+
+
+
+
     def test_extraction(self): 
         pad = True
         sfreq = 1
@@ -163,12 +166,47 @@ class TestPatient(unittest.TestCase):
         if os.path.exists('./'+cls.f._folder + '/feats/'):
             shutil.rmtree('./'+cls.f._folder + '/feats/')
         cls.f.reset()
-        
-        
+
+        # we hallucinate an entire unisens
+        p = Patient(cls.tmpdir + '/000_offset', makenew=True, autosave=True)
+        p.startsec = 15
+        RR = [1]*15 + [0.5]*120 + [0.75]*110
+        T_RR = np.hstack([[0] , np.cumsum(RR)])
+        pkl = {'Data':{'T_RR':T_RR, 'RR':RR}}
+        p.duration = int(T_RR[-1])
+        CustomEntry('feats.pkl', parent=p).set_data(pkl)
+
+        hypno = [0, 1, 2, 3, 4, 5, 6]
+        times = np.arange(len(hypno))
+        hypno = np.vstack([times, hypno]).T
+        EventEntry(id='hypnogram.csv', parent=p).set_data(hypno, sampleRate=1/30, contentClass='Stage', typeLength=1)
+        cls.p_offset = p
+        cls.hypno=hypno
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdir)
-        
+
+
+    def test_offset(self):
+
+        p = self.p_offset
+
+        for i in range(4,8):
+            p.reset()
+            hypno_org = list(range(i))
+            times = np.arange(len(hypno_org))
+            hypno_org = np.vstack([times, hypno_org]).T
+            p.hypnogram.set_data(hypno_org, sampleRate=1/30, contentClass='Stage', typeLength=1)
+
+            hypno = p.get_hypno(cache=False)
+            self.assertEqual(len(hypno),len(hypno_org))
+            art = p.get_artefacts(cache=False)
+            feat = p.get_feat('mean_HR', cache=False)
+
+            self.assertEqual(len(hypno), len(art))
+            self.assertEqual(len(hypno), len(feat))
+
     def test_create(self):
         sleepset1 = SleepSet(self.patient_list)
         sleepset2 = SleepSet(self.patients)
@@ -231,9 +269,10 @@ class TestPatient(unittest.TestCase):
 
         art2 = f.get_artefacts(wsize=300, step=30, offset=False)
         self.assertEqual(len(art2), 82)
-        self.assertEqual(sum(art2), 48)
+        self.assertEqual(sum(art2), 46)
         time.sleep(0.25)
         self.f.reset()
+        time.sleep(0.1)
         self.assertFalse(os.path.exists(f._folder + '/feats'))
         self.assertFalse(os.path.exists(f._folder + '/artefacts-30-30-0.npy'))
         self.assertFalse(os.path.exists(f._folder + '/artefacts-300-30-0.npy'))
@@ -250,9 +289,6 @@ class TestPatient(unittest.TestCase):
         hr2 = f.get_feat('mean_HR', offset=False)
         np.testing.assert_allclose(hr, hr2)
 
-        hr2 = f.get_feat('mean_HR', step=60, offset=False)
-        self.assertEqual(len(hr2), len(hr)//2+1)
-
         time.sleep(0.25)
         f.reset()
         self.assertFalse(os.path.exists(f._folder + '/feats/mean_HR-30-30-0.npy'))
@@ -268,9 +304,9 @@ class TestPatient(unittest.TestCase):
         T_RR2, RR2 = f.get_RR(offset=True)
 
         assert T_RR1[0]<1
-        assert T_RR1[0]>0
+        assert T_RR1[0]>=0
         assert T_RR2[0]<1
-        assert T_RR2[0]>0
+        assert T_RR2[0]>=0
 
         art1 = f.get_artefacts(offset=False)
         art2 = f.get_artefacts(offset=True)
