@@ -24,7 +24,8 @@ from boltons.funcutils import wraps
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.filters import gaussian_filter1d
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
-
+log.basicConfig()
+log.getLogger().setLevel(log.INFO)
 
 def natsort_key(s, _nsre=re.compile('([0-9]+)')):
     return [int(text) if text.isdigit() else text.lower()
@@ -330,20 +331,23 @@ class Patient(Unisens):
         # how many epochs we have in the hypnogram and it will truncate
         # the features accordingly.
         if offset:
-            assert self.startsec>0, 'startsec is 0, are you sure this is correct?'
+            if self.startsec>0: log.warning(f'startsec is 0, are you sure this is correct? {self._folder}')
             start_at = self.startsec//30*30 - self.startsec
             if start_at>0:
-                log.warn(f'WARNING: positive padding! {self._folder}')
+                log.warning(f'positive padding! {self._folder}')
                 idx = np.argmax(T_RR>start_at)
                 T_RR = T_RR - int(T_RR[idx])
                 T_RR = T_RR[idx:]
                 RR = RR[idx:]
             elif start_at<0:
+                log.debug(f'Adding {start_at} seconds to fill first epoch')
                 T_RR_pad = list(range(abs(start_at)))
                 RR_pad = [1] * abs(start_at) # dummy RR peaks
                 T_RR += abs(start_at)
                 T_RR = np.hstack([T_RR_pad, T_RR])
                 RR = np.hstack([RR_pad, RR])
+            else:
+                log.debug(f'No padding to fill epoch')
 
 
         assert len(T_RR)==len(RR)+1, 'T_RR does not fit to RR, seems wrong. {len(T_RR)}!={len(RR)+1}'
@@ -369,10 +373,12 @@ class Patient(Unisens):
         ### now some caching tricks to speed up loading of features
         # if cached, reload this cached version bv
         if cache and hasattr(self, f'_cache_{art_name}'):
+            log.debug('Loading cached artefacts')
             art = self.__dict__[f'_cache_{art_name}']
             
         # if not cached, but already computed, load computed version
-        elif art_name in self:      
+        elif art_name in self:
+            log.debug('Loading previously saved artefacts')
             art = self[art_name].get_data()
             
         # else: not computed and not cached, compute this feature now.  
@@ -380,6 +386,7 @@ class Patient(Unisens):
             # receive RRs to calculate artefacts on this
             T_RR, RR = self.get_RR(offset=offset, cache=cache)
             # calculate artefacts given these RRs.
+            log.debug('Calculating artefacts')
             hypno = self.get_hypno(cache=cache)
             art = np.array(features.artefact_detection(T_RR,RR, wsize, step, expected_nwin=len(hypno)))
             # we need to change the readability of this Patient
@@ -506,10 +513,12 @@ class Patient(Unisens):
         ### now some caching tricks to speed up loading of features
         # if cached, reload this cached version
         if cache and hasattr(self, f'_cache_{feat_name}'):
+            log.debug(f'Returning cached {feat_name}')
             feat = self.__dict__[f'_cache_{feat_name}']
             
         # if not cached, but already computed, load computed version
-        elif feat_name in self.feats:      
+        elif feat_name in self.feats:
+            log.debug(f'Returning saved {feat_name}.npy')
             feat = self.feats[feat_name].get_data()
             
         # else: not computed and not cached, compute this feature now.  
@@ -520,6 +529,7 @@ class Patient(Unisens):
             RR_windows = features.extract_RR_windows(T_RR, RR, wsize=wsize,
                                                      step=step, pad=True,
                                                      expected_nwin=len(hypno))
+            log.debug(f'Calculating {feat_name}')
             # retrieve the function handle from functions.py
             # there should be a function with this name present there.
             feat_func = features.__dict__[name]

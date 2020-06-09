@@ -18,7 +18,7 @@ from sleep import Patient, SleepSet
 import sleep_utils
 from unisens import CustomEntry
 import matplotlib.pyplot as plt
-
+import logging as log
 
 
 class TestFeatures(unittest.TestCase):
@@ -170,8 +170,8 @@ class TestPatient(unittest.TestCase):
         # we hallucinate an entire unisens
         p = Patient(cls.tmpdir + '/000_offset', makenew=True, autosave=True)
         p.startsec = 15
-        RR = [1]*15 + [0.5]*120 + [0.75]*110
-        T_RR = np.hstack([[0] , np.cumsum(RR)])
+        RR = np.array([1]*16 + [0.5]*59 + [0.75]*40 + [1.5]*21)
+        T_RR = np.hstack([[0] , np.cumsum(RR)])+15
         pkl = {'Data':{'T_RR':T_RR, 'RR':RR}}
         p.duration = int(T_RR[-1])
         CustomEntry('feats.pkl', parent=p).set_data(pkl)
@@ -183,13 +183,30 @@ class TestPatient(unittest.TestCase):
         cls.p_offset = p
         cls.hypno=hypno
 
+        # we hallucinate an entire unisens
+        p = Patient(cls.tmpdir + '/001__fulloffset', makenew=True, autosave=True)
+        p.startsec = 30
+        RR = np.array([0.5]*59 + [0.75]*40 + [1.5]*21)
+        T_RR = np.hstack([[0] , np.cumsum(RR)])+30
+        pkl = {'Data':{'T_RR':T_RR, 'RR':RR}}
+        p.duration = int(T_RR[-1])
+        CustomEntry('feats.pkl', parent=p).set_data(pkl)
+
+        hypno = [0, 1, 2, 3, 4, 5, 6]
+        times = np.arange(len(hypno))
+        hypno = np.vstack([times, hypno]).T
+        EventEntry(id='hypnogram.csv', parent=p).set_data(hypno, sampleRate=1/30, contentClass='Stage', typeLength=1)
+        cls.p_full_offset = p
+        cls.hypno=hypno
+
+
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdir)
 
 
     def test_offset(self):
-
         p = self.p_offset
 
         for i in range(4,8):
@@ -202,16 +219,23 @@ class TestPatient(unittest.TestCase):
             hypno = p.get_hypno(cache=False)
             self.assertEqual(len(hypno),len(hypno_org))
             art = p.get_artefacts(cache=False)
-            feat = p.get_feat('mean_HR', cache=False)
+            feat = p.get_feat('mean_HR', wsize=30, cache=False)
+            np.testing.assert_array_almost_equal(feat[:4], [60, 120, 80, 40])
 
             self.assertEqual(len(hypno), len(art))
             self.assertEqual(len(hypno), len(feat))
+
+        p = self.p_full_offset
+        p.reset()
+        art = p.get_artefacts(cache=False)
+        feat = p.get_feat('mean_HR', wsize=30, cache=False)
 
     def test_create(self):
         sleepset1 = SleepSet(self.patient_list)
         sleepset2 = SleepSet(self.patients)
         assert len(sleepset1)==2
         assert len(sleepset2)==2
+
         
     def test_filter(self):
         s = SleepSet(self.patients)
@@ -321,5 +345,9 @@ class TestPatient(unittest.TestCase):
 #%% main
 if __name__ == '__main__':
     plt.close('all')
+    level = log.getLogger().level
+    log.getLogger().setLevel(log.DEBUG)
+
     unittest.main()
     
+    log.getLogger().setLevel(level)
