@@ -13,7 +13,9 @@ import scipy
 from datetime import datetime
 from scipy import stats
 import hrvanalysis
+import nolds
 from joblib.memory import Memory
+import entropy
 
 # ### caching dir to prevent recomputation of reduntant functions
 # if hasattr(cfg, 'folder_cache'):
@@ -42,8 +44,17 @@ def dummy(RR_windows, **kwargs):
     """
     pass
     
+def RR_windows(RR_windows):
+    return RR_windows
 
-    
+def lengths(RR_windows, **kwargs):
+    """
+    return how many seconds each window spans
+    mainly interesting for debugging purposes
+    """
+    lengths = [np.sum(wRR) for wRR in RR_windows]
+    return lengths
+
 # 1  
 def mean_HR(RR_windows, **kwargs):
     feat = []
@@ -66,6 +77,16 @@ def mean_RR(RR_windows, **kwargs):
         feat.append(mRR)
     return np.array(feat)
 
+#3
+def SDNN(RR_windows, **kwargs):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<1:
+            SDNN = np.nan
+        else:
+            SDNN = np.std(wRR)
+        feat.append(SDNN)
+    return np.array(feat)
 
 # 4
 def RMSSD(RR_windows, **kwargs):
@@ -79,20 +100,23 @@ def RMSSD(RR_windows, **kwargs):
         feat.append(RNSSD)
     return np.array(feat)
 
-# 6
-def pNN50(RR_windows, **kwargs):
-    return pNNXX(RR_windows, XX=50)
-
-def SDNN(RR_windows, **kwargs):
+#5
+def RR_range(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<1:
-            SDNN = np.nan
+        if len(wRR)<2:
+            value = np.nan
         else:
-            SDNN = np.std(wRR)
-        feat.append(SDNN)
-    return np.array(feat)
+            value = np.ptp(wRR)
+        feat.append(value)
+    return feat
 
+# 6
+def pNN50(RR_windows, **kwargs):
+    return pNNxx(RR_windows, XX=50)
+
+
+# 8
 def SDSD(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
@@ -104,17 +128,18 @@ def SDSD(RR_windows, **kwargs):
         feat.append(SDSD)
     return np.array(feat)
 
-def VLF(RR_windows, **kwargs):
+def VLF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['vlf']
     return np.array(feat)
 
 
 # 10
-def LF(RR_windows, **kwargs):
+def LF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['lf']
     return np.array(feat)
+
 # 11
-def HF(RR_windows, **kwargs):
+def HF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['hf']
     return np.array(feat)
 
@@ -123,7 +148,7 @@ def LF_HF(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['lf_hf_ratio']
     return np.array(feat)
    
-def pNNXX(RR_windows, XX=50, **kwargs):
+def pNNxx(RR_windows, xx=50, **kwargs):
     """
     Calculate the pNN index for a given millisecond interval difference
     pNN50 is the percentage of successive beats that differ more than 50ms
@@ -134,9 +159,197 @@ def pNNXX(RR_windows, XX=50, **kwargs):
             pNN50 = np.nan
         else:
             diffRR = np.diff(wRR)
-            pNN50 = ((diffRR>(XX/1000)).sum()/len(diffRR))*100
+            pNN50 = ((diffRR>(xx/1000)).sum()/len(diffRR))*100
         feat.append(pNN50)
     return np.array(feat)
+
+
+def SD1(RR_windows):
+    feat = get_poincare_plot_features(RR_windows)['sd1']
+    return feat
+
+def SD2(RR_windows):
+    feat = get_poincare_plot_features(RR_windows)['sd2']
+    return feat
+
+def SD2_SD1(RR_windows):
+    feat = get_poincare_plot_features(RR_windows)['ratio_sd2_sd1']
+    return feat
+
+# Not Implemented
+# def TINN(RR_windows):
+#     feat = get_geometrical_features(RR_windows)['tinn']
+#     return feat
+
+def triangular_index(RR_windows):
+    feat = get_geometrical_features(RR_windows)['triangular_index']
+    return feat
+
+
+def SNSindex(RR_windows):
+    feat = get_csi_cvi_features(RR_windows)['csi']
+    return feat
+
+def PNSindex(RR_windows):
+    feat = get_csi_cvi_features(RR_windows)['cvi']
+    return feat
+
+def modified_csi(RR_windows):
+    feat = get_csi_cvi_features(RR_windows)['Modified_csi']
+    return feat
+
+
+
+
+################### Entropy features
+# 67
+def SampEn(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<3:
+            value = np.nan
+        else:
+            # value = nolds.sampen(wRR, emb_dim=1)
+            value = entropy.sample_entropy(wRR, order=2, metric='chebyshev')
+        feat.append(value)
+    return np.array(feat)
+
+
+def PermEn(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<3:
+            value = np.nan
+        else:
+            value = entropy.perm_entropy(wRR, order=3, normalize=True)
+        feat.append(value)
+    return feat
+
+
+def SVDEn(RR_windows):
+    # Singular value decomposition entropy
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            value = np.nan
+        else:
+            value = entropy.svd_entropy(wRR, order=3, delay=1, normalize=True)
+        feat.append(value)
+    return feat
+
+def ApEn(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            value = np.nan
+        else:
+            value = entropy.app_entropy(wRR, order=2, metric='chebyshev')
+        feat.append(value)
+    return feat
+
+
+
+################### Fractal features
+
+
+def PetrosianFract(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            value = np.nan
+        else:
+            value = entropy.petrosian_fd(wRR)
+        feat.append(value)
+    return feat
+
+def KatzFract(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            value = np.nan
+        else:
+            value = entropy.katz_fd(wRR)
+        feat.append(value)
+    return feat
+
+def HiguchiFract(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            value = np.nan
+        else:
+            value = entropy.higuchi_fd(wRR, kmax=5)
+        feat.append(value)
+    return feat
+
+def detrend_fluctuation(RR_windows):
+    feat = []
+    for wRR in RR_windows:
+        if len(wRR)<3:
+            value = np.nan
+        else:
+            value = entropy.detrended_fluctuation(wRR)
+        feat.append(value)
+    return feat
+
+
+##############################################################################
+##############################################################################
+### Helper functions
+
+def get_csi_cvi_features(RR_windows):
+    assert isinstance(RR_windows, (list, np.ndarray))
+    if isinstance(RR_windows, np.ndarray): 
+        assert RR_windows.ndim==2, 'Must be 2D'
+        
+    if any([np.any(wRR>1000) for wRR in RR_windows if len(wRR)>0]):
+        log.warn('Values seem to be in ms instead of seconds! Algorithm migh fail.')
+
+    feats = { x:[] for x in ['csi', 'cvi', 'Modified_csi']}
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            for key, val in feats.items(): feats[key].append(np.nan)
+        else:
+            mRR = hrvanalysis.get_csi_cvi_features((wRR*1000).astype(int))
+            for key, val in mRR.items(): feats[key].append(val)
+    return feats
+
+
+
+def get_geometrical_features(RR_windows):
+    assert isinstance(RR_windows, (list, np.ndarray))
+    if isinstance(RR_windows, np.ndarray): 
+        assert RR_windows.ndim==2, 'Must be 2D'
+        
+    if any([np.any(wRR>1000) for wRR in RR_windows if len(wRR)>0]):
+        log.warn('Values seem to be in ms instead of seconds! Algorithm migh fail.')
+
+    feats = { x:[] for x in ['tinn', 'triangular_index']}
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            for key, val in feats.items(): feats[key].append(np.nan)
+        else:
+            mRR = hrvanalysis.get_geometrical_features((wRR*1000).astype(int))
+            for key, val in mRR.items(): feats[key].append(val)
+    return feats
+
+def get_poincare_plot_features(RR_windows):
+    assert isinstance(RR_windows, (list, np.ndarray))
+    if isinstance(RR_windows, np.ndarray): 
+        assert RR_windows.ndim==2, 'Must be 2D'
+        
+    if any([np.any(wRR>1000) for wRR in RR_windows if len(wRR)>0]):
+        log.warn('Values seem to be in ms instead of seconds! Algorithm migh fail.')
+
+    feats = { x:[] for x in ['sd1', 'sd2', 'ratio_sd2_sd1']}
+    for wRR in RR_windows:
+        if len(wRR)<2:
+            for key, val in feats.items(): feats[key].append(np.nan)
+        else:
+            mRR = hrvanalysis.get_poincare_plot_features((wRR*1000).astype(int))
+            for key, val in mRR.items(): feats[key].append(val)
+    return feats
+
 
 def get_frequency_domain_features(RR_windows):
     """
@@ -153,7 +366,6 @@ def get_frequency_domain_features(RR_windows):
          'total_power': 0.0,
          'vlf': 0.0}
     """
-    assert True
     assert isinstance(RR_windows, (list, np.ndarray))
     if isinstance(RR_windows, np.ndarray): 
         assert RR_windows.ndim==2, 'Must be 2D'
@@ -163,12 +375,14 @@ def get_frequency_domain_features(RR_windows):
         
     feats = { x:[] for x in ['lf', 'hf', 'lf_hf_ratio', 'lfnu', 'hfnu', 'total_power', 'vlf']}
     for wRR in RR_windows:
-        if len(wRR)<2:
+        if len(wRR)<5: # fewer than 5 beats in this window? unlikely
             for key, val in feats.items(): feats[key].append(np.nan)
         else:
-            mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int))
+            mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int),
+                                                            sampling_frequency=10, interpolation_method='cubic')
             for key, val in mRR.items(): feats[key].append(val)
     return feats
+
 
 
 #%% other functions

@@ -118,7 +118,7 @@ ss = ss.stratify() # only use matched participants
 p = ss[1]
 
 # stop
-#%%### Van Meijden 2015 Table 1
+#%%### Van Meijden Table 1
 
 descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
                'S2 latency','SWS latency','REM latency',
@@ -187,7 +187,7 @@ for group in ['nt1', 'control']:
     values = values / (table1['TST'][group]['values']*2)
     table1['REM ratio'][group]['values'] = values
     
-    # Stage shift index
+    # Stage shift index, nr of stage changes per hour
     hypnos = [p.get_hypno(only_sleeptime=True) for p in subset]
     values = np.array([np.count_nonzero(np.diff(hypno[hypno!=5])) for hypno in hypnos])
     values = values / (np.array([len(p.get_hypno(only_sleeptime=True)) for p in subset])/120)
@@ -236,7 +236,7 @@ plotting.print_table(table1, 'Sleep Stage Parameters')
 table1.pop('gender') # remove this, can't be plotted appropriately
 plotting.distplot_table(table1, 'Sleep Stage Parameters', ylabel='counts')
 
-#%% Mean episode length Van Meijden 2015 Figure 2, 
+#%% Van Meijden Figure 2 Mean episode length  2015 ,
 stage_means = dict(zip(range(6), [{'control':{}, 'nt1':{}} for _ in range(6)]))
 fig, axs = plt.subplots(2, 2)
 
@@ -274,36 +274,35 @@ for i, stage in enumerate([1,2,3,4]):
     minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
     ax.axvline(minmean, linestyle='dashed', linewidth=2, c='black')
     
-#%% Van Meijden 2015 Figure 3: Feat Change after transition
+#%% Van Meijden Figure 3: Feat Change after transition
 
-features = ['mean_HR', 'LF', 'HF', 'LF_HF']
-post_transitions = {feat:{stage:{} for stage in range(6)} for feat in features} 
+feat_names = ['mean_HR', 'LF_power', 'HF_power', 'LF_HF']
+post_transitions = {feat:{stage:{} for stage in range(6)} for feat in feat_names}
    
-for name in features:
-    for stage in range(6):
+for name in feat_names:
+    for stage in tqdm(range(6), desc=f'feat {name}'):
         for group in ['nt1', 'control']:
             subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
             values = []
             for p in subset:
                 hypno = p.get_hypno(only_sleeptime=True)
-                # get the phase sequence, the lengths of the phase, 
+                # get the phase sequence, the lengths of the phase,
                 # and their start in the hypnogram
                 stages, lengths, idxs = functions.sleep_phase_sequence(hypno)
                 # get all indices where we have the given stage with longer
                 # period than the mean stage length
-                minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
-                minmean = 16#int(minmean)
+                # minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+                minlen = 10#int(minlen)
                 # we need it in epoch notation, so *2
-                phase_starts = np.where(np.logical_and(stages==stage, lengths>minmean))[0]
+                phase_starts = np.where(np.logical_and(stages==stage, lengths>=minlen))[0]
                 feat = p.get_feat(name, only_sleeptime=True, wsize=300, step=30)
 
-                # loop through all phases that are longer than minmean and copy features from there
+                # loop through all phases that are longer than minlen and copy features from there
                 for start in phase_starts:
-                    bool_idx = np.zeros(len(feat), dtype=bool)
-                    bool_idx[idxs[start]: idxs[start]+lengths[start]] = True
-                    feat_values = feat[idxs[start]: idxs[start]+lengths[start]]
-                    if len(feat_values)<minmean: continue
-                    values.append(feat_values[:minmean]) # only take %minmean% epochs
+                    feat_values = feat[idxs[start]: idxs[start]+minlen]
+                    # if there is a NAN value, skip this epoch.
+                    if np.isnan(feat_values).any(): continue
+                    values.append(feat_values[:minlen]) # only take %minmean% epochs
 
             post_transitions[name][stage][group] = {'values':np.atleast_2d(values)}
             
@@ -313,7 +312,17 @@ for name in features:
     n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl')))
     fig, axs = plotting.lineplot_table(post_transitions[name], title, xlabel='epochs', 
                                        ylabel=name, n=n)
-    plotting.print_table(post_transitions[name], title) 
+    plotting.print_table(post_transitions[name], title)
+    # break
+
+#%% Van Meijden Table 2
+
+
+
+# ????? I don't understand the mixed effect regression model they are used
+#       or how to reproduce it...
+
+
 
 ################################################
 ################################################

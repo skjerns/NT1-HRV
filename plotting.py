@@ -73,7 +73,7 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
     
     fig, axs = plt.subplots(*size)
     axs = axs.flatten()
-    for i, descriptor in enumerate(table): 
+    for i, descriptor in enumerate(table):
         ax = axs[i]
         for group in ['nt1', 'control']:
             values = table[descriptor][group]['values']
@@ -92,8 +92,8 @@ def lineplot_table(table, title, columns=3, rows=None, save_to=None,
             # sns.pointplot(x=x, y=y_mean, ax=ax, c=c[group])
             ax.errorbar(x, y_mean, yerr=sem, c=c[group], fmt='-o', alpha=0.7)
 
-        n_nt1 = np.sum(~np.isnan(table[descriptor]['nt1']['values']))
-        n_cnt = np.sum(~np.isnan(table[descriptor]['control']['values']))
+        n_nt1 = table[descriptor]['nt1']['values'].shape[0]
+        n_cnt = table[descriptor]['control']['values'].shape[0]
         # convert sleep stage to stage name if necessary
         if descriptor in [0,1,2,3,4,5]: 
             descriptor = cfg.num2stage[descriptor]

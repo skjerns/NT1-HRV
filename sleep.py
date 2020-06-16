@@ -296,17 +296,17 @@ class Patient(Unisens):
         """
         assert isinstance(offset, bool), 'offset must be boolean not int/float'
 
-        if cache and hasattr(self, '_cache_RR'):
+        if cache and hasattr(self.feats, '_cache_RR'):
             log.debug('Loading cached RR')
             # already loaded within this session
-            T_RR, RR = self._cache_RR
+            T_RR, RR = self.feats._cache_RR
         
         elif 'feats/RR.npy' in self.feats and 'feats/T_RR.npy' in self.feats:
             log.debug('Loading saved RR')
             # previously loaded
             RR = self.feats.RR.get_data()
             T_RR = self.feats.T_RR.get_data()  
-            self._cache_RR = (T_RR.copy(), RR.copy())
+            self.feats._cache_RR = (T_RR.copy(), RR.copy())
 
         else:
             log.debug('extracting RR from pkl-file')
@@ -314,11 +314,12 @@ class Patient(Unisens):
             data = self['feats.pkl'].get_data()['Data']
             T_RR = data['T_RR'] - self.startsec
             RR = data['RR']
-            self._cache_RR = (T_RR.copy(), RR.copy())
+            self.feats._cache_RR = (T_RR.copy(), RR.copy())
             _readonly = self._readonly
             self._readonly = False
             CustomEntry('feats/RR.npy', parent=self.feats).set_data(RR)
             CustomEntry('feats/T_RR.npy', parent=self.feats).set_data(T_RR)
+            self.save()
             self._readonly = _readonly
 
         # the hypnograms from Domino always start at :00 or :30
@@ -331,7 +332,7 @@ class Patient(Unisens):
         # how many epochs we have in the hypnogram and it will truncate
         # the features accordingly.
         if offset:
-            if self.startsec>0: log.warning(f'startsec is 0, are you sure this is correct? {self._folder}')
+            if self.startsec==0: log.warning(f'startsec is 0, are you sure this is correct? {self._folder}')
             start_at = self.startsec//30*30 - self.startsec
             if start_at>0:
                 log.warning(f'positive padding! {self._folder}')
@@ -372,9 +373,9 @@ class Patient(Unisens):
         
         ### now some caching tricks to speed up loading of features
         # if cached, reload this cached version bv
-        if cache and hasattr(self, f'_cache_{art_name}'):
+        if cache and hasattr(self.feats, f'_cache_{art_name}'):
             log.debug('Loading cached artefacts')
-            art = self.__dict__[f'_cache_{art_name}']
+            art = self.feats.__dict__[f'_cache_{art_name}']
             
         # if not cached, but already computed, load computed version
         elif art_name in self:
@@ -389,6 +390,7 @@ class Patient(Unisens):
             log.debug('Calculating artefacts')
             hypno = self.get_hypno(cache=cache)
             art = np.array(features.artefact_detection(T_RR,RR, wsize, step, expected_nwin=len(hypno)))
+            
             # we need to change the readability of this Patient
             # to store newly created features.
             _readonly = self._readonly
@@ -398,10 +400,11 @@ class Patient(Unisens):
             entry.wsize = wsize
             entry.step = step
             entry.offset = offset
+            self.save()
             self._readonly = _readonly
           
         # save for caching purposes
-        if cache: self.__dict__[f'_cache_{art_name}'] = art 
+        if cache: self.feats.__dict__[f'_cache_{art_name}'] = art
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
@@ -510,15 +513,15 @@ class Patient(Unisens):
         # calculated for different parameters.
         feat_name = f'feats/{name}-{int(wsize)}-{int(step)}-{int(offset)}.npy'
         
-        ### now some caching tricks to speed up loading of features
+        # now some caching tricks to speed up loading of features
         # if cached, reload this cached version
-        if cache and hasattr(self, f'_cache_{feat_name}'):
-            log.debug(f'Returning cached {feat_name}')
-            feat = self.__dict__[f'_cache_{feat_name}']
+        if cache and hasattr(self.feats, f'_cache_{feat_name}'):
+            log.debug(f'Loading cached {feat_name}')
+            feat = self.feats.__dict__[f'_cache_{feat_name}']
             
         # if not cached, but already computed, load computed version
         elif feat_name in self.feats:
-            log.debug(f'Returning saved {feat_name}.npy')
+            log.debug(f'Loading saved {feat_name}.npy')
             feat = self.feats[feat_name].get_data()
             
         # else: not computed and not cached, compute this feature now.  
@@ -533,20 +536,27 @@ class Patient(Unisens):
             # retrieve the function handle from functions.py
             # there should be a function with this name present there.
             feat_func = features.__dict__[name]
-            feat = np.array(feat_func(RR_windows))
-            # we need to change the readability of this Patient
-            # to store newly created features.
-            _readonly = self._readonly
-            self._readonly = False
-            entry = CustomEntry(feat_name, parent=self.feats).set_data(feat)
-            # also save the parameters just in case
-            entry.wsize = wsize
-            entry.step = step
-            entry.offset = offset
-            self._readonly = _readonly
-          
+            try:
+                feat = np.array(feat_func(RR_windows))
+                # we need to change the readability of this Patient
+                # to store newly created features.
+                _readonly = self._readonly
+                self._readonly = False
+                entry = CustomEntry(feat_name, parent=self.feats).set_data(feat)
+                # also save the parameters just in case
+                entry.wsize = wsize
+                entry.step = step
+                entry.offset = offset
+                self.save()
+                self._readonly = _readonly
+            except Exception as e:
+                # if there was an error we do not save the values.
+                log.error(f'{self}, Cant create feature {feat_name}: ' + str(e))
+                feat = np.empty(len(RR_windows))
+                feat.fill(np.nan)
+
         # save for caching purposes
-        if cache: self.__dict__[f'_cache_{feat_name}'] = feat 
+        if cache: self.feats.__dict__[f'_cache_{feat_name}'] = feat
 
         if only_clean:
             art = self.get_artefacts(only_sleeptime=False, wsize=wsize, step=step,
@@ -567,9 +577,9 @@ class Patient(Unisens):
         removed will be all extracted features, RR intervals, artefacts
         """
         assert not self._readonly, 'Can\'t reset readonly Patient'
-        for var in list(self.__dict__):
+        for var in list(self.feats.__dict__):
             if var.startswith('_cache'):
-                del self.__dict__[var]
+                del self.feats.__dict__[var]
         for feat in list(self.feats):
             self.feats.remove_entry(feat.id)
             if os.path.exists(feat._filename):

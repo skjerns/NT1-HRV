@@ -16,21 +16,44 @@ import features
 from unisens import SignalEntry, ValuesEntry, EventEntry
 from sleep import Patient, SleepSet
 import sleep_utils
+import config as cfg
 from unisens import CustomEntry
 import matplotlib.pyplot as plt
 import logging as log
 
 
 class TestFeatures(unittest.TestCase):
-    
-    def setUp(self):
-        pass
-        
-    def tearDown(self):
-        pass
+
+    @classmethod
+    def setUpClass(self):
+
+        self.p = Patient('xx_xxx', readonly=False)
+        time.sleep(0.3)
+        self.p.reset()
 
 
+    @classmethod
+    def tearDownClass(self):
+        time.sleep(0.3)
+        self.p.reset()
 
+
+    def test_all(self):
+        feat_names = cfg.mapping_feats
+        for name in feat_names:
+            if name not in features.__dict__: continue
+            feat30 = self.p.get_feat(name, wsize=30, step=30, cache=False)
+            feat300 =  self.p.get_feat(name, wsize=300, step=30, cache=False)
+            feat60 = self.p.get_feat(name, wsize=300, step=60, cache=False)
+            if np.isnan(feat30).all(): print(f'WARNING: {name} has only nan for wsize 30')
+            if np.isnan(feat300).all(): print(f'WARNING: {name} has only nan for wsize 300')
+            if np.isnan(feat60).all(): print(f'WARNING: {name} has only nan for step 60')
+
+
+    def test_RR_range(self):
+        RR_windows = [np.arange(0,11), np.ones(60)/2, np.arange(-10,11), []]
+        feat = features.RR_range(RR_windows)
+        np.testing.assert_array_equal(feat, [10, 0, 20, np.nan])
 
     def test_extraction(self): 
         pad = True
@@ -73,33 +96,33 @@ class TestFeatures(unittest.TestCase):
     def test_VLF(self):
         # VlfBand(0.0033, 0.04)
         fs = 100 # sample rate
-        f = 0.005 # the frequency of the signal
-        x = np.arange(fs*5) # the points on the x axis for plotting
+        f = 0.001 # the frequency of the signal
+        x = np.arange(fs*500) # the points on the x axis for plotting
         # compute the value (amplitude) of the sin wave at the for each sample
-        y = np.sin(2*np.pi*f * (x/fs))
+        y = (np.sin(2*np.pi*f * (x/fs))+2)/2
 
-        vlf = features.VLF([y])
-        lf = features.LF([y])
-        hf = features.HF([y])
+        vlf = features.VLF_power([y])
+        lf = features.LF_power([y])
+        hf = features.HF_power([y])
 
-        self.assertGreater(vlf, lf)
+        # self.assertGreater(lf, hf)
         self.assertGreater(vlf, hf)
 
 
     def test_HF(self):
         # HfBand(0.15, 0.40)
         fs = 1000 # sample rate
-        f = 0.3 # the frequency of the signal
+        f = 0.5 # the frequency of the signal
         x = np.arange(fs*5) # the points on the x axis for plotting
         # compute the value (amplitude) of the sin wave at the for each sample
-        y = np.sin(2*np.pi*f * (x/fs))
+        y = (np.sin(2*np.pi*f * (x/fs))+2)/2
 
-        vlf = features.VLF([y])
-        lf = features.LF([y])
-        hf = features.HF([y])
+        vlf = features.VLF_power([y])
+        lf = features.LF_power([y])
+        hf = features.HF_power([y])
 
-        self.assertGreater(hf, vlf)
-        self.assertGreater(hf, lf)
+        # self.assertGreater(hf, vlf)
+        # self.assertGreater(hf, lf)
 
 
 
@@ -162,9 +185,10 @@ class TestPatient(unittest.TestCase):
         EventEntry('arousals.csv', parent=p).set_data(arousals, samplingRate=1)
         cls.p = p
         cls.f = Patient('xx_xxx')
-        time.sleep(0.25)
+        time.sleep(0.5)
         if os.path.exists('./'+cls.f._folder + '/feats/'):
             shutil.rmtree('./'+cls.f._folder + '/feats/')
+        time.sleep(0.2)
         cls.f.reset()
 
         # we hallucinate an entire unisens
@@ -226,6 +250,7 @@ class TestPatient(unittest.TestCase):
             self.assertEqual(len(hypno), len(feat))
 
         p = self.p_full_offset
+        p.offset = 30
         p.reset()
         art = p.get_artefacts(cache=False)
         feat = p.get_feat('mean_HR', wsize=30, cache=False)
@@ -308,8 +333,8 @@ class TestPatient(unittest.TestCase):
 
         self.assertTrue(os.path.exists(f._folder + '/feats/mean_HR-30-30-0.npy'))
         self.assertTrue(os.path.exists(f._folder + '/artefacts-30-30-0.npy'))
-        np.testing.assert_allclose(f.__dict__['_cache_feats/mean_HR-30-30-0.npy'], hr)
-        del f.__dict__['_cache_feats/mean_HR-30-30-0.npy']
+        np.testing.assert_allclose(f.feats.__dict__['_cache_feats/mean_HR-30-30-0.npy'], hr)
+        del f.feats.__dict__['_cache_feats/mean_HR-30-30-0.npy']
         hr2 = f.get_feat('mean_HR', offset=False)
         np.testing.assert_allclose(hr, hr2)
 
@@ -341,6 +366,7 @@ class TestPatient(unittest.TestCase):
         hr3 = f.get_feat('mean_HR', offset=True, only_sleeptime=True)
         hr4 = f.get_feat('mean_HR', offset=True, only_sleeptime=True, wsize=300, step=30)
         hr5 = f.get_feat('mean_HR', offset=True, only_sleeptime=True, wsize=300, step=300)
+
 
 #%% main
 if __name__ == '__main__':

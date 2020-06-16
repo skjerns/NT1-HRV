@@ -147,7 +147,7 @@ mapping_feats = {1:  'mean_HR',
                  **dict(zip(range(57,62), [f'detr_RR_{i}_perc' for i in (10,25,50,75,90)])),
                  # 52-56: detrended HR percentiles
                  **dict(zip(range(62,67), [f'detr_HR_{i}_perc' for i in (10,25,50,75,90)])),
-                 67: 'sample_entropy',      # sample entropy of symbolic binary change in RR interval
+                 67: 'SampEn',              # sample entropy of symbolic binary change in RR interval
                  68: 'ECG_power',           # power of ECG
                  69: 'ECG_4th_power',       # fouth power of ECG
                  70: 'ECG_curve_length',
@@ -161,7 +161,25 @@ mapping_feats = {1:  'mean_HR',
                  78: 'spectral_entropy',    # of ECG
                  79: 'hurst_exponent', 
                  80: 'short_phase_coord',   # short phase coordination
-                 81: 'long_phase_coord'     # long phase coordination
+                 81: 'long_phase_coord',     # long phase coordination
+
+                 # ones not mentioned in the paper
+                 83: 'VLF_power',
+                 84: 'SD1',                 # std of Poincaré plot line
+                 85: 'SD2',                 # std of Poincaré plot identity line
+                 86: 'SD2_SD1',             # ratio of the two
+                 87: 'triangular_index',    # this is related to TINN
+                 88: 'SNSindex',            # Sympathetic activity index
+                 89: 'PNSindex',            # Parasympathetic activity index
+                 90: 'modified_csi',        # modified CSI, similar to SNS und PNS index
+                 91: 'PermEn',              # Permutation entropy
+                 92: 'SVDEn',               # singular value decomposition entropy
+                 93: 'ApEn',                # approximate entropy
+                 94: 'PetrosianFract',      # Petrosian fractal energy
+                 95: 'KatzFract',           # Katz fractal energy
+                 96: 'HiguchiFract',        # Higuchi fractal energy
+                 97: 'detrend_fluctuation'  # detrended fluctuation
+
                  }
 
 
