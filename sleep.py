@@ -356,7 +356,7 @@ class Patient(Unisens):
     
     
     @error_handle
-    def get_artefacts(self, only_sleeptime=False, wsize=30, step=30,
+    def get_artefacts(self, only_sleeptime=False, wsize=300, step=30,
                       offset=True, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
@@ -491,7 +491,7 @@ class Patient(Unisens):
         return data
     
     @error_handle
-    def get_feat(self, name, only_sleeptime=False, wsize=30, step=30,
+    def get_feat(self, name, only_sleeptime=False, wsize=300, step=30,
                  offset=True, cache=True, only_clean=True):
         """
         Returns the given feature with the chosen parameters.

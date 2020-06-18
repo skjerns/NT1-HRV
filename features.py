@@ -13,6 +13,7 @@ import scipy
 from datetime import datetime
 from scipy import stats
 import hrvanalysis
+import pyhrv
 import nolds
 from joblib.memory import Memory
 import entropy
@@ -85,6 +86,7 @@ def SDNN(RR_windows, **kwargs):
             SDNN = np.nan
         else:
             SDNN = np.std(wRR)
+
         feat.append(SDNN)
     return np.array(feat)
 
@@ -185,6 +187,15 @@ def triangular_index(RR_windows):
     feat = get_geometrical_features(RR_windows)['triangular_index']
     return feat
 
+# def TINN(RR_windows):
+#     feat = []
+#     for wRR in RR_windows:
+#         if len(wRR)<2:
+#             value = np.nan
+#         else:
+#             value = pyhrv.time_domain.time_domain(wRR, plot=False, show=False)
+#         feat.append(value)
+#     return np.array(feat)
 
 def SNSindex(RR_windows):
     feat = get_csi_cvi_features(RR_windows)['csi']
@@ -218,10 +229,10 @@ def SampEn(RR_windows):
 def PermEn(RR_windows):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<3:
-            value = np.nan
-        else:
+        try:
             value = entropy.perm_entropy(wRR, order=3, normalize=True)
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
@@ -230,20 +241,20 @@ def SVDEn(RR_windows):
     # Singular value decomposition entropy
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<2:
-            value = np.nan
-        else:
+        try:
             value = entropy.svd_entropy(wRR, order=3, delay=1, normalize=True)
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
 def ApEn(RR_windows):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<2:
-            value = np.nan
-        else:
+        try:
             value = entropy.app_entropy(wRR, order=2, metric='chebyshev')
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
@@ -255,40 +266,40 @@ def ApEn(RR_windows):
 def PetrosianFract(RR_windows):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<2:
-            value = np.nan
-        else:
+        try:
             value = entropy.petrosian_fd(wRR)
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
 def KatzFract(RR_windows):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<2:
-            value = np.nan
-        else:
+        try:
             value = entropy.katz_fd(wRR)
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
 def HiguchiFract(RR_windows):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<2:
-            value = np.nan
-        else:
+        try:
             value = entropy.higuchi_fd(wRR, kmax=5)
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
 def detrend_fluctuation(RR_windows):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<3:
-            value = np.nan
-        else:
+        try:
             value = entropy.detrended_fluctuation(wRR)
+        except:
+            value = np.nan
         feat.append(value)
     return feat
 
@@ -385,7 +396,7 @@ def get_frequency_domain_features(RR_windows):
 
 
 
-#%% other functions
+### other functions
 
 def _window_view(a, window, step = None, axis = None, readonly = True):
         """
@@ -599,32 +610,35 @@ def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
  
     # RR_pre is before correction
     # RR_post is after correction (as coming directly from Kubios)
-    RR_pre = np.diff(T_RR)
-    RR_post = RR
-    windows_RR_pre =  [RR_pre[idx] if len(idx)>0 else [] for idx in idxs]
-    windows_RR_post = [RR_post[idx] if len(idx)>0 else [] for idx in idxs]
-    assert len(windows_RR_pre)==len(windows_RR_post)
+    RR_orig = np.diff(T_RR)
+    RR_corr = RR
+    windows_RR_orig =  [RR_orig[idx] if len(idx)>0 else [] for idx in idxs]
+    windows_RR_corr = [RR_corr[idx] if len(idx)>0 else [] for idx in idxs]
+    assert len(windows_RR_orig)==len(windows_RR_corr)
     
     art = []
-    for w_RR_pre, w_RRi_post in zip(windows_RR_pre, windows_RR_post):
-        
-        assert len(w_RR_pre) == len(w_RRi_post)
-        # 2. HR<30, seems odd + too large or too small
-        if len(w_RR_pre)<15 or np.argmax(w_RR_pre>2) or np.argmax(w_RRi_post<0.4):
+    for w_RR_orig, w_RRi_corr in zip(windows_RR_orig, windows_RR_corr):
+
+        assert len(w_RR_orig) == len(w_RRi_corr)
+        # 2. HR<30, seems odd
+        # but also any corrected RR larger than 2 or smaller than 0.4 seems wrong
+        if len(w_RR_orig)<wsize/2 or (w_RRi_corr>2).any() or (w_RRi_corr<0.4).any():
             art.append(True)
             continue
         else:
-            diff = np.where(~np.isclose(w_RR_pre, w_RRi_post))[0]
-            percentage = len(diff)/len(w_RR_pre)
+            diff = np.where(~np.isclose(w_RR_orig, w_RRi_corr))[0]
+            percentage = len(diff)/len(w_RR_orig)
             # 5. special case, are they consecutive or not?
             if wsize==30 and len(diff)==3:
                 # are the consecutive? Then the summary of their distance should be 3
                 if np.sum(diff)==3:
                     art.append(True)
                     continue
+            # else more than 3 corrected values and wsize=30, discard
             elif wsize==30 and len(diff)>3:
                 art.append(True)
                 continue
+            # if wsize is 300, we only look if percentage of corrected is > 0.05
             elif wsize==300 and percentage>0.05:
                 art.append(True)
                 continue
@@ -633,7 +647,7 @@ def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
         art.append(False)
         
     art = np.array(art)
-    assert len(art)==len(windows_RR_post)
+    assert len(art)==len(windows_RR_corr)
     return art
 
     

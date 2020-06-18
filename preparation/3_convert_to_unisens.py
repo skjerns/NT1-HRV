@@ -90,7 +90,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     tqdm_desc(f'{code}: Reading ECG')
 
     if not 'ECG' in u or overwrite:
-        signals, shead, header = read_edf(edf_file, ch_names='ECG I', digital=True, verbose=False)
+        signals, shead, header = read_edf(edf_file, ch_names=['ECG I'], digital=True, verbose=False)
         signals[:,0:2]  = np.percentile(signals, 10), np.percentile(signals,90) # trick for viewer automatic scaling
         pmin, pmax = shead[0]['physical_min'], shead[0]['physical_max']
         dmin, dmax = shead[0]['digital_min'], shead[0]['digital_max']
@@ -352,5 +352,5 @@ if __name__=='__main__':
         if not 'Y' in answer.upper():
             execute = False
     if execute:
-        Parallel(n_jobs=5, batch_size=4)(delayed(to_unisens)(
+        Parallel(n_jobs=6)(delayed(to_unisens)(
             edf_file, unisens_folder=unisens_folder, skip_exist=True, overwrite=False) for edf_file in tqdm(files, desc='Converting'))

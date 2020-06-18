@@ -18,7 +18,7 @@ Participants:
 
 Calculations:
     Cardiovascular:
-e    - the mean HR of each epoch was calculated
+    - the mean HR of each epoch was calculated
     - HR, HRV, resp. freq var. for each sleep stage 
     - low frequency (LF; 0.04–0.15 Hz) power via FFT (sympathetical activity)
     - high frequency (HF; 0.15–0.4 Hz) power via FFT (vagal activity)
@@ -120,11 +120,13 @@ p = ss[1]
 # stop
 #%%### Van Meijden Table 1
 
-descriptors = ['gender', 'age' , 'TST', 'sleep efficiency', 'S1 latency' ,
+descriptors = ['gender', 'age', 'Number of epochs', 'Artefact ratio' , 'TST',
+               'sleep efficiency', 'S1 latency' ,
                'S2 latency','SWS latency','REM latency',
                'S1 ratio', 'S2 ratio', 'SWS ratio', 'REM ratio', 'WASO ratio',
                'Stage shift index', 'Arousals', 'Arousal transitions',
-               'Nr. of Awakenings', 'Awakenings/Hour', 'Awakening Lengths']
+               'Nr. of Awakenings', 'Awakenings/Hour', 'Awakening Lengths',
+               ]
 
 table1 = {name:{'nt1':{}, 'control':{}} for name in descriptors}
 for group in ['nt1', 'control']:
@@ -137,6 +139,14 @@ for group in ['nt1', 'control']:
     table1['gender'][group]['mean'] = None
     table1['gender'][group]['std'] = None
     table1['gender'][group]['p'] = None
+
+    # number of epochs
+    values = list([len(p.get_hypno(only_sleeptime=True)) for p in subset])
+    table1['Number of epochs'][group]['values'] = values
+
+    # number of discarded epochs
+    values = list([np.mean(p.get_artefacts(only_sleeptime=True, wsize=300)) for p in subset])
+    table1['Artefact ratio'][group]['values'] = values
 
     # age
     values = np.array([x.age for x in subset])
@@ -225,16 +235,15 @@ for group in ['nt1', 'control']:
     # Length of awakenings
     values = list([np.mean(functions.phase_lengths(h)[0])/2 for h in subset.get_hypnos(only_sleeptime=True)])
     table1['Awakening Lengths'][group]['values'] = values
-  
-    
-  
+
+
 
 # calculate mean, std and p values for the values above
 functions.calc_statistics(table1)
 # plot distributions for the two groups and save results to html
-plotting.print_table(table1, 'Sleep Stage Parameters') 
+plotting.print_table(table1, '1 Sleep Stage Parameters')
 table1.pop('gender') # remove this, can't be plotted appropriately
-plotting.distplot_table(table1, 'Sleep Stage Parameters', ylabel='counts')
+plotting.distplot_table(table1, '1 Sleep Stage Parameters', ylabel='counts')
 
 #%% Van Meijden Figure 2 Mean episode length  2015 ,
 stage_means = dict(zip(range(6), [{'control':{}, 'nt1':{}} for _ in range(6)]))
@@ -262,6 +271,7 @@ for group in ['nt1', 'control']:
         ax.set_xlabel('minutes')
         ax.set_ylabel('total # of epochs')
         ax.legend(['nt1', 'control'])
+
 n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl') and not x.ecg_broken=='False'))
 plt.suptitle(f'Number of sleep phases for different phase lengths, n={n}')
 
@@ -291,7 +301,7 @@ for name in feat_names:
                 stages, lengths, idxs = functions.sleep_phase_sequence(hypno)
                 # get all indices where we have the given stage with longer
                 # period than the mean stage length
-                # minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+                minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
                 minlen = 10#int(minlen)
                 # we need it in epoch notation, so *2
                 phase_starts = np.where(np.logical_and(stages==stage, lengths>=minlen))[0]
@@ -476,9 +486,10 @@ plotting.distplot_table(table_body_changes, f'Total body position changes', colu
 
 
 
-#%% Features for different sleep stages: HF/LF, HRV, etc
+#%% Features in sleep stages: HF/LF, HRV, etc
 
-features = ['LF', 'HF', 'LF_HF', 'mean_HR', 'RMSSD', 'pNN50']
+features = ['mean_HR', 'VLF_power', 'LF_power', 'HF_power', 'LF_HF', 'RMSSD', 'pNN50',
+            'SD1', 'SD2', 'SD2_SD1']
 table_features = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in features}
 masks = {'nt1':{}, 'control':{}}
 
@@ -492,12 +503,13 @@ for group in ['nt1', 'control']:
         
         ##### here we filter out which epochs are elegible for analysis
         # only take epochs that are longer than the mean epoch length
-        minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
-        mask_length = [np.array(l)>minmean for l in phase_lengths]
+        # minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+        minlen = 10 # 5 minutes
+        mask_length = [np.array(l)>minlen for l in phase_lengths]
         # onlt take epochs of the given stage
         mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
         # only take epochs with no artefacts surrounding 300 seconds
-        mask_art = [p.get_artefacts(only_sleeptime=True, block_window_length=300)==False for p in subset]
+        mask_art = [p.get_artefacts(only_sleeptime=True, wsize=300)==False for p in subset]
         assert all([len(x)==len(y) for x,y in zip(mask_length, mask_stage)])
         assert all([len(x)==len(y)  for x,y in zip(mask_length, mask_art)])
         # create a singel mask
@@ -514,9 +526,9 @@ for feat in tqdm(features, desc='Calculating features'):
             values = [np.mean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage]) if len(v[m[:len(v)]])!=0]
             table_features[feat][stage][group] = {'values':values}
     functions.calc_statistics(table_features[feat])
-    plotting.distplot_table(table_features[feat], f'Mean {feat} during sleep stages')
+    plotting.distplot_table(table_features[feat], title=f'Feature {feat} during sleep stages')
     
-# plotting.print_table_with_subvars(table_features, 'feats')
+plotting.print_table_with_subvars(table_features, title=f'9 Features during during sleep stages')
 
 
 #%% end

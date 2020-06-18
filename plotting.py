@@ -15,6 +15,7 @@ import config as cfg
 from pytablewriter import TableWriterFactory, HtmlTableWriter
 from pytablewriter.style import Style
 import plotting
+import pandas as pd
 sns.set(style='whitegrid')
 ### settings
 
@@ -226,26 +227,26 @@ def print_table(table, title):
         dictionary['variable name']['subvarname']['group1/group2']['values'] = [0,5,2,3,4, ...]
  
     """
-    report_dir = os.path.join(cfg.documents, 'reports')
-    
-    matrix = []    
-    writer.table_name = title
-    writer.headers = ["Variable", "NT1", "Control", "p"]
-    
+
+    df = pd.DataFrame(columns=["Variable", "NT1", "Control", "p"])
+
     for name, d in table.items():
         nt1_mean, nt1_std = d['nt1']['mean'], d['nt1']['std']
         c_mean, c_std = d['control']['mean'], d['control']['std']
-        p = format_p_value(d['p'])
-        matrix += [[name, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p]]
-        
-    writer.value_matrix  = matrix
-    file = os.path.join(report_dir, f'{title}.{table_format}')
+        p = format_p_value(d['p'], bold=False)
+        df.loc[len(df)] = [name, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p]
+
     
-    # writer = 
-    string = writer.dumps()
+    string = df.to_html(escape=False, index_names=False)
     possible_plot = f'<br><br><br><br><img src="{title}.png" alt="not found: {title}.png">'
-    with open(file, 'w') as f:
+
+    html_file = os.path.join(report_dir, f'{title}.html')
+    xlsx_file = os.path.join(report_dir, f'{title}.xlsx')
+
+    with open(html_file, 'w') as f:
         f.write(css_format + string + possible_plot)
+
+    df.to_excel(xlsx_file)
     return string
 
 def print_table_with_subvars(table, title):
@@ -262,33 +263,32 @@ def print_table_with_subvars(table, title):
         dictionary['variable name']['subvarname']['group1/group2']['values'] = [0,5,2,3,4, ...]
  
     """
-    report_dir = os.path.join(cfg.documents, 'reports')
 
-    matrix = []    
-    writer.table_name = title
-    writer.headers = ["Variable", "Subvar", "NT1", "Control", "p"]
-    
+    df = pd.DataFrame(columns=["Variable", "Subvar", "NT1", "Control", "p"])
+
     for name, subtable in table.items():
         if name in [0,1,2,3,4,5]:
             name = cfg.num2stage[name]
-        matrix+= [[fbold(name)]]
-        for subvar in subtable:
+        df.loc[len(df)] = [name, '', '', '', '']
 
+        for subvar in subtable:
             nt1_mean, nt1_std = subtable[subvar]['nt1']['mean'], subtable[subvar]['nt1']['std']
             c_mean, c_std = subtable[subvar]['control']['mean'], subtable[subvar]['control']['std']
-            p = format_p_value(subtable[subvar]['p'])
+            p = format_p_value(subtable[subvar]['p'], bold=False)
             if subvar in [0,1,2,3,4,5]:
                 subvar = cfg.num2stage[subvar]
-            matrix += [['',subvar, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p]]
-            
-    writer.value_matrix  = matrix
-    file = os.path.join(report_dir, f'{title}.{table_format}')
-    
-    # writer = 
-    string = writer.dumps()
+            df.loc[len(df)] = ['', subvar, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p]
+
+
+    report_dir = os.path.join(cfg.documents, 'reports')
+    html_file = os.path.join(report_dir, f'{title}.html')
+    xlsx_file = os.path.join(report_dir, f'{title}.xlsx')
+
+    string = df.to_html(escape=False, index_names=False)
     possible_plot = f'<br><br><br><br><img src="{title}.png" alt="not found: {title}.png">'
-    with open(file, 'w') as f:
+    with open(html_file, 'w') as f:
         f.write(css_format + string + possible_plot)
+    df.to_excel(xlsx_file)
     return string
 
 

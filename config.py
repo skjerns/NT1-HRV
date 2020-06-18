@@ -119,8 +119,8 @@ mapping_feats = {1:  'mean_HR',
                  7:  'RMSSD',
                  8:  'SDSD',
                  9:  'RR_log_VLF',
-                 10: 'LF',                  # LF power
-                 11: 'HF',                  # HF power
+                 10: 'LF_power',                  # LF power
+                 11: 'HF_power',                  # HF power
                  12: 'LF_HF',               # ratio LF/HF
                  13: 'mean_RR_resp_freq',   # RR mean respiratory frequency
                  14: 'mean_RR_resp_pow',    # RR mean respiratory power
