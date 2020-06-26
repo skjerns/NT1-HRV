@@ -56,7 +56,7 @@ def dummy(RR_windows, **kwargs):
     """
     pass
     
-def RR_windows(RR_windows, **kwargs):
+def identity(RR_windows, **kwargs):
     return RR_windows
 
 def lengths(RR_windows, **kwargs):
@@ -156,20 +156,25 @@ def HF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['hf']
     return np.array(feat)
 
-def HFrf_power(RR_windows, p:'Patient', **kwargs):
+def HFrf_power(RR_windows, p, **kwargs):
     """HF with respiratory frequency"""
     signal = p.get_signal('thorax', offset=True)
     sfreq = p.thorax.sampleRate
     windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
+
     freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
     # trim respiratory to RR_window length.
     # it can happen that the last time window does not contain any RRs, then
     # RR_windows is shorter than the expected number of epochs
     # psd = psd[:len(RR_windows),:] # zip() does this below
+
+    if abs(len(psd)-len(RR_windows))>1:
+        log.warning(f'{p}, len PSD and len RR_windows differ by {abs(len(psd)-len(RR_windows))}')
+        log.warning(f'len windows and len RR_windows is different {len(windows)}!={len(RR_windows)}')
+
     feat = []
-    assert len(psd)==len(RR_windows), f'len psd and len RR_windows is different {len(psd)}!={len(RR_windows)}'
     for wRR, power in zip(RR_windows, psd):
-        if len(wRR) < 2:
+        if len(wRR) < 5:
             feat.append(np.nan)
             continue
         hf_lower = freq[np.argmax(power[3:])+3]*0.65
@@ -180,6 +185,8 @@ def HFrf_power(RR_windows, p:'Patient', **kwargs):
                                                          interpolation_method='cubic',
                                                          hf_band=hf_band)
         feat.append(mRR['hf'])
+    # pad that we have same number of features in hypno an feat
+    feat = feat + [np.nan for _ in range(len(RR_windows)-len(feat))]
     return np.array(feat)
 
 def LF_HFrf(RR_windows, patient, **kwargs):
@@ -190,9 +197,10 @@ def LF_HFrf(RR_windows, patient, **kwargs):
     windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
     freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
     feat = []
-    assert len(psd)==len(RR_windows)
+    if abs(len(psd)-len(RR_windows))>1:
+        log.error(f'len PSD and len RR_windows differ by { abs(len(psd)-len(RR_windows))}')
     for wRR, power in zip(RR_windows, psd):
-        if len(wRR) < 2:
+        if len(wRR) < 5:
             feat.append(np.nan)
             continue
         hf_lower = freq[np.argmax(power[3:])+3]*0.65
@@ -203,6 +211,8 @@ def LF_HFrf(RR_windows, patient, **kwargs):
                                                          interpolation_method='cubic',
                                                          hf_band=hf_band)
         feat.append(mRR['lf_hf_ratio'])
+    # pad that we have same number of features in hypno an feat
+    feat = feat + [np.nan for _ in range(len(RR_windows)-len(feat))]
     return np.array(feat)
 
 
@@ -716,13 +726,4 @@ def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
 
     
 #%% main 
-if __name__=='__main__':
-    
-    import stimer
-    ## testing flatline detection
-    from sleep import Patient
-    p = Patient('Z:/NT1-HRV-unisens/006_62843')
-    T_RR, RR = p.get_RR()
-    wsize = 300
-    step = 30
-    RR_windows = extract_RR_windows(T_RR, RR, wsize, step=step)
+# RR_windows

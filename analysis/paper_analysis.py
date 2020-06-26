@@ -120,9 +120,7 @@ p = ss[2]
 max_epochs = int(2*60*4.5) # only analyse the first 3 REM cycles
 
 
-# for p in ss:p.get_feat('HFrf_power')
-p = ss['055_63388']
-p.get_feat('HFrf_power')
+
 #%%### Van Meijden Table 1
 
 descriptors = ['gender', 'age', 'Number of epochs', 'Artefact ratio' , 'TST',

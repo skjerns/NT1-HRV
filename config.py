@@ -87,7 +87,7 @@ max_epochs = None #int(2*60*4.5) #only analyse this many epochs
 
 default_wsize = 300
 default_step  = 30
-default_offset = 0
+default_offset = True
 
 ecg_channel = 'ECG I'
 max_age_diff = 3 # maximum age difference to make a matching

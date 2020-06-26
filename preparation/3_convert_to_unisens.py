@@ -299,16 +299,11 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
 
             feats_entry = CustomEntry('feats.pkl', parent=u)
             feats_entry.set_data(HRV, comment='pickle dump of the kubios created features file', fileType='pickle')
-        
-            for nr, name in cfg.mapping_feats.items():
-                # if there is no function for this feature name
-                # we skip the calculation of this feature
-                # it might not be implemented yet.
-                if not name in features.__dict__: continue
-                wsize = cfg.default_wsize
-                step = cfg.default_step
-                offset = True
-                u.get_feat(name, wsize=wsize, step=step, offset=True)
+
+            wsize = cfg.default_wsize
+            step = cfg.default_step
+            offset = True
+            u.compute_features()
             u.get_artefacts(wsize=wsize, step=step, offset=True)
 
         

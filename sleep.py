@@ -24,6 +24,7 @@ from boltons.funcutils import wraps
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.filters import gaussian_filter1d
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
+from joblib import Parallel, delayed
 log.basicConfig()
 log.getLogger().setLevel(log.INFO)
 
@@ -155,7 +156,12 @@ class SleepSet():
                 print(f'Can\'t filter {code}: {e}')
             
         return SleepSet(p_true)
-    
+
+
+    def compute_features(self, n_jobs=-1, overwrite=True):
+        Parallel(n_jobs=n_jobs)(delayed(p.compute_features)(overwrite=overwrite) for p in tqdm(self))
+
+
     def add(self, patient):
         """
         Inserts a Patient to the SleepSet
@@ -298,8 +304,38 @@ class Patient(Unisens):
         if isinstance(folder, Patient): return None
         if not 'autosave' in kwargs: kwargs['autosave'] = False
         super().__init__(folder, convert_nums=True, *args, **kwargs)
-        
-        
+
+    @error_handle
+    def compute_features(self, names=None, wsize=None, step=None, offset=None,
+                         overwrite=True):
+        """
+        A helper function that computes all features.
+        Useful to overwrite or recompute certain features
+        but also to just create all features.
+        """
+        _readonly = self._readonly
+        self._readonly = False
+        if wsize is None:
+            wsize = config.default_wsize
+        if step is None:
+            step = config.default_step
+        if offset is None:
+            offset = config.default_offset
+        if names is None:
+            names = list(zip(*config.mapping_feats.items()))[0]
+        for name in names:
+            # if there is no function for this feature name
+            # we skip the calculation of this feature
+            # it might not be implemented yet.
+            if not name in features.__dict__: continue
+            feat_name = f'feats/{name}-{int(wsize)}-{int(step)}-{int(offset)}.npy'
+            if overwrite and feat_name in self.feats:
+                log.debug('Remove {feat_name}')
+                self.feats.remove_entry(feat_name)
+            log.debug('create {feat_name}')
+            self.get_feat(name, wsize=wsize, step=step, offset=True, cache=False)
+        self._readonly = _readonly
+
     @error_handle
     def get_RR(self, offset=True, cache=True):
         """
@@ -590,7 +626,7 @@ class Patient(Unisens):
                 feat.fill(np.nan)
 
         # save for caching purposes
-        if cache: self.feats.__dict__[f'_cache_{feat_name}'] = feat
+        self.feats.__dict__[f'_cache_{feat_name}'] = feat
 
         if only_clean:
             art = self.get_artefacts(only_sleeptime=False, wsize=wsize, step=step,
