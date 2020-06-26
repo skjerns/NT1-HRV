@@ -35,7 +35,7 @@ table {width: 750px;}
 img {max-width:750px;
   width: auto;
   height: auto;
-}
+}   
 </style>
 """
 
@@ -321,16 +321,16 @@ def format_p_value(p, bold=True):
         p = f'{p:.3f}*'
         p = fbold(p) if bold else p
     elif p>0.0001:
-        p = '>0.001**'
+        p = '<0.001**'
         p = fbold(p) if bold else p
     elif p>0.00001:
-        p = '>0.0001***'
+        p = '<0.0001***'
         p = fbold(p) if bold else p
     elif p>0.000001:
-        p = '>0.00001****'
+        p = '<0.00001****'
         p = fbold(p) if bold else p
     else:
-        p = '>0.000001!'
+        p = '<0.000001!'
         p = fbold(p) if bold else p
     return p
 

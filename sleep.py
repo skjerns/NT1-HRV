@@ -62,6 +62,8 @@ class SleepSet():
         
         :param patient_list: A list of strings pointing to Patients
         """
+        if config.max_epochs:
+            log.warning(f'Only analysing {config.max_epochs} epochs, set in config.py')
         if isinstance(patient_list, str):
             patient_list = ospath.list_folders(patient_list)
         assert isinstance(patient_list, list), 'patient_list must be type list'
@@ -191,6 +193,7 @@ class SleepSet():
         return np.hstack(feats)
     
     def get_hypnos(self, only_sleeptime=False):
+        log.warning('WARNING, MAX EPOCHS IS SET')
         hypnos = [p.get_hypno(only_sleeptime) for p in self]
         return hypnos
     
@@ -201,6 +204,7 @@ class SleepSet():
         # a meta function to filter both groups in one call
         filter_both = lambda ss, func: (len(ss.filter(lambda x: func(x) and x.group=='nt1')), \
                                        len(ss.filter(lambda x: func(x) and x.group=='control')))
+
 
         n_all = len(self)
         n_both = filter_both(self, lambda x: True)
@@ -216,7 +220,15 @@ class SleepSet():
         n_ecgother = filter_both(self,lambda x: 'ECG' in x and int(x.ECG.sampleRate) not in [200,256,512])
         n_feats = filter_both(self,lambda x: 'feats' in x and len(x.feats)>0)
         n_hypno = filter_both(self,lambda x: len(x.get_hypno())>0)     
-               
+
+        thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
+        thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control')]
+
+        hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
+        hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
+        n_thorax_nt1 = ', '.join([f'{hz} Hz = {n}' for hz,n in hz_nt1])
+        n_thorax_cnt = ', '.join([f'{hz} Hz = {n}' for hz,n in hz_cnt])
+
         print()
         t = PrettyTable(['Name', 'NT1', 'Control', 'Comment'])
         t.align['Name'] = 'l'
@@ -228,6 +240,7 @@ class SleepSet():
         # t.add_row(['Has EMG', *n_emg, f'missing: {n_all-sum(n_emg)}'])
         t.add_row(['Has Body', *n_lage, f'missing: {n_all-sum(n_lage)}'])
         t.add_row(['Has Thorax', *n_thorax, f'missing: {n_all-sum(n_thorax)}'])
+        t.add_row(['Thorax', n_thorax_nt1, n_thorax_cnt, ''])
         t.add_row(['ECG 200 Hz', *n_ecg200, f'total: {sum(n_ecg200)}'])
         t.add_row(['ECG 256 Hz', *n_ecg256, f'total: {sum(n_ecg256)}'])
         t.add_row(['ECG 512 Hz', *n_ecg512, f'total: {sum(n_ecg512)}'])
@@ -323,7 +336,7 @@ class Patient(Unisens):
             self._readonly = _readonly
 
         # the hypnograms from Domino always start at :00 or :30
-        # e.g. if the recording starts at 05:05:25, the first epoch starts
+        # e.g. if the recording starts at 05:05:25, the first hypno epoch starts
         # at 05:05:00, that means 25 seconds are added in the beginning.
         # therefore we need to add this offset to the beginning.
         # additionally domino does not count the last epoch if its not full.
@@ -332,16 +345,18 @@ class Patient(Unisens):
         # how many epochs we have in the hypnogram and it will truncate
         # the features accordingly.
         if offset:
-            if self.startsec==0: log.warning(f'startsec is 0, are you sure this is correct? {self._folder}')
+            if self.startsec==0:
+                log.error(f'startsec is 0, are you sure this is correct? {self._folder}')
+            # this is how many seconds we need to add
             start_at = self.startsec//30*30 - self.startsec
             if start_at>0:
-                log.warning(f'positive padding! {self._folder}')
+                log.warning(f'positive RR padding for {self._folder}')
                 idx = np.argmax(T_RR>start_at)
                 T_RR = T_RR - int(T_RR[idx])
                 T_RR = T_RR[idx:]
                 RR = RR[idx:]
             elif start_at<0:
-                log.debug(f'Adding {start_at} seconds to fill first epoch')
+                log.debug(f'Shifting to start at {start_at} seconds to fill first epoch')
                 T_RR_pad = list(range(abs(start_at)))
                 RR_pad = [1] * abs(start_at) # dummy RR peaks
                 T_RR += abs(start_at)
@@ -357,7 +372,7 @@ class Patient(Unisens):
     
     @error_handle
     def get_artefacts(self, only_sleeptime=False, wsize=300, step=30,
-                      offset=True, cache=True):
+                      offset=True, cache=True, max_len=None):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
@@ -409,10 +424,10 @@ class Patient(Unisens):
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
             art = art[self.sleep_onset//step:self.sleep_offset//step]
-        return art
+        return art[:max_len]
     
     @error_handle
-    def get_hypno(self, only_sleeptime=False, cache=True):
+    def get_hypno(self, only_sleeptime=False, cache=True, max_len=None):
         
         if cache and hasattr(self, '_cache_hypno'):
             hypno = self._cache_hypno
@@ -433,33 +448,48 @@ class Patient(Unisens):
         self.sleep_offset = len(hypno)*30-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])*30
         if only_sleeptime:
             hypno = hypno[self.sleep_onset//30:self.sleep_offset//30]
-        return hypno
+        return hypno[:max_len]
     
     @error_handle
     def get_ecg(self, only_sleeptime=False):
-        data = self['ecg.bin'].get_data().squeeze()
-        
+        data = self.get_signal('ECG', offset=True)
+
         if only_sleeptime:
             sfreq = int(self.ecg.sampleRate)
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
             data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
         return data
-    
+
+
     @error_handle
-    def get_signal(self, name='eeg', stage=None, only_sleeptime=False):
+    def get_signal(self, name='eeg', stage=None, only_sleeptime=False,
+                   offset=False):
         """
         get values of a SignalEntry
         
         :name name of the SignalEntry
         :param stage: only return values for this sleep stage
         :param only_sleeptime: only get values after first sleep until last sleep epoch 
+        :param offset: only return from full epoch (see drive->preprocessing->offset of hypnogram)
         """
         
         data = self[f'{name}.bin'].get_data().squeeze()
         sfreq = int(self[name].sampleRate)
-        
+
+        if offset and hasattr(self, 'startsec'):
+            if self.startsec==0:
+                log.error(f'startsec is 0, are you sure this is correct? {self._folder}')
+            # this is how much we pad in the beginning to fill the first
+            # epoch, as hypnograms start at :00 or :30, but signals start at e.g.
+            # :15, we add 15 seconds of signal to round up to 00/30
+            start_at = self.startsec - self.startsec//30*30
+            if start_at<0: log.error('negative padding should not be possible')
+            data = np.pad(data, pad_width=[start_at*sfreq, 0], mode='symmetric')
+
+        n_epochs = len(self.get_hypno())
+        data = data[:sfreq*n_epochs*30]
+
         if only_sleeptime:
-            if not hasattr(self, 'sleep_onset'): self.get_hypno()
             data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
             
         if stage is not None: 
@@ -467,7 +497,8 @@ class Patient(Unisens):
             mask = np.repeat(hypno, sfreq*30)==stage
             data = data[mask[:len(data)]]
         return data
-    
+
+
     @error_handle
     def get_arousals(self, only_sleeptime=False):
         """return epochs in which an arousal has taken place"""
@@ -537,7 +568,10 @@ class Patient(Unisens):
             # there should be a function with this name present there.
             feat_func = features.__dict__[name]
             try:
-                feat = np.array(feat_func(RR_windows))
+                # the patient argument is ignored by most functions
+                feat = np.array(feat_func(RR_windows, p=self))
+                if len(feat)<5:
+                    raise Exception(f'Created feature is too small: {len(feat)}')
                 # we need to change the readability of this Patient
                 # to store newly created features.
                 _readonly = self._readonly
@@ -551,7 +585,7 @@ class Patient(Unisens):
                 self._readonly = _readonly
             except Exception as e:
                 # if there was an error we do not save the values.
-                log.error(f'{self}, Cant create feature {feat_name}: ' + str(e))
+                log.error(f'{self}, Cant create feature {feat_name}: ' + repr(e))
                 feat = np.empty(len(RR_windows))
                 feat.fill(np.nan)
 

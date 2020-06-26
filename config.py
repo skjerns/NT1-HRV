@@ -83,6 +83,8 @@ root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() el
 #%% GENERAL LOOKUP TABLES AND VARIABLES
 ############################################
 
+max_epochs = None #int(2*60*4.5) #only analyse this many epochs
+
 default_wsize = 300
 default_step  = 30
 default_offset = 0
@@ -178,7 +180,9 @@ mapping_feats = {1:  'mean_HR',
                  94: 'PetrosianFract',      # Petrosian fractal energy
                  95: 'KatzFract',           # Katz fractal energy
                  96: 'HiguchiFract',        # Higuchi fractal energy
-                 97: 'detrend_fluctuation'  # detrended fluctuation
+                 97: 'detrend_fluctuation', # detrended fluctuation
+                 98: 'HFrf_power',          # HF power corrected by respiratory frequency
+                 99: 'LF_HRrf',             # LF/HF corrected by respiratory frequency
 
                  }
 

@@ -28,7 +28,18 @@ import entropy
 #     memory = Memory(None, verbose=99)
 # ###################################################
 
-    
+
+def resp_freq(thorax_windows, sfreq, **kwargs):
+    """
+    calculate the respiratory frequency distribution based on the 
+    thorax windows.
+    """
+    feat = []
+    for windows in thorax_windows:
+        pass
+    return np.array(feat)
+
+
 def dummy(RR_windows, **kwargs):
     """
     each function here should be named exactly as the feature 
@@ -45,7 +56,7 @@ def dummy(RR_windows, **kwargs):
     """
     pass
     
-def RR_windows(RR_windows):
+def RR_windows(RR_windows, **kwargs):
     return RR_windows
 
 def lengths(RR_windows, **kwargs):
@@ -145,6 +156,56 @@ def HF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['hf']
     return np.array(feat)
 
+def HFrf_power(RR_windows, p:'Patient', **kwargs):
+    """HF with respiratory frequency"""
+    signal = p.get_signal('thorax', offset=True)
+    sfreq = p.thorax.sampleRate
+    windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
+    freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
+    # trim respiratory to RR_window length.
+    # it can happen that the last time window does not contain any RRs, then
+    # RR_windows is shorter than the expected number of epochs
+    # psd = psd[:len(RR_windows),:] # zip() does this below
+    feat = []
+    assert len(psd)==len(RR_windows), f'len psd and len RR_windows is different {len(psd)}!={len(RR_windows)}'
+    for wRR, power in zip(RR_windows, psd):
+        if len(wRR) < 2:
+            feat.append(np.nan)
+            continue
+        hf_lower = freq[np.argmax(power[3:])+3]*0.65
+        hf_upper = freq[np.argmax(power[3:])+3]*1.35
+        hf_band = (hf_lower, hf_upper)
+        mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int),
+                                                         sampling_frequency=10,
+                                                         interpolation_method='cubic',
+                                                         hf_band=hf_band)
+        feat.append(mRR['hf'])
+    return np.array(feat)
+
+def LF_HFrf(RR_windows, patient, **kwargs):
+    """LF/HF_rf ratio with respiratory frequency"""
+    log.warning('NEED TO ACCOUNT OFFSET')
+    signal = patient.get_signal('thorax')
+    sfreq = patient.thorax.sampleRate
+    windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
+    freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
+    feat = []
+    assert len(psd)==len(RR_windows)
+    for wRR, power in zip(RR_windows, psd):
+        if len(wRR) < 2:
+            feat.append(np.nan)
+            continue
+        hf_lower = freq[np.argmax(power[3:])+3]*0.65
+        hf_upper = freq[np.argmax(power[3:])+3]*1.35
+        hf_band = (hf_lower, hf_upper)
+        mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int),
+                                                         sampling_frequency=10,
+                                                         interpolation_method='cubic',
+                                                         hf_band=hf_band)
+        feat.append(mRR['lf_hf_ratio'])
+    return np.array(feat)
+
+
 # 12
 def LF_HF(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['lf_hf_ratio']
@@ -166,24 +227,24 @@ def pNNxx(RR_windows, xx=50, **kwargs):
     return np.array(feat)
 
 
-def SD1(RR_windows):
+def SD1(RR_windows, **kwargs):
     feat = get_poincare_plot_features(RR_windows)['sd1']
     return feat
 
-def SD2(RR_windows):
+def SD2(RR_windows, **kwargs):
     feat = get_poincare_plot_features(RR_windows)['sd2']
     return feat
 
-def SD2_SD1(RR_windows):
+def SD2_SD1(RR_windows, **kwargs):
     feat = get_poincare_plot_features(RR_windows)['ratio_sd2_sd1']
     return feat
 
 # Not Implemented
-# def TINN(RR_windows):
+# def TINN(RR_windows, **kwargs):
 #     feat = get_geometrical_features(RR_windows)['tinn']
 #     return feat
 
-def triangular_index(RR_windows):
+def triangular_index(RR_windows, **kwargs):
     feat = get_geometrical_features(RR_windows)['triangular_index']
     return feat
 
@@ -197,15 +258,15 @@ def triangular_index(RR_windows):
 #         feat.append(value)
 #     return np.array(feat)
 
-def SNSindex(RR_windows):
+def SNSindex(RR_windows, **kwargs):
     feat = get_csi_cvi_features(RR_windows)['csi']
     return feat
 
-def PNSindex(RR_windows):
+def PNSindex(RR_windows, **kwargs):
     feat = get_csi_cvi_features(RR_windows)['cvi']
     return feat
 
-def modified_csi(RR_windows):
+def modified_csi(RR_windows, **kwargs):
     feat = get_csi_cvi_features(RR_windows)['Modified_csi']
     return feat
 
@@ -214,7 +275,7 @@ def modified_csi(RR_windows):
 
 ################### Entropy features
 # 67
-def SampEn(RR_windows):
+def SampEn(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         if len(wRR)<3:
@@ -226,7 +287,7 @@ def SampEn(RR_windows):
     return np.array(feat)
 
 
-def PermEn(RR_windows):
+def PermEn(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         try:
@@ -237,7 +298,7 @@ def PermEn(RR_windows):
     return feat
 
 
-def SVDEn(RR_windows):
+def SVDEn(RR_windows, **kwargs):
     # Singular value decomposition entropy
     feat = []
     for wRR in RR_windows:
@@ -248,7 +309,7 @@ def SVDEn(RR_windows):
         feat.append(value)
     return feat
 
-def ApEn(RR_windows):
+def ApEn(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         try:
@@ -263,7 +324,7 @@ def ApEn(RR_windows):
 ################### Fractal features
 
 
-def PetrosianFract(RR_windows):
+def PetrosianFract(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         try:
@@ -273,7 +334,7 @@ def PetrosianFract(RR_windows):
         feat.append(value)
     return feat
 
-def KatzFract(RR_windows):
+def KatzFract(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         try:
@@ -283,7 +344,7 @@ def KatzFract(RR_windows):
         feat.append(value)
     return feat
 
-def HiguchiFract(RR_windows):
+def HiguchiFract(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         try:
@@ -293,7 +354,7 @@ def HiguchiFract(RR_windows):
         feat.append(value)
     return feat
 
-def detrend_fluctuation(RR_windows):
+def detrend_fluctuation(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
         try:
@@ -481,23 +542,26 @@ def extract_windows(signal, sfreq, wsize, step=30, pad=True):
     """ 
     Extract windows from a signal of a given window size with striding step
     
+    :param sfreq:  the sampling frequency of the signal
     :param wsize:  the size of the window
-    :param stride: stepize of the window extraction. If None, stride=wsize
+    :param step:   stepize of the window extraction. If None, stride=wsize
     :param pad:    whether to pad the array such that there are exactly 
                    len(signal)//stride windows (e.g. same as hypnogram)
     """ 
     assert signal.ndim==1
     if step is None: step = wsize
-    n_step = len(signal)//step
     step *= sfreq
     wsize *= sfreq
-    assert len(signal)>=wsize
-    if pad: 
+    assert len(signal)>=wsize, 'signal is shorter than window size'
+    n_step = len(signal)//step
+
+    if pad:
         padding = (wsize//2-step//2)
         signal = np.pad(signal, [padding, padding], mode='reflect')
     windows = _window_view(signal, window=wsize, step=step, readonly=True)
-    if pad: 
-        assert n_step == len(windows), 'unequal sizes'
+
+    if pad:
+        assert n_step == len(windows), f'unequal sizes {n_step}!={len(windows)}'
     return windows
 
 def extract_RR_windows(T_RR, RR, wsize, step=30, pad=True,

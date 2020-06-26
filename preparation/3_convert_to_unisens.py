@@ -22,6 +22,7 @@ These meta attributes will be added:
 
 @author: skjerns
 """
+import tempfile
 import config as cfg
 import mat73
 from unisens import SignalEntry, EventEntry, ValuesEntry
@@ -289,7 +290,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             hypno_old_entry = EventEntry(id='hypnogram_old.csv', parent=u)
             hypno_old_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
-        #%% add kubios
+        #%% add features and kubios
         elif file.endswith('mat'):     
             if  'feats.pkl' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Kubios')
@@ -312,7 +313,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
 
         
         
-        #%% add artefact
+        # add artefact
         ############ removed artefact detection and calculated from kubios above
         # elif file.endswith('npy'):
         #     if  'artefacts' in u and not overwrite: continue

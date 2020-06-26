@@ -242,7 +242,7 @@ class TestPatient(unittest.TestCase):
 
             hypno = p.get_hypno(cache=False)
             self.assertEqual(len(hypno),len(hypno_org))
-            art = p.get_artefacts(cache=False)
+            art = p.get_artefacts(cache=False, wsize=30)
             feat = p.get_feat('mean_HR', wsize=30, cache=False)
             np.testing.assert_array_almost_equal(feat[:4], [60, 120, 80, 40])
 
@@ -252,7 +252,7 @@ class TestPatient(unittest.TestCase):
         p = self.p_full_offset
         p.offset = 30
         p.reset()
-        art = p.get_artefacts(cache=False)
+        art = p.get_artefacts(cache=False, wsize=30)
         feat = p.get_feat('mean_HR', wsize=30, cache=False)
 
     def test_create(self):
@@ -312,13 +312,13 @@ class TestPatient(unittest.TestCase):
 
     def test_artefacts(self):
         f = self.f
-        art = f.get_artefacts(offset=False)
+        art = f.get_artefacts(offset=False, wsize=30)
         self.assertEqual(len(art), 82)
-        self.assertEqual(sum(art), 22)
+        self.assertEqual(sum(art), 25)
 
         art2 = f.get_artefacts(wsize=300, step=30, offset=False)
         self.assertEqual(len(art2), 82)
-        self.assertEqual(sum(art2), 46)
+        self.assertEqual(sum(art2), 47)
         time.sleep(0.25)
         self.f.reset()
         time.sleep(0.1)
@@ -329,13 +329,13 @@ class TestPatient(unittest.TestCase):
 
     def test_feature(self):
         f = self.f
-        hr = f.get_feat('mean_HR', offset=False)
+        hr = f.get_feat('mean_HR',wsize=30, offset=False)
 
         self.assertTrue(os.path.exists(f._folder + '/feats/mean_HR-30-30-0.npy'))
         self.assertTrue(os.path.exists(f._folder + '/artefacts-30-30-0.npy'))
         np.testing.assert_allclose(f.feats.__dict__['_cache_feats/mean_HR-30-30-0.npy'], hr)
         del f.feats.__dict__['_cache_feats/mean_HR-30-30-0.npy']
-        hr2 = f.get_feat('mean_HR', offset=False)
+        hr2 = f.get_feat('mean_HR',wsize=30, offset=False)
         np.testing.assert_allclose(hr, hr2)
 
         time.sleep(0.25)

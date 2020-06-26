@@ -115,9 +115,14 @@ ss = SleepSet(files, readonly=True)
 stimer.stop()
 # ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
 ss = ss.stratify() # only use matched participants
-p = ss[1]
+p = ss[2]
 
-# stop
+max_epochs = int(2*60*4.5) # only analyse the first 3 REM cycles
+
+
+# for p in ss:p.get_feat('HFrf_power')
+p = ss['055_63388']
+p.get_feat('HFrf_power')
 #%%### Van Meijden Table 1
 
 descriptors = ['gender', 'age', 'Number of epochs', 'Artefact ratio' , 'TST',
@@ -145,7 +150,7 @@ for group in ['nt1', 'control']:
     table1['Number of epochs'][group]['values'] = values
 
     # number of discarded epochs
-    values = list([np.mean(p.get_artefacts(only_sleeptime=True, wsize=300)) for p in subset])
+    values = list([np.mean(p.get_artefacts(only_sleeptime=True, wsize=300, max_len=cfg.max_epochs)) for p in subset])
     table1['Artefact ratio'][group]['values'] = values
 
     # age
@@ -286,7 +291,7 @@ for i, stage in enumerate([1,2,3,4]):
     
 #%% Van Meijden Figure 3: Feat Change after transition
 
-feat_names = ['mean_HR', 'LF_power', 'HF_power', 'LF_HF']
+feat_names = ['mean_HR', 'LF_power', 'HF_power', 'HFrf_power', 'LF_HF', 'LF_HFrf']
 post_transitions = {feat:{stage:{} for stage in range(6)} for feat in feat_names}
    
 for name in feat_names:
@@ -488,8 +493,8 @@ plotting.distplot_table(table_body_changes, f'Total body position changes', colu
 
 #%% Features in sleep stages: HF/LF, HRV, etc
 
-features = ['mean_HR', 'VLF_power', 'LF_power', 'HF_power', 'LF_HF', 'RMSSD', 'pNN50',
-            'SD1', 'SD2', 'SD2_SD1']
+features = ['mean_HR', 'VLF_power', 'LF_power', 'HF_power', 'HFrf_power' ,
+            'LF_HF', 'RMSSD', 'pNN50',   'SD1', 'SD2', 'SD2_SD1']
 table_features = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in features}
 masks = {'nt1':{}, 'control':{}}
 
@@ -505,7 +510,7 @@ for group in ['nt1', 'control']:
         # only take epochs that are longer than the mean epoch length
         # minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
         minlen = 10 # 5 minutes
-        mask_length = [np.array(l)>minlen for l in phase_lengths]
+        mask_length = [np.array(l)>=minlen for l in phase_lengths]
         # onlt take epochs of the given stage
         mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
         # only take epochs with no artefacts surrounding 300 seconds
