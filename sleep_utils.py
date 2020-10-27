@@ -136,7 +136,7 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
                 print('[INFO] Assuming csv annotations are per second')
         lines = [[int(line)] for line in lines if len(line)>0]
         lines = [[line]*epochlen_infile for line in lines]
-        stages = np.array([conv_dict[l.upper()] for l in np.array(lines).flatten()])
+        stages = np.array([conv_dict[l.upper()]if isinstance(l, str) else l for l in np.array(lines).flatten()])
     
     # for the Dreams Database 
     # http://www.tcts.fpms.ac.be/~devuyst/Databases/DatabaseSubjects/    

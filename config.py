@@ -38,7 +38,7 @@ def get_dropbox_location():
 
 
 ###############################
-#%% USER SPECIFIC CONFIGURATION
+###USER SPECIFIC CONFIGURATION
 ###############################
 username = getpass.getuser().lower()  # your login name
 host     = platform.node().lower()    # the name of this computer
@@ -57,7 +57,7 @@ if dropbox:
 if username == 'nd269' and host=='ess-donatra':
     USER_VAR = 'test123'
     
-elif username == 'simon' and host=='desktop-skjerns':
+elif username == 'simon' and host=='desktop-simon':
     USER_VAR = 'test456'
     
 else:
@@ -69,18 +69,20 @@ else:
 try: 
     sys.path.append(documents)
     from user_variables import *
-except:
+except Exception as e:
+    print(e)
     print('It seems like you have not set the documents folder for this '\
           'machine. Please add in config.py. The documents folder contains '\
           'another script user_variables.py where you can set privacy' \
           'sensitive stuff that should not land on github such as dataset '\
           'paths.')
 
+
 root_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in vars() else ''
 
 
 ############################################
-#%% GENERAL LOOKUP TABLES AND VARIABLES
+### GENERAL LOOKUP TABLES AND VARIABLES
 ############################################
 
 max_epochs = None #int(2*60*4.5) #only analyse this many epochs
@@ -108,7 +110,7 @@ mapping_body = {1: 'face down',
 # reverse as well
 mapping_body.update( {v: k for k, v in mapping_body.items()})
 
-
+### Feature mapping
 # Features mapping to names
 # The names should be used to store and access the features in Unisens
 # The dictionary is case insensitive
@@ -182,7 +184,7 @@ mapping_feats = {1:  'mean_HR',
                  96: 'HiguchiFract',        # Higuchi fractal energy
                  97: 'detrend_fluctuation', # detrended fluctuation
                  98: 'HFrf_power',          # HF power corrected by respiratory frequency
-                 99: 'LF_HRrf',             # LF/HF corrected by respiratory frequency
+                 99: 'LF_HFrf',             # LF/HF corrected by respiratory frequency
 
                  }
 

@@ -16,7 +16,7 @@ import hrvanalysis
 import pyhrv
 import nolds
 from joblib.memory import Memory
-import entropy
+import entropy # pip install git+https://github.com/raphaelvallat/entropy.git
 
 # ### caching dir to prevent recomputation of reduntant functions
 # if hasattr(cfg, 'folder_cache'):
@@ -141,6 +141,13 @@ def SDSD(RR_windows, **kwargs):
         feat.append(SDSD)
     return np.array(feat)
 
+def ULF_power(RR, **kwargs):
+    ulf_band = (0, 0.0033)
+    feat = hrvanalysis.get_frequency_domain_features((RR*1000).astype(int), vlf_band=ulf_band,
+                                                            sampling_frequency=10, interpolation_method='cubic')
+    feat = feat['vlf']
+    return np.array(feat)
+
 def VLF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['vlf']
     return np.array(feat)
@@ -189,11 +196,10 @@ def HFrf_power(RR_windows, p, **kwargs):
     feat = feat + [np.nan for _ in range(len(RR_windows)-len(feat))]
     return np.array(feat)
 
-def LF_HFrf(RR_windows, patient, **kwargs):
+def LF_HFrf(RR_windows, p, **kwargs):
     """LF/HF_rf ratio with respiratory frequency"""
-    log.warning('NEED TO ACCOUNT OFFSET')
-    signal = patient.get_signal('thorax')
-    sfreq = patient.thorax.sampleRate
+    signal = p.get_signal('thorax', offset=True)
+    sfreq = p.thorax.sampleRate
     windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
     freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
     feat = []
@@ -288,7 +294,7 @@ def modified_csi(RR_windows, **kwargs):
 def SampEn(RR_windows, **kwargs):
     feat = []
     for wRR in RR_windows:
-        if len(wRR)<3:
+        if len(wRR)<8:
             value = np.nan
         else:
             # value = nolds.sampen(wRR, emb_dim=1)

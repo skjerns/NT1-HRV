@@ -92,6 +92,7 @@ Notes:
 """
 import stimer
 import functions
+import features
 from functions import arousal_transitions
 import numpy as np
 import config as cfg
@@ -114,96 +115,122 @@ stimer.start()
 ss = SleepSet(files, readonly=True)
 stimer.stop()
 # ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
+ss = ss.filter(lambda x: x.drug_hrv==0 and x.drug_sleep==0)
 ss = ss.stratify() # only use matched participants
 p = ss[2]
 
-max_epochs = int(2*60*4.5) # only analyse the first 3 REM cycles
+# apply this type of pvalue correction per table,
+# see  from statsmodels.stats.multitest.multipletests
+correction = 'holm'
+
+# only analyse the first 3 REM cycles
+max_epochs = int(2*60*4.5)
+
+#%% Population description
+descriptors = ['gender', 'age', 'Number of epochs (only sleeptime)', 'Artefact ratio']
+table_general = {name:{'nt1':{}, 'control':{}} for name in descriptors}
+
+total_number_of_epochs =  sum([len(p.get_hypno(only_sleeptime=True)) for p in ss])
+total_number_discarded = sum([sum(p.get_artefacts(only_sleeptime=True)) for p in ss])
+
+print(f'{total_number_of_epochs} are available, of which {total_number_discarded} are discarded ({total_number_discarded/total_number_of_epochs*100:.1f}%)')
+
+for group in ['nt1', 'control']:
+    subset = ss.filter(lambda x: x.group==group)
+
+    # gender
+    table_general['gender'][group]['female'] = np.sum([x.gender=='female' for x in subset])
+    table_general['gender'][group]['male'] = np.sum([x.gender=='male' for x in subset])
+    table_general['gender'][group]['values'] = [x.gender=='male' for x in subset]
+    table_general['gender'][group]['mean'] = 5
+    table_general['gender'][group]['std'] = None
+    table_general['gender'][group]['p'] = 2
+
+    # number of epochs
+    values = list([len(p.get_hypno(only_sleeptime=True)) for p in subset])
+    table_general['Number of epochs (only sleeptime)'][group]['values'] = values
+
+    # number of discarded epochs
+    values = list([np.nanmean(p.get_artefacts(only_sleeptime=True, wsize=300)) for p in subset])
+    table_general['Artefact ratio'][group]['values'] = values
+
+    # age
+    values = np.array([x.age for x in subset])
+    table_general['age'][group]['values'] = values
 
 
+# calculate mean, std and p values for the values above
+functions.calc_statistics(table_general)
+# plot distributions for the two groups and save results to html
+plotting.print_table(table_general, '1 Population description', correction=correction)
+table_general.pop('gender') # remove this, can't be plotted appropriately
+plotting.distplot_table(table_general, '1 Population description', ylabel='counts')
 
-#%%### Van Meijden Table 1
+# now print some general channel information
+ss.summary()
 
-descriptors = ['gender', 'age', 'Number of epochs', 'Artefact ratio' , 'TST',
-               'sleep efficiency', 'S1 latency' ,
+#%%### Sleep Stage Parameters
+
+descriptors = ['TST', 'sleep efficiency', 'S1 latency' ,
                'S2 latency','SWS latency','REM latency',
                'S1 ratio', 'S2 ratio', 'SWS ratio', 'REM ratio', 'WASO ratio',
                'Stage shift index', 'Arousals', 'Arousal transitions',
-               'Nr. of Awakenings', 'Awakenings/Hour', 'Awakening Lengths',
+               'Nr. of Awakenings', 'Awakening Lengths', #'Awakenings/Hour'
                ]
 
 table1 = {name:{'nt1':{}, 'control':{}} for name in descriptors}
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group)
 
-    # gender
-    table1['gender'][group]['female'] = np.sum([x.gender=='female' for x in subset])
-    table1['gender'][group]['male'] = np.sum([x.gender=='male' for x in subset])
-    table1['gender'][group]['values'] = [[x.gender=='male' for x in subset]]
-    table1['gender'][group]['mean'] = None
-    table1['gender'][group]['std'] = None
-    table1['gender'][group]['p'] = None
-
-    # number of epochs
-    values = list([len(p.get_hypno(only_sleeptime=True)) for p in subset])
-    table1['Number of epochs'][group]['values'] = values
-
-    # number of discarded epochs
-    values = list([np.mean(p.get_artefacts(only_sleeptime=True, wsize=300, max_len=cfg.max_epochs)) for p in subset])
-    table1['Artefact ratio'][group]['values'] = values
-
-    # age
-    values = np.array([x.age for x in subset])
-    table1['age'][group]['values'] = values
-    
     # TST in minutes
-    values = np.array([len([x for x in p.get_hypno() if x in [1,2,3,4]])/2 for p in subset])
+    values = np.array([len([x for x in p.get_hypno(only_sleeptime=True)[:max_epochs] if x in [1,2,3,4]])/2 for p in subset])
     table1['TST'][group]['values'] = values
     
     # Sleep efficiency
-    values = np.array([len(p.get_hypno(only_sleeptime=True)) for p in subset])
+    values = np.array([len(p.get_hypno(only_sleeptime=True)[:max_epochs]) for p in subset])
     values =  table1['TST'][group]['values'] / values*2
     table1['sleep efficiency'][group]['values'] = values
    
     # S1 latency in minutes
-    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==1)/2 for p in subset])
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)[:max_epochs]==1)/2 for p in subset])
     table1['S1 latency'][group]['values'] = values
    
     # S2 latency in minutes
-    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==2)/2 for p in subset])
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)[:max_epochs]==2)/2 for p in subset])
     table1['S2 latency'][group]['values'] = values
     
     # SWS latency in minutes
-    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==3)/2 for p in subset])
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)[:max_epochs]==3)/2 for p in subset])
     table1['SWS latency'][group]['values'] = values
     
     # REM latency in minutes
-    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)==4)/2 for p in subset])
+    values = np.array([np.argmax(p.get_hypno(only_sleeptime=True)[:max_epochs]==4)/2 for p in subset])
     table1['REM latency'][group]['values'] = values
     
     # Sleep stage 1 ratio
-    values = np.array([np.sum(p.get_hypno(only_sleeptime=True)==1) for p in subset])
-    values = values / (table1['TST'][group]['values']*2)
+    values = np.array([np.nanmean(p.get_hypno(only_sleeptime=True)[:max_epochs]==1) for p in subset])
     table1['S1 ratio'][group]['values'] = values
 
      # Sleep stage 2 ratio
-    values = np.array([np.sum(p.get_hypno(only_sleeptime=True)==2) for p in subset])
-    values = values / (table1['TST'][group]['values']*2)
+    values = np.array([np.nanmean(p.get_hypno(only_sleeptime=True)[:max_epochs]==2) for p in subset])
     table1['S2 ratio'][group]['values'] = values
 
      # SWS ratio
-    values = np.array([np.sum(p.get_hypno(only_sleeptime=True)==3) for p in subset])
-    values = values / (table1['TST'][group]['values']*2)
+    values = np.array([np.nanmean(p.get_hypno(only_sleeptime=True)[:max_epochs]==3) for p in subset])
     table1['SWS ratio'][group]['values'] = values
     
      # REM ratio
-    values = np.array([np.sum(p.get_hypno(only_sleeptime=True)==4) for p in subset])
-    values = values / (table1['TST'][group]['values']*2)
+    values = np.array([np.nanmean(p.get_hypno(only_sleeptime=True)[:max_epochs]==4) for p in subset])
     table1['REM ratio'][group]['values'] = values
-    
+
+    # WASO ratio
+    values = np.array([np.nanmean(p.get_hypno(only_sleeptime=True)[:max_epochs]==0) for p in subset])
+    table1['WASO ratio'][group]['values'] = values
+
     # Stage shift index, nr of stage changes per hour
-    hypnos = [p.get_hypno(only_sleeptime=True) for p in subset]
-    values = np.array([np.count_nonzero(np.diff(hypno[hypno!=5])) for hypno in hypnos])
-    values = values / (np.array([len(p.get_hypno(only_sleeptime=True)) for p in subset])/120)
+    hypnos = [p.get_hypno(only_sleeptime=True)[:max_epochs] for p in subset]
+    values = np.array([np.count_nonzero(np.diff(hypno)) for hypno in hypnos])
+    values = values / (max_epochs/2/60)
     table1['Stage shift index'][group]['values'] = values
     
     # LM index (movements)
@@ -211,32 +238,32 @@ for group in ['nt1', 'control']:
     # we dont have these annotations, so skip
     
     # Arousal transitions
-    hypnos = [p.get_hypno() for p in subset]
-    arousals = [p.get_arousals() for p in subset]
+    hypnos = [p.get_hypno(only_sleeptime=True)[:max_epochs] for p in subset]
+    arousals = [p.get_arousals(only_sleeptime=True) for p in subset]
+    arousals = [v[:np.argmax(v>(max_epochs-1))] for v in arousals]
     values = [arousal_transitions(h, a) for h, a in zip(hypnos, arousals)]
+    for h,a in zip(hypnos, arousals): arousal_transitions(h,a)
     table1['Arousal transitions'][group]['values'] = values
     
     #### Additional
-    # WASO ratio
-    values = np.array([np.sum(p.get_hypno(only_sleeptime=True)==0) for p in subset])
-    values = values / table1['TST'][group]['values']
-    table1['WASO ratio'][group]['values'] = values
     
     # Number of arousals
-    values = [p.get_arousals() for p in subset]
-    values = [len(v) for v in values]
+    arousals = [p.get_arousals(only_sleeptime=True) for p in subset]
+    arousals = [v[:np.argmax(v>max_epochs-1)] for v in arousals]
+    values = [len(v) for v in arousals]
     table1['Arousals'][group]['values'] = values
 
     # Number of awakenings
-    values = list([len(functions.phase_lengths(h)[0]) for h in subset.get_hypnos(only_sleeptime=True)])
+    values = list([len(functions.phase_lengths(h[:max_epochs])[0]) for h in subset.get_hypnos(only_sleeptime=True)])
     table1['Nr. of Awakenings'][group]['values'] = values
     
     # Number of awakenings//hour
-    values = list([len(functions.phase_lengths(h)[0])/(len(h)/120) for h in subset.get_hypnos(only_sleeptime=True)])
-    table1['Awakenings/Hour'][group]['values'] = values
+    # REMOVED, as we take all values for 4.5 anyway
+    #values = list([len(functions.phase_lengths(h[:max_epochs])[0])/(len(h[:max_epochs])/120) for h in subset.get_hypnos(only_sleeptime=True)])
+    #table1['Awakenings/Hour'][group]['values'] = values
     
     # Length of awakenings
-    values = list([np.mean(functions.phase_lengths(h)[0])/2 for h in subset.get_hypnos(only_sleeptime=True)])
+    values = list([np.nanmean(functions.phase_lengths(h[:max_epochs])[0])/2 for h in subset.get_hypnos(only_sleeptime=True)])
     table1['Awakening Lengths'][group]['values'] = values
 
 
@@ -244,48 +271,47 @@ for group in ['nt1', 'control']:
 # calculate mean, std and p values for the values above
 functions.calc_statistics(table1)
 # plot distributions for the two groups and save results to html
-plotting.print_table(table1, '1 Sleep Stage Parameters')
-table1.pop('gender') # remove this, can't be plotted appropriately
-plotting.distplot_table(table1, '1 Sleep Stage Parameters', ylabel='counts')
+plotting.print_table(table1, '2 Sleep Stage Parameters', correction=correction)
+plotting.distplot_table(table1, '2 Sleep Stage Parameters', ylabel='counts')
 
 #%% Van Meijden Figure 2 Mean episode length  2015 ,
-stage_means = dict(zip(range(6), [{'control':{}, 'nt1':{}} for _ in range(6)]))
-fig, axs = plt.subplots(2, 2)
+# stage_means = dict(zip(range(6), [{'control':{}, 'nt1':{}} for _ in range(6)]))
+# fig, axs = plt.subplots(2, 2)
 
-for group in ['nt1', 'control']:
-    subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
-
-    phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
-    phase_counts_all = dict(zip(range(6), [[] for _ in range(6)]))
-    for phase_count in phase_counts: 
-        for i in phase_count:
-            phase_counts_all[i].extend(phase_count[i])
+# for group in ['nt1', 'control']:
+#     subset = ss.filter(lambda x: x.group==group and hasattr(x, 'feats.pkl'))
+#     hypnos = subset.get_hypnos(only_sleeptime=True)
+#     phase_counts = [functions.phase_lengths(h[:max_epochs]) for h in hypnos]
+#     phase_counts_all = dict(zip(range(6), [[] for _ in range(6)]))
+#     for phase_count in phase_counts: 
+#         for i in phase_count:
+#             phase_counts_all[i].extend(phase_count[i])
             
     
-    for stage in range(6):
-        durations = np.array(phase_counts_all[stage], dtype=int)/2
-        stage_means[stage][group]['values'] = durations
-        if stage in [0, 5]: continue
+#     for stage in range(6):
+#         durations = np.array(phase_counts_all[stage], dtype=int)/2
+#         stage_means[stage][group]['values'] = durations
+#         if stage in [0, 5]: continue
     
-        hist = np.histogram(durations, bins=np.arange(16))
-        ax = axs.flatten()[stage-1]
-        ax.plot(hist[1][:-1], hist[0])
-        ax.set_title(cfg.num2stage[stage])
-        ax.set_xlabel('minutes')
-        ax.set_ylabel('total # of epochs')
-        ax.legend(['nt1', 'control'])
+#         hist = np.histogram(durations, bins=np.arange(16))
+#         ax = axs.flatten()[stage-1]
+#         ax.plot(hist[1][:-1], hist[0])
+#         ax.set_title(cfg.num2stage[stage])
+#         ax.set_xlabel('minutes')
+#         ax.set_ylabel('total # of epochs')
+#         ax.legend(['nt1', 'control'])
 
-n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl') and not x.ecg_broken=='False'))
-plt.suptitle(f'Number of sleep phases for different phase lengths, n={n}')
+# n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl') and not x.ecg_broken=='False'))
+# plt.suptitle(f'Number of sleep phases for different phase lengths, n={n}')
 
-# calculate statistics and print out results
-functions.calc_statistics(stage_means)
-plotting.print_table(stage_means, 'Number of sleep phases for different phase lengths') 
+# # calculate statistics and print out results
+# functions.calc_statistics(stage_means)
+# plotting.print_table(stage_means, 'Number of sleep phases for different phase lengths', correction=correction)
 
-for i, stage in enumerate([1,2,3,4]):
-    ax = axs.flatten()[i]
-    minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
-    ax.axvline(minmean, linestyle='dashed', linewidth=2, c='black')
+# for i, stage in enumerate([1,2,3,4]):
+#     ax = axs.flatten()[i]
+#     minmean = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+#     ax.axvline(minmean, linestyle='dashed', linewidth=2, c='black')
     
 #%% Van Meijden Figure 3: Feat Change after transition
 
@@ -298,17 +324,17 @@ for name in feat_names:
             subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
             values = []
             for p in subset:
-                hypno = p.get_hypno(only_sleeptime=True)
+                hypno = p.get_hypno(only_sleeptime=True)[:max_epochs]
                 # get the phase sequence, the lengths of the phase,
                 # and their start in the hypnogram
                 stages, lengths, idxs = functions.sleep_phase_sequence(hypno)
                 # get all indices where we have the given stage with longer
                 # period than the mean stage length
-                minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
+                # minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
                 minlen = 10#int(minlen)
                 # we need it in epoch notation, so *2
                 phase_starts = np.where(np.logical_and(stages==stage, lengths>=minlen))[0]
-                feat = p.get_feat(name, only_sleeptime=True, wsize=300, step=30)
+                feat = p.get_feat(name, only_sleeptime=True, wsize=300, step=30)[:max_epochs]
 
                 # loop through all phases that are longer than minlen and copy features from there
                 for start in phase_starts:
@@ -320,12 +346,12 @@ for name in feat_names:
             post_transitions[name][stage][group] = {'values':np.atleast_2d(values)}
             
     # calculate statistics and print out results
-    title = f'{name} rate changes directly after Sleep Phase Change'
+    title = f'3 after transition, {name} rate changes directly after Sleep Phase Change'
     functions.calc_statistics(post_transitions[name])
     n = len(ss.filter(lambda x: hasattr(x, 'feats.pkl')))
     fig, axs = plotting.lineplot_table(post_transitions[name], title, xlabel='epochs', 
                                        ylabel=name, n=n)
-    plotting.print_table(post_transitions[name], title)
+    plotting.print_table(post_transitions[name], title, correction=correction)
     # break
 
 #%% Van Meijden Table 2
@@ -344,36 +370,36 @@ for name in feat_names:
 ################################################
 ################################################
 
-descriptors = ['Starting Sequences \nN1-N2-SWS-REM / N2-REM / SOREM / Other', 
-               'Starting Sequences \nSWS-REM / N2-REM / SOREM',
-               'Sequences W-S', 'Sequences W-NR-R', 'Sequences N1-NR-R']
+descriptors = ['Starting Sequences \nN1-N2-SWS-REM / N2-REM / SOREM / Other',
+                'Starting Sequences \nSWS-REM / N2-REM / SOREM',
+                'Sequences W-S', 'Sequences W-NR-R', 'Sequences N1-NR-R']
 
 pizza2015 = {name:{'nt1':{}, 'control':{}} for name in descriptors}
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group)
 
     # Sleep Stage Sequences (see Pizza 2015)
-    values = list([functions.starting_sequence_pizza(h) for h in subset.get_hypnos(only_sleeptime=True)])
+    values = list([functions.starting_sequence_pizza(h[:max_epochs]) for h in subset.get_hypnos(only_sleeptime=True)])
     pizza2015['Starting Sequences \nN1-N2-SWS-REM / N2-REM / SOREM / Other'][group]['values'] = values
   
     # Sleep Stage Sequences (own definition, see functions.py)
-    values = list([functions.starting_sequence(h) for h in subset.get_hypnos(only_sleeptime=True)])
+    values = list([functions.starting_sequence(h[:max_epochs]) for h in subset.get_hypnos(only_sleeptime=True)])
     pizza2015['Starting Sequences \nSWS-REM / N2-REM / SOREM'][group]['values'] = values
     
     # Sleep Stage Sequences tW-Si (see Pizza 2015)
-    values = np.array(list([functions.transition_index(h, [0]) for h in subset.get_hypnos()]))
+    values = np.array(list([functions.transition_index(h[:max_epochs], [0]) for h in subset.get_hypnos()]))
     values = values / table1['TST'][group]['values']*60
     pizza2015['Sequences W-S'][group]['values'] = values
     
     # Sleep Stage Sequences tW-NR-Ri (see Pizza 2015)
-    values = np.array(list([functions.transition_index(h, [0,1,4]) for h in subset.get_hypnos()]))
-    values += np.array(list([functions.transition_index(h, [0,2,4]) for h in subset.get_hypnos()]))
+    values = np.array(list([functions.transition_index(h[:max_epochs], [0,1,4]) for h in subset.get_hypnos()]))
+    values += np.array(list([functions.transition_index(h[:max_epochs], [0,2,4]) for h in subset.get_hypnos()]))
     values = values / table1['TST'][group]['values']*60
     pizza2015['Sequences W-NR-R'][group]['values'] = values
     
     # Sleep Stage Sequences N1-NR-Ri (see Pizza 2015)
-    values = np.array(list([functions.transition_index(h, [0,1,2,4]) for h in subset.get_hypnos()]))
-    values += np.array(list([functions.transition_index(h, [0,1,3,4]) for h in subset.get_hypnos()]))
+    values = np.array(list([functions.transition_index(h[:max_epochs], [0,1,2,4]) for h in subset.get_hypnos()]))
+    values += np.array(list([functions.transition_index(h[:max_epochs], [0,1,3,4]) for h in subset.get_hypnos()]))
     values = values / table1['TST'][group]['values']*60
     pizza2015['Sequences N1-NR-R'][group]['values'] = values
     
@@ -381,8 +407,8 @@ for group in ['nt1', 'control']:
 functions.calc_statistics(pizza2015)
 
 # plot distributions for the two groups and print out table
-plotting.print_table(pizza2015, 'Sleep transition indices' ) 
-plotting.distplot_table(pizza2015, 'Sleep transition indices', columns=2, 
+plotting.print_table(pizza2015, '4.1 Sleep transition indices' , correction=correction)
+plotting.distplot_table(pizza2015, '4.1 Sleep transition indices', columns=2,
                         xlabel=[*['Nr of Starting Sequence']*2, *3*['Nr of occurence / h']])
 
 
@@ -394,8 +420,8 @@ transitions = {name:{'nt1':{}, 'control':{}} for name in descriptors}
 for group in ['nt1', 'control']:
     subset = ss.filter(lambda x: x.group==group)
     for pair in descriptors:
-        values = [len(functions.search_sequences(p.get_hypno(), np.array(pair))) for p in subset]
-        nr_transitions = [np.count_nonzero(np.diff(p.get_hypno(only_sleeptime=True))) for p in subset]
+        values = [len(functions.search_sequences(p.get_hypno()[:max_epochs], np.array(pair))) for p in subset]
+        nr_transitions = [np.count_nonzero(np.diff(p.get_hypno(only_sleeptime=True)[:max_epochs])) for p in subset]
         transitions[pair][group]['values'] = np.array(values)/nr_transitions
         
         # comment this in for transitions / hour
@@ -409,9 +435,9 @@ for group in ['nt1', 'control']:
         
 # calculate mean, std and p values for the values above
 functions.calc_statistics(transitions)
-plotting.distplot_table(transitions, '% of transitions of total transitions', columns=3, 
-                        xlabel='% of all transitions', ylabel='count')
-plotting.print_table(transitions, '% of transitions of total transitions' ) 
+plotting.distplot_table(transitions, '4.2 % of transitions of total transitions', columns=3,
+                        xlabel='4.2 % of all transitions', ylabel='count')
+plotting.print_table(transitions, '% of transitions of total transitions', correction=correction )
 
 
 
@@ -419,122 +445,148 @@ plotting.print_table(transitions, '% of transitions of total transitions' )
 #%% Body position changes
 #########################
 
-body_positions = [cfg.mapping_body[x] for x in range(1,7)]
-table_body = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in body_positions}
-table_body = {name:{'nt1':{}, 'control':{}} for name in body_positions}
+# body_positions = [cfg.mapping_body[x] for x in range(1,7)]
+# table_body = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in body_positions}
+# table_body = {name:{'nt1':{}, 'control':{}} for name in body_positions}
 
-# filter out all where they or their match has no body position
-# stratify to have one match for each nt1
-subset_body = ss.filter(lambda x: 'body' in x and x.body.sampleRate==4).stratify()
+# # filter out all where they or their match has no body position
+# # stratify to have one match for each nt1
+# subset_body = ss.filter(lambda x: 'body' in x and x.body.sampleRate==4).stratify()
 
-for pos in body_positions:
-    for group in ['nt1', 'control']:
+# for pos in body_positions:
+#     for group in ['nt1', 'control']:
         
-        subset = subset_body.filter(lambda x: x.group==group)
-        subset.stratify() # make sure we have equal number in both sets
+#         subset = subset_body.filter(lambda x: x.group==group)
+#         subset.stratify() # make sure we have equal number in both sets
         
-        values = [np.nanmean((p.get_signal('body', only_sleeptime=True)==cfg.mapping_body[pos])) for i,p in enumerate(subset)]
+#         values = [np.nanmean((p.get_signal('body', only_sleeptime=True)==cfg.mapping_body[pos])) for i,p in enumerate(subset)]
 
-        values = [v for v in values if v]
-        table_body[pos][group]['values'] = values
-
-
-functions.calc_statistics(table_body)
-plotting.distplot_table(table_body, 'Distribution of body positions', xlabel='ration spent in this position', ylabel='epochs spent in this position')
-
-#########################
-#%% Body position per sleep stage changes
-#########################
-
-body_positions = [cfg.mapping_body[x] for x in range(1,7)]
-body_positions.remove('upside down') # silly you, sleeping like a bat
-
-table_body = {stage:{name:{'nt1':{}, 'control':{}} for name in body_positions} for stage in range(5)}
+#         values = [v for v in values if v]
+#         table_body[pos][group]['values'] = values
 
 
-for stage in tqdm(range(5), desc=f'Body position'):
-    for pos in body_positions:
-        for group in ['nt1', 'control']:
-            subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate==4)
-            p=subset[0]
+# functions.calc_statistics(table_body)
+# plotting.distplot_table(table_body, '5.1 Distribution of body positions', xlabel='ration spent in this position', ylabel='epochs spent in this position')
+
+# #########################
+# #%% Body position per sleep stage changes
+# #########################
+
+# body_positions = [cfg.mapping_body[x] for x in range(1,7)]
+# body_positions.remove('upside down') # silly you, sleeping like a bat
+
+# table_body = {stage:{name:{'nt1':{}, 'control':{}} for name in body_positions} for stage in range(5)}
+
+
+# for stage in tqdm(range(5), desc=f'Body position'):
+#     for pos in body_positions:
+#         for group in ['nt1', 'control']:
+#             subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate==4)
+#             p=subset[0]
             
-            values = [np.nanmean(p.get_signal('body', only_sleeptime=True, stage=stage)==cfg.mapping_body[pos]) for p in subset]
-            # values = [v for v in values if v>0]
-            table_body[stage][pos][group]['values'] = values
+#             values = [np.nanmean(p.get_signal('body', only_sleeptime=True, stage=stage)==cfg.mapping_body[pos]) for p in subset]
+#             # values = [v for v in values if v>0]
+#             table_body[stage][pos][group]['values'] = values
 
 
-    functions.calc_statistics(table_body[stage])
-    plotting.distplot_table(table_body[stage], f'Body positions in stage {cfg.num2stage[stage]}',
-                                      xlabel='Ratio of this position in this stage',
-                                      ylabel='Number of patients with this ratio')
+#     functions.calc_statistics(table_body[stage])
+#     plotting.distplot_table(table_body[stage], f'Body positions in stage {cfg.num2stage[stage]}',
+#                                       xlabel='Ratio of this position in this stage',
+#                                       ylabel='Number of patients with this ratio')
  
 
     
-plotting.print_table_with_subvars(table_body, f'Body positions in stages')
+# plotting.print_table_with_subvars(table_body, f'5.2 Body positions in stages', correction=correction)
 
-#%% nr of position changes
+# #%% nr of position changes
 
-features = ['Total position changes']
-table_body_changes = {name:{'nt1':{}, 'control':{}} for name in features}
+# features = ['Total position changes']
+# table_body_changes = {name:{'nt1':{}, 'control':{}} for name in features}
 
-for name in features:
-    for group in ['nt1', 'control']:
-        subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate==4)
-        values = [np.count_nonzero(np.diff(p.get_signal('body', only_sleeptime=True))) for p in subset]
-        table_body_changes[name][group]['values'] = values
+# for name in features:
+#     for group in ['nt1', 'control']:
+#         subset = ss.filter(lambda x: x.group==group and 'body' in x and x.body.sampleRate==4)
+#         values = [np.count_nonzero(np.diff(p.get_signal('body', only_sleeptime=True))) for p in subset]
+#         table_body_changes[name][group]['values'] = values
         
-functions.calc_statistics(table_body_changes)
-plotting.print_table(table_body_changes, f'Total body position changes')
-plotting.distplot_table(table_body_changes, f'Total body position changes', columns=1)
+# functions.calc_statistics(table_body_changes)
+# plotting.print_table(table_body_changes, f'5.3 Total body position changes', correction=correction)
+# plotting.distplot_table(table_body_changes, f'5.3 Total body position changes', columns=1)
 
 
 
 #%% Features in sleep stages: HF/LF, HRV, etc
 
-features = ['mean_HR', 'VLF_power', 'LF_power', 'HF_power', 'HFrf_power' ,
-            'LF_HF', 'RMSSD', 'pNN50',   'SD1', 'SD2', 'SD2_SD1']
+features = ['mean_HR', 'VLF_power', 'LF_power', 'HF_power', 'LF_HF', 'RMSSD',
+            'pNN50', 'SDNN']
 table_features = {name:{stage:{'nt1':{}, 'control':{}} for stage in range(5)} for name in features}
 masks = {'nt1':{}, 'control':{}}
 
 for group in ['nt1', 'control']:
     subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
 
-    phase_counts = list(map(functions.phase_lengths, subset.get_hypnos(only_sleeptime=True)))
-    phase_lengths = list(map(functions.stage2length, subset.get_hypnos(only_sleeptime=True)))
-    
+    phase_counts = [functions.phase_lengths(h[:max_epochs]) for h in subset.get_hypnos(only_sleeptime=True)]
+    phase_lengths = [functions.stage2length(h[:max_epochs]) for h in subset.get_hypnos(only_sleeptime=True)]
+
     for stage in range(5):
         
         ##### here we filter out which epochs are elegible for analysis
         # only take epochs that are longer than the mean epoch length
         # minlen = min(stage_means[stage]['nt1']['mean'], stage_means[stage]['control']['mean'])
-        minlen = 10 # 5 minutes
+        minlen = 2 # 5 minutes
         mask_length = [np.array(l)>=minlen for l in phase_lengths]
         # onlt take epochs of the given stage
-        mask_stage = [h==stage for h in subset.get_hypnos(only_sleeptime=True)]
+        mask_stage = [h[:max_epochs]==stage for h in subset.get_hypnos(only_sleeptime=True)]
         # only take epochs with no artefacts surrounding 300 seconds
-        mask_art = [p.get_artefacts(only_sleeptime=True, wsize=300)==False for p in subset]
+        mask_art = [p.get_artefacts(only_sleeptime=True, wsize=300)[:max_epochs]==False for p in subset]
         assert all([len(x)==len(y) for x,y in zip(mask_length, mask_stage)])
         assert all([len(x)==len(y)  for x,y in zip(mask_length, mask_art)])
         # create a singel mask
         mask = [np.logical_and.reduce((x,y,z)) for x,y,z in zip(mask_length, mask_stage, mask_art)]
         masks[group][stage] = mask    
 
+
 for feat in tqdm(features, desc='Calculating features'):
     for stage in range(5):
         for group in 'nt1', 'control':
             subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
             # get all values
-            values = [p.get_feat(cfg.mapping_feats[feat], only_sleeptime=True, cache=True) for p in subset]
+            feat_name = cfg.mapping_feats[feat]
+            values = [p.get_feat(feat_name, only_sleeptime=True)[:max_epochs] for p in subset]
             # combine values with masks
-            values = [np.mean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage]) if len(v[m[:len(v)]])!=0]
+            values = [np.nanmean(v[m[:len(v)]]) for v, m in zip(values, masks[group][stage]) if len(v[m[:len(v)]])!=0]
             table_features[feat][stage][group] = {'values':values}
+
+    # manually calculate WBSO (wake before sleep onset)
+    table_features[feat]['WAKE Before Sleep'] = {}
+    for group in ['nt1', 'control']:
+        subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
+        sleep_onset = [np.argmax((hyp==1) | (hyp==2) | (hyp==3) | (hyp==4)) for hyp in subset.get_hypnos(only_sleeptime=False)]
+        values = [np.nanmean(p.get_feat(feat_name, only_sleeptime=False)[minlen*2:m]) for p, m in zip(subset, sleep_onset)]
+
+        table_features[feat]['WAKE Before Sleep'][group] = {'values':values}
+
+
     functions.calc_statistics(table_features[feat])
-    plotting.distplot_table(table_features[feat], title=f'Feature {feat} during sleep stages')
+    plotting.distplot_table(table_features[feat], title=f'9 Feature {feat} during sleep stages')
     
-plotting.print_table_with_subvars(table_features, title=f'9 Features during during sleep stages')
+plotting.print_table_with_subvars(table_features, title=f'9 Features during during sleep stages', correction=correction)
 
+#%% ULF analysis
+feat_names = ['ULF']
+table_whole_night = {feat:{'nt1':{}, 'control':{}} for feat in feat_names}
 
-#%% end
+for group in ['nt1', 'control']:
+    subset = ss.stratify(lambda x: hasattr(x, 'feats.pkl') and x.ecg_broken==False).filter(lambda x: x.group==group)
+    RRs_tuples = [p.get_RR(only_sleeptime=True) for p in subset]
+    RRs = [RR[:np.argmax(T_RR>=3600*2+T_RR[0])] for T_RR, RR in RRs_tuples]
+    ulf = [features.ULF_power(RR) for RR in tqdm(RRs, desc='ULF calc')]
+
+    table_whole_night['ULF'][group]['values'] = np.array(ulf)
+
+functions.calc_statistics(table_whole_night)
+plotting.distplot_table(table_whole_night, 'ULF')
+
 
 stimer.stop('All calculations')
 

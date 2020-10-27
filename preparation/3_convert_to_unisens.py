@@ -50,7 +50,8 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                skip_exist=False):
     pass
 #%% create unisens
-    if tqdm_desc is None:  tqdm_desc=lambda x: None
+    if tqdm_desc is None:
+        tqdm_desc=lambda x: None
     dtype = np.int16
     code = ospath.basename(edf_file)[:-4]
     folder = ospath.dirname(edf_file)
@@ -72,8 +73,13 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     attribs = misc.get_attribs()
     u.group = attribs[code].get('group', 'none')
     u.gender = attribs[code].get('gender', 'none')
+
+    u.drug_hrv = attribs[code].get('drug_hrv', 0)
+    u.drug_sleep = attribs[code].get('drug_sleep', 0)
+
     u.age = attribs[code].get('age', -1)
     u.match = attribs[code].get('match', '')
+    
     u.channels = str(', '.join(header['channels']))
     u.startsec = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
         
@@ -253,8 +259,11 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     #%%#### add rest #######
     ############################
     for file in add_files:
+        # ignore diagnosis files of StanfordStages
+        if file.endswith(('diagnosis.txt', 'hypnodensity.txt', 'hypnogram.txt')): #
+            pass
         #%% add arousals
-        if file.endswith('_arousals.txt'):
+        elif file.endswith('_arousal.txt'):
             if  'arousals' in u and not overwrite: continue
             lines = misc.read_csv(file, convert_nums=True)
             
@@ -267,7 +276,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                 data += [[epoch, length]]
             
             arousal_event = EventEntry('arousals.csv', parent=u)
-            arousal_event.set_data(data, comment=f'Arousal appearance epoch, name is lengths in seconds', 
+            arousal_event.set_data(data, comment='Arousal appearance epoch, name is lengths in seconds',
                                  sampleRate=1/30, contentClass='Arousal', typeLength=1)
         #%% add hypnogram
         elif file.endswith('txt'):
@@ -306,8 +315,15 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             u.compute_features()
             u.get_artefacts(wsize=wsize, step=step, offset=True)
 
-        
-        
+        #%% add RRi
+
+            tqdm_desc(f'{code}: writing RRi')
+    
+            rri_entry = CustomEntry('RRi.pkl', parent=u)
+            rri_entry.set_data(HRV['Data']['RRi'], comment='raw data of RRi, the interpolated RRs at 4hz', fileType='pickle')
+            rri_entry.sampleRate = 4
+
+
         # add artefact
         ############ removed artefact detection and calculated from kubios above
         # elif file.endswith('npy'):
@@ -321,7 +337,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         #     artefact_entry = ValuesEntry(id='artefacts.csv', parent=u)
         #     artefact_entry.set_data(art, sampleRate=1/15, dataType='int16')
             
-        elif file.endswith('.edf'):
+        elif file.endswith(('.edf', 'pkl')):
             pass
 
         else:
@@ -348,5 +364,9 @@ if __name__=='__main__':
         if not 'Y' in answer.upper():
             execute = False
     if execute:
-        Parallel(n_jobs=6)(delayed(to_unisens)(
-            edf_file, unisens_folder=unisens_folder, skip_exist=True, overwrite=False) for edf_file in tqdm(files, desc='Converting'))
+        Parallel(n_jobs=10)(delayed(to_unisens)(
+            edf_file, unisens_folder=unisens_folder, skip_exist=False, overwrite=False) for edf_file in tqdm(files, desc='Converting'))
+
+    # single process
+    # for file in tqdm(files):
+        # to_unisens(file, unisens_folder=unisens_folder, skip_exist=False, overwrite=False)

@@ -24,6 +24,8 @@ from boltons.funcutils import wraps
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.filters import gaussian_filter1d
 from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
+from unisens.utils import make_key
+from textwrap import fill
 from joblib import Parallel, delayed
 log.basicConfig()
 log.getLogger().setLevel(log.INFO)
@@ -43,7 +45,8 @@ def error_handle(func):
         try:
             return func(self, *args, **kwargs)
         except Exception as e:
-            print(f'## [{type(e).__name__}]  {self} ({self._folder})')
+            import traceback
+            traceback.print_exc()
             raise e
     print_error_wrapper.__doc__ = func.__doc__
     return print_error_wrapper
@@ -56,15 +59,13 @@ class SleepSet():
     makes it easier to do bulk operations, feature extraction etc.
     on a whole set of Patients.
     """
-    
+
     def __init__(self, patient_list:list=None, readonly=False):
         """
         Load a list of Patients (edf format). Resample if necessary.
         
         :param patient_list: A list of strings pointing to Patients
         """
-        if config.max_epochs:
-            log.warning(f'Only analysing {config.max_epochs} epochs, set in config.py')
         if isinstance(patient_list, str):
             patient_list = ospath.list_folders(patient_list)
         assert isinstance(patient_list, list), 'patient_list must be type list'
@@ -158,8 +159,8 @@ class SleepSet():
         return SleepSet(p_true)
 
 
-    def compute_features(self, n_jobs=-1, overwrite=True):
-        Parallel(n_jobs=n_jobs)(delayed(p.compute_features)(overwrite=overwrite) for p in tqdm(self))
+    def compute_features(self, names=None, n_jobs=8, overwrite=True):
+        Parallel(n_jobs=n_jobs)(delayed(p.compute_features)(names=names,overwrite=overwrite) for p in tqdm(self))
 
 
     def add(self, patient):
@@ -199,7 +200,6 @@ class SleepSet():
         return np.hstack(feats)
     
     def get_hypnos(self, only_sleeptime=False):
-        log.warning('WARNING, MAX EPOCHS IS SET')
         hypnos = [p.get_hypno(only_sleeptime) for p in self]
         return hypnos
     
@@ -215,44 +215,52 @@ class SleepSet():
         n_all = len(self)
         n_both = filter_both(self, lambda x: True)
         n_matched = filter_both(self, lambda x: x.match!='')
+        n_male = filter_both(self, lambda x: x.gender=='male')
+        n_female = filter_both(self, lambda x: x.gender=='female')
+
         n_ecg = filter_both(self,lambda x: 'ECG' in x)
         n_eeg = filter_both(self,lambda x: 'EEG' in x)
-        n_emg = filter_both(self,lambda x: 'EMG' in x)
+        # n_emg = filter_both(self,lambda x: 'EMG' in x)
         n_lage = filter_both(self,lambda x: 'Body' in x.channels)
-        n_thorax = filter_both(self,lambda x: 'thorax' in x) 
-        n_ecg200 = filter_both(self,lambda x: 'ECG' in x and int(x.ecg.sampleRate)==200)
-        n_ecg256 = filter_both(self,lambda x: 'ECG' in x and int(x.ecg.sampleRate)==256)
-        n_ecg512 = filter_both(self,lambda x: 'ECG' in x and int(x.ecg.sampleRate)==512)
-        n_ecgother = filter_both(self,lambda x: 'ECG' in x and int(x.ECG.sampleRate) not in [200,256,512])
+        n_thorax = filter_both(self,lambda x: 'thorax' in x)
         n_feats = filter_both(self,lambda x: 'feats' in x and len(x.feats)>0)
         n_hypno = filter_both(self,lambda x: len(x.get_hypno())>0)     
 
+        # get sampling frequency of ecg
+        ecg_nt1 = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
+        ecg_cnt = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='control')]
+        ecg_hz_nt1 = list(zip(*[list(y) for y in np.unique(ecg_nt1, return_counts=True)]))
+        ecg_hz_cnt = list(zip(*[list(y) for y in np.unique(ecg_cnt, return_counts=True)]))
+        n_ecg_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_hz_nt1])
+        n_ecg_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_hz_cnt])
+
+        # get sampling frequency of thorax
         thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
         thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control')]
-
-        hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
-        hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
-        n_thorax_nt1 = ', '.join([f'{hz} Hz = {n}' for hz,n in hz_nt1])
-        n_thorax_cnt = ', '.join([f'{hz} Hz = {n}' for hz,n in hz_cnt])
+        thorax_hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
+        thorax_hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
+        n_thorax_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_nt1])
+        n_thorax_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_cnt])
 
         print()
         t = PrettyTable(['Name', 'NT1', 'Control', 'Comment'])
         t.align['Name'] = 'l'
         t.align['Comment'] = 'l'
+
+        t.add_row(['Male', *n_male, ''])
+        t.add_row(['Female', *n_female, ''])
         t.add_row(['Group', *n_both, f'total: {n_all}'])
         t.add_row(['Matched', *n_matched, f'total: {n_all-sum(n_matched)}'])
         t.add_row(['Has ECG',*n_ecg, f'missing: {n_all-sum(n_ecg)}'])
         t.add_row(['Has EEG', *n_eeg, f'missing: {n_all-sum(n_eeg)}'])
+        t.add_row(['Has feats', *n_feats, f'missing: {n_all-sum(n_feats)}'])   
+        t.add_row(['Has hypno', *n_hypno, f'missing: {n_all-sum(n_hypno)}'])
         # t.add_row(['Has EMG', *n_emg, f'missing: {n_all-sum(n_emg)}'])
         t.add_row(['Has Body', *n_lage, f'missing: {n_all-sum(n_lage)}'])
         t.add_row(['Has Thorax', *n_thorax, f'missing: {n_all-sum(n_thorax)}'])
-        t.add_row(['Thorax', n_thorax_nt1, n_thorax_cnt, ''])
-        t.add_row(['ECG 200 Hz', *n_ecg200, f'total: {sum(n_ecg200)}'])
-        t.add_row(['ECG 256 Hz', *n_ecg256, f'total: {sum(n_ecg256)}'])
-        t.add_row(['ECG 512 Hz', *n_ecg512, f'total: {sum(n_ecg512)}'])
-        t.add_row(['ECG other', *n_ecgother, f'total: {sum(n_ecgother)}'])        
-        t.add_row(['Has feats', *n_feats, f'missing: {n_all-sum(n_feats)}'])   
-        t.add_row(['Has hypno', *n_hypno, f'missing: {n_all-sum(n_hypno)}'])   
+        t.add_row(['Thorax Hz', n_thorax_nt1, n_thorax_cnt, ''])
+        t.add_row(['ECG Hz', n_ecg_nt1, n_ecg_cnt, ''])
+
         print(t)
      
     def print(self):
@@ -333,11 +341,29 @@ class Patient(Unisens):
                 log.debug('Remove {feat_name}')
                 self.feats.remove_entry(feat_name)
             log.debug('create {feat_name}')
-            self.get_feat(name, wsize=wsize, step=step, offset=True, cache=False)
+            try: self.get_feat(name, wsize=wsize, step=step, offset=True, cache=False)
+            except Exception as e: print(e, repr(e))
         self._readonly = _readonly
 
+
+    def get_RRi(self, only_sleeptime=False, offset=True, cache=True):
+        assert isinstance(offset, bool), 'offset must be boolean not int/float'
+        if cache and hasattr(self, '_cache_RRi'):
+            RRi = self._cache_RRi
+        else:
+            RRi = self.feats.get_data()['Data']['RRi']
+
+        if cache:
+            self._cache_RRi = RRi
+
+        if only_sleeptime:
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            RRi = RRi[self.sleep_onset*4:self.sleep_offset*4]
+        return RRi
+
+
     @error_handle
-    def get_RR(self, offset=True, cache=True):
+    def get_RR(self, only_sleeptime=False, offset=True, cache=True):
         """
         Retrieve the RR peaks and the T_RR, which is their respective positions
         
@@ -345,11 +371,12 @@ class Patient(Unisens):
         """
         assert isinstance(offset, bool), 'offset must be boolean not int/float'
 
-        if cache and hasattr(self.feats, '_cache_RR'):
+        if cache and \
+            ((cached:=self.feats.__dict__.get('_cache_RR')) is not None):
             log.debug('Loading cached RR')
+            T_RR, RR = cached
             # already loaded within this session
-            T_RR, RR = self.feats._cache_RR
-        
+
         elif 'feats/RR.npy' in self.feats and 'feats/T_RR.npy' in self.feats:
             log.debug('Loading saved RR')
             # previously loaded
@@ -399,16 +426,27 @@ class Patient(Unisens):
                 T_RR = np.hstack([T_RR_pad, T_RR])
                 RR = np.hstack([RR_pad, RR])
             else:
-                log.debug(f'No padding to fill epoch')
+                log.debug('No padding to fill epoch')
 
+        if only_sleeptime:
+            if not hasattr(self, 'sleep_onset'): self.get_hypno()
+            start = np.argmax(T_RR>=self.sleep_onset)
+            stop = np.argmax(T_RR>=self.sleep_offset)
+            if stop==0:
+                stop = len(T_RR)
 
+            T_RR = T_RR[start:stop]
+            RR = RR[start:stop-1]
         assert len(T_RR)==len(RR)+1, 'T_RR does not fit to RR, seems wrong. {len(T_RR)}!={len(RR)+1}'
-        return T_RR, RR
+
+
+        return np.array(T_RR), np.array(RR)
     
     
     @error_handle
+    @profile
     def get_artefacts(self, only_sleeptime=False, wsize=300, step=30,
-                      offset=True, cache=True, max_len=None):
+                      offset=True, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
@@ -421,18 +459,21 @@ class Patient(Unisens):
         # this way we can store several versions of the artefacts
         # calculated for different parameters.
         art_name = f'artefacts-{int(wsize)}-{int(step)}-{int(offset)}.npy'
-        
+        cache_name = f'_cache_{art_name}'
+
         ### now some caching tricks to speed up loading of features
         # if cached, reload this cached version bv
-        if cache and hasattr(self.feats, f'_cache_{art_name}'):
+        if cache and \
+            ((art:=self.feats.__dict__.get(cache_name, None)) is not None):
             log.debug('Loading cached artefacts')
-            art = self.feats.__dict__[f'_cache_{art_name}']
-            
+            # already loaded during assignment expression
         # if not cached, but already computed, load computed version
         elif art_name in self:
             log.debug('Loading previously saved artefacts')
             art = self[art_name].get_data()
-            
+            # save for caching purposes
+            if cache:
+                self.feats.__dict__[cache_name] = art
         # else: not computed and not cached, compute this feature now.  
         else:
             # receive RRs to calculate artefacts on this
@@ -454,16 +495,18 @@ class Patient(Unisens):
             self.save()
             self._readonly = _readonly
           
-        # save for caching purposes
-        if cache: self.feats.__dict__[f'_cache_{art_name}'] = art
+            # save for caching purposes
+            if cache:
+                self.feats.__dict__[cache_name] = art
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
             art = art[self.sleep_onset//step:self.sleep_offset//step]
-        return art[:max_len]
+        return art
     
     @error_handle
-    def get_hypno(self, only_sleeptime=False, cache=True, max_len=None):
+    @profile
+    def get_hypno(self, only_sleeptime=False, cache=True):
         
         if cache and hasattr(self, '_cache_hypno'):
             hypno = self._cache_hypno
@@ -484,7 +527,7 @@ class Patient(Unisens):
         self.sleep_offset = len(hypno)*30-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])*30
         if only_sleeptime:
             hypno = hypno[self.sleep_onset//30:self.sleep_offset//30]
-        return hypno[:max_len]
+        return hypno
     
     @error_handle
     def get_ecg(self, only_sleeptime=False):
@@ -540,24 +583,20 @@ class Patient(Unisens):
         """return epochs in which an arousal has taken place"""
         try:
             epochs = self['arousals.csv'].get_data()
+            if len(epochs)==0:
+                return(np.array([0]))
         except:
             log.warn(f'{self.code} has no arousal file')
             return(np.array([0]))
-        arousals = set()
-        for epoch, length in epochs:
-            arousals.add(epoch)
-            i = 1
-            while length>30:
-                arousals.add(epoch+i)
-                i+=1
-                
-        data = np.array(sorted(list(arousals)))       
+        arousals = np.array(list(zip(*epochs))[0])
+
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            data = data-self.sleep_onset//30
-        return data
+            arousals = arousals[np.argmax(arousals>self.sleep_onset//30):]
+        return arousals
     
     @error_handle
+    @profile
     def get_feat(self, name, only_sleeptime=False, wsize=300, step=30,
                  offset=True, cache=True, only_clean=True):
         """
@@ -579,17 +618,19 @@ class Patient(Unisens):
         # this way we can store several versions of the features
         # calculated for different parameters.
         feat_name = f'feats/{name}-{int(wsize)}-{int(step)}-{int(offset)}.npy'
+        feat_id = make_key(feat_name)
+        cache_name = f'_cache_{feat_name}'
         
         # now some caching tricks to speed up loading of features
         # if cached, reload this cached version
-        if cache and hasattr(self.feats, f'_cache_{feat_name}'):
+        if cache and cache_name in self.feats.__dict__:
             log.debug(f'Loading cached {feat_name}')
-            feat = self.feats.__dict__[f'_cache_{feat_name}']
+            feat = self.feats.__dict__[cache_name]
             
         # if not cached, but already computed, load computed version
-        elif feat_name in self.feats:
+        elif self.feats.__dict__.get(feat_id) is not None:
             log.debug(f'Loading saved {feat_name}.npy')
-            feat = self.feats[feat_name].get_data()
+            feat = self.feats.__dict__[feat_id].get_data()
             
         # else: not computed and not cached, compute this feature now.  
         else:
@@ -620,8 +661,11 @@ class Patient(Unisens):
                 self.save()
                 self._readonly = _readonly
             except Exception as e:
+                import traceback
                 # if there was an error we do not save the values.
                 log.error(f'{self}, Cant create feature {feat_name}: ' + repr(e))
+                traceback.print_exc()
+
                 feat = np.empty(len(RR_windows))
                 feat.fill(np.nan)
 
@@ -631,7 +675,7 @@ class Patient(Unisens):
         if only_clean:
             art = self.get_artefacts(only_sleeptime=False, wsize=wsize, step=step,
                                      offset=offset)
-            feat[art] = [np.nan] * sum(art)
+            feat[art] = np.nan
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno(cache=cache)
@@ -705,8 +749,13 @@ class Patient(Unisens):
             for i, channel in enumerate(channels):
                 if channel in self:
                     entry =  self[channel]
-                    signal = entry.get_data()
-                    if entry.id.endswith('bin'):
+                    signal = entry.get_data().squeeze()
+                    if entry.id.endswith('pkl'):
+                        sfreq = entry.sampleRate
+                        axs[i].specgram(signal, Fs=sfreq)
+                        # axs[i].set_ylim(0,1)
+
+                    elif entry.id.endswith('bin'):
                         signal = signal[0]
                         sfreq = entry.sampleRate
                         sleep_utils.specgram_multitaper(signal, int(sfreq), ax=axs[i])
@@ -715,6 +764,8 @@ class Patient(Unisens):
                         sfreq = entry.samplingRate
                         signal = list(zip(*signal))
                         axs[i].plot(signal[0], signal[1])
+                    else:
+                        raise ValueError(f'Entry {channel} not found')
                 else:
                     signal = self.get_feat(channel)
                     smoothed = gaussian_filter1d(signal, sigma=3.5)

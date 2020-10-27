@@ -51,7 +51,7 @@ def anonymize_and_streamline(old_file, target_folder):
     # Here we read the list of controls and patients with their age and gender
     mappings = misc.read_csv(cfg.controls_csv)
     mappings.extend(misc.read_csv(cfg.patients_csv))
-    mappings = dict([[name, {'gender':gender, 'age':age}] for name, gender, age in mappings])
+    mappings = dict([[name, {'gender':gender, 'age':age}] for name, gender, age,*_ in mappings])
 
     # old name is the personalized file without file extension, e.g. thomas_smith(1)
     old_name = ospath.splitext(ospath.basename(old_file))[0]
@@ -157,7 +157,8 @@ if __name__ == '__main__':
          'ERROR: Hash collision! Check thoroughly.'
     
     csv_file = ospath.join(documents, 'mapping_all.csv')
-    pd.DataFrame(results).to_csv(csv_file, header=None, index=False, sep=';')
+    df = pd.DataFrame(results)
+    df.to_csv(csv_file, header=None, index=False, sep=';')
 
         
         

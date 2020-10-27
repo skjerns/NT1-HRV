@@ -32,6 +32,7 @@ def get_matching():
     matching.extend([x[::-1] for x in matching]) # also backwards
     return dict(matching)
 
+
 def get_attribs():
     """get the attributes of the patients etc"""
     import config
@@ -44,8 +45,8 @@ def get_attribs():
     control = utils.read_csv(config.controls_csv)
     nt1 = utils.read_csv(config.patients_csv)
     
-    control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control'}] for c in control] 
-    nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1'}] for c in nt1] 
+    control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control', 'drug_hrv':c[3], 'drug_sleep':c[4]}] for c in control]
+    nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1', 'drug_hrv':c[3], 'drug_sleep':c[4]}] for c in nt1]
     
     
     
@@ -55,6 +56,8 @@ def get_attribs():
     # reverse mapping as well
     for c in all_subjects: all_subjects[c].update({'match':matching.get(c,'')})
     return dict(all_subjects)
+
+
 
 def codify(filename): 
     """

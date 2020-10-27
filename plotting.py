@@ -16,6 +16,7 @@ from pytablewriter import TableWriterFactory, HtmlTableWriter
 from pytablewriter.style import Style
 import plotting
 import pandas as pd
+from statsmodels.stats.multitest import multipletests
 sns.set(style='whitegrid')
 ### settings
 
@@ -213,8 +214,11 @@ def distplot_table(table, title, columns=3, rows=None, save_to=None,
         
 
 
-def print_table(table, title):
+def print_table(table, title, correction=False):
     """
+
+    :param correction: the correction method to be applied, see statmodels.stats.multipletest.multipletests
+
     Format a dictionary as a table and save it to HTML/MD/CSV
     
     example dictionary
@@ -228,13 +232,29 @@ def print_table(table, title):
  
     """
 
-    df = pd.DataFrame(columns=["Variable", "NT1", "Control", "p"])
+    df = pd.DataFrame(columns=["Variable", "NT1", "Control", "p", f'p_corr_{correction}', 'effect size'])
+
+    if correction:
+        pvals = []
+        for name, subtable in table.items():
+                p = table[name]['p']
+                pvals.append(0 if isinstance(p, str) else p)
+        try:
+            corr_pvals = multipletests(pvals, alpha=0.05, method=correction)
+        except:
+            corr_pvals =[ [np.nan for _ in pvals]]*2
+        i=0
+        for name, subtable in table.items():
+                table[name][f'p_corr_{correction}'] = corr_pvals[1][i]
+                i+=1
 
     for name, d in table.items():
         nt1_mean, nt1_std = d['nt1']['mean'], d['nt1']['std']
         c_mean, c_std = d['control']['mean'], d['control']['std']
         p = format_p_value(d['p'], bold=False)
-        df.loc[len(df)] = [name, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p]
+        cohen_d = d['d']
+        p_corr = format_p_value(d.get(f'p_corr_{correction}', '-'), bold=False)
+        df.loc[len(df)] = [name, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p, p_corr, cohen_d]
 
     
     string = df.to_html(escape=False, index_names=False)
@@ -249,8 +269,11 @@ def print_table(table, title):
     df.to_excel(xlsx_file)
     return string
 
-def print_table_with_subvars(table, title):
+def print_table_with_subvars(table, title, correction=False):
     """
+
+    :param correction: the correction method to be applied, see statmodels.stats.multipletest.multipletests
+
     Format a dictionary as a table and save it to HTML/MD/CSV
     
     example dictionary
@@ -264,21 +287,41 @@ def print_table_with_subvars(table, title):
  
     """
 
-    df = pd.DataFrame(columns=["Variable", "Subvar", "NT1", "Control", "p"])
+    df = pd.DataFrame(columns=["Variable",'Subvar', "NT1", "Control", "p", f'p_corr_{correction}', 'effect size'])
+
+    if correction:
+        pvals = []
+        for name, subtable in table.items():
+            for subvar in subtable:
+                pvals.append(table[name][subvar]['p'])
+        corr_pvals = multipletests(pvals, alpha=0.05, method=correction)
+        i=0
+        for name, subtable in table.items():
+            for subvar in subtable:
+                table[name][subvar][f'p_corr_{correction}'] = corr_pvals[1][i]
+                i+=1
+
 
     for name, subtable in table.items():
         if name in [0,1,2,3,4,5]:
             name = cfg.num2stage[name]
-        df.loc[len(df)] = [name, '', '', '', '']
+        df.loc[len(df)] = [name, '', '', '', '', '', '']
 
         for subvar in subtable:
             nt1_mean, nt1_std = subtable[subvar]['nt1']['mean'], subtable[subvar]['nt1']['std']
             c_mean, c_std = subtable[subvar]['control']['mean'], subtable[subvar]['control']['std']
             p = format_p_value(subtable[subvar]['p'], bold=False)
+            p_corr = format_p_value(subtable[subvar].get(f'p_corr_{correction}', '-'), bold=False)
+            cohen_d = subtable[subvar]['d']
             if subvar in [0,1,2,3,4,5]:
                 subvar = cfg.num2stage[subvar]
-            df.loc[len(df)] = ['', subvar, f'{nt1_mean:.2f} ± {nt1_std:.2f}', f'{c_mean:.2f} ± {c_std:.2f}', p]
-
+            if nt1_mean<0.1:
+                pf = 4
+            elif nt1_mean<1:
+                pf = 3
+            else:
+                pf = 2
+            df.loc[len(df)] = ['', subvar, f'{nt1_mean:.{pf}f} ± {nt1_std:.{pf}f}', f'{c_mean:.{pf}f} ± {c_std:.{pf}f}', p, p_corr, cohen_d]
 
     report_dir = os.path.join(cfg.documents, 'reports')
     html_file = os.path.join(report_dir, f'{title}.html')

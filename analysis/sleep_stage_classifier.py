@@ -26,6 +26,8 @@ import plotting
 import ospath
 from itertools import permutations
 import features
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score, cross_validate
 
 
 plt.close('all')
@@ -35,19 +37,33 @@ p = ss[1]
 
 #%% step 1: get features
 if __name__=='__main__':
-    wsize = 300
-    step = 30
-    
-    feats = []
-    hypnos = []
 
-    for p in ss:
-        p.reset()
-        feats_p = []
+    train_x = []
+    train_y = []
+
+    for p in tqdm(ss, desc='Loading features'):
+        feature_names = []
+        feats = []
+        stages = []
+        hypno = p.get_hypno()
+
         for feat_name in cfg.mapping_feats:
-            if feat_name in features.__dict__:
-                feat = p.get_feat(feat_name, wsize=wsize, step=step)
-                feats_p.append(feat)
-                hypno = p.get_hypno()
-                hypnos.append(hypno)
-        break
+            if feat_name not in features.__dict__: continue
+            data = p.get_feat(feat_name, wsize=30, step=30, offset=True)
+            assert len(data) == len(hypno)
+            feats.append(data)
+
+        train_x.extend(np.array(feats).T)
+        train_y.extend(hypno)
+    
+    train_x = np.array(train_x)
+    train_y = np.array(train_y)
+    # replace nan values with the mean of this value over all other participants
+    for i in range(train_x.shape[-1]):
+        train_x[~np.isfinite(train_x[:,i]), i] = np.nanmedian(train_x[:,i])
+
+#%% ML
+
+clf = RandomForestClassifier(1000)
+x = cross_validate(clf, train_x, train_y, cv=5, scoring= ['accuracy', 'f1_macro'], n_jobs=4, verbose=100)
+print(f'accuracy {np.mean(x["test_accuracy"]):.3f},\nf1 {np.mean(x["test_f1_macro"]):.3f}')

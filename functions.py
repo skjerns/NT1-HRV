@@ -7,10 +7,31 @@ Created on Sat Apr 11 11:33:49 2020
 from itertools import groupby
 import numpy as np
 import scipy.stats as stats
+import mne
 
-significance_test = stats.mannwhitneyu
-significance_test = stats.ttest_ind
+def cohen_d(x,y):
+    nx = len(x)
+    ny = len(y)
+    dof = nx + ny - 2
+    mean = np.nanmedian
+    d = (mean(x) - mean(y)) / np.sqrt(((nx-1)*np.nanstd(x, ddof=1) ** 2 + (ny-1)*np.nanstd(y, ddof=1) ** 2) / dof)
+    return abs(d)
 
+
+def statistical_test(values1, values2):
+    """
+    calculate p values with the function defined here.
+    makes it easier to replace the function later on
+    """
+    # values1=np.array(values1)
+    # values2=np.array(values2)
+    # values1 = values1[np.isnan(values1)==False]
+    # values2 = values2[np.isnan(values2)==False]
+    res = stats.mannwhitneyu(values1, values2)
+    # res = stats.ttest_ind(values1, values2, nan_policy='omit', equal_var=False, axis=None)
+    p = res.pvalue
+    # p = mne.stats.permutation_t_test(np.vstack([values_nt1, values_cnt]).T, n_permutations=50000, n_jobs=8)
+    return p
 
 
 def calc_statistics(table):
@@ -33,16 +54,20 @@ def calc_statistics(table):
             if len(table[descriptor]['nt1'])==0 or len(table[descriptor]['control'])==0\
                or len(table[descriptor]['nt1']['values'])==0 or len(table[descriptor]['control']['values'])==0:
                 table[descriptor]['p'] = '-'
+                table[descriptor]['d'] = '-'
                 table[descriptor]['mean'] = np.nan
                 table[descriptor]['std'] = np.nan
                 continue
             values_nt1 = table[descriptor]['nt1']['values']
             values_cnt = table[descriptor]['control']['values']
             try:
-                table[descriptor]['p'] = stats.mannwhitneyu(values_nt1, values_cnt).pvalue
-            except:
-                table[descriptor]['p'] = '-'
-                
+                p = statistical_test(values_nt1, values_cnt)
+                d = cohen_d(values_cnt, values_nt1)
+                table[descriptor]['p'] = p
+                table[descriptor]['d'] = d
+            except Exception as e:
+                table[descriptor]['p'] = str(e)
+                table[descriptor]['d'] = str(e)
             for group in ['nt1', 'control']:
                 table[descriptor][group]['mean'] = np.nanmean(table[descriptor][group]['values'])
                 table[descriptor][group]['std'] = np.nanstd(table[descriptor][group]['values'])
@@ -64,6 +89,25 @@ def sleep_phase_sequence(hypno):
     stages = np.array([hypno[sum(lengths[:i+1])-1] for i in range(len(lengths))])
     idxs = np.pad(np.cumsum(lengths),[1,0])[:-1]
     return stages, lengths, idxs
+
+
+def count_transitions(hypno):
+    """
+    return the count for all possible transitions
+
+    """
+
+    possible_transitions = [(0,1), (0,2), (0,4),  # W  -> S1, S2, REM
+                            (1,2), (1,0), (1,3), # S1 -> W, S2, REM
+                            (2,0), (2,1), (2,3), (2,4), # S2 -> W, S1, SWS, REM
+                            (3,0), (3,2),  # SWS -> W, S2
+                            (4,0), (4,1), (4,2)] #
+
+    counts = []
+    for trans in possible_transitions:
+        counts += [transition_index(hypno, trans)]
+    return counts
+
 
 
 def transition_index(hypno, transition_pattern):
@@ -111,13 +155,12 @@ def starting_sequence_pizza(hypno):
         sequence_nr = 3
     return sequence_nr
 
+
 def starting_sequence(hypno):
     """
     
     return which sequence sleep stages occur in a hypnogram
     this is our own definition
-    
-    
     
     0:  'normal transitions': First SWS then REM
     1:  'kind of normal': First N2, no SWS, then REM
@@ -147,7 +190,7 @@ def starting_sequence(hypno):
 
 
 
-def search_sequences(arr,seq):
+def search_sequences(arr, seq):
     """ Find sequence in an array using NumPy only.
 
     Parameters
@@ -207,15 +250,14 @@ def stage2length(hypno):
     return hypno_lengths
 
 
-def arousal_transitions(hypno, arousals):
-    
-    
-    arousal_transitions = 0
-    for pos in arousals:
-        pre = hypno[pos]
-        post = hypno[pos+1]
+def arousal_transitions(h, a):
+    transitions = 0
+    for pos in a:
+        if pos+1>=len(h):continue
+        pre = h[pos]
+        post = h[pos+1]
         if pre == 3 and post in [2,1]:
-            arousal_transitions+=1
+            transitions+=1
         elif pre==2 and post==1:
-            arousal_transitions+=1
-    return arousal_transitions
+            transitions+=1
+    return transitions
