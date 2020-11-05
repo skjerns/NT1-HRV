@@ -52,6 +52,7 @@ def error_handle(func):
     return print_error_wrapper
         
 
+
 class SleepSet():
     """
     A SleepSet is a container for several Patients, where each Patient
@@ -159,8 +160,11 @@ class SleepSet():
         return SleepSet(p_true)
 
 
-    def compute_features(self, names=None, n_jobs=8, overwrite=True):
-        Parallel(n_jobs=n_jobs)(delayed(p.compute_features)(names=names,overwrite=overwrite) for p in tqdm(self))
+    def compute_features(self, names=None, wsize=None, step=None, offset=None,
+                         overwrite=False, n_jobs=-1):
+        Parallel(n_jobs=n_jobs)(delayed(Patient.compute_features)\
+                                (p, names=names, wsize=wsize, step=step,
+                                 offset=offset, overwrite=overwrite) for p in tqdm(self))
 
 
     def add(self, patient):
@@ -341,9 +345,10 @@ class Patient(Unisens):
                 log.debug('Remove {feat_name}')
                 self.feats.remove_entry(feat_name)
             log.debug('create {feat_name}')
-            try: self.get_feat(name, wsize=wsize, step=step, offset=True, cache=False)
+            try: self.get_feat(name, wsize=wsize, step=step, offset=offset, cache=False)
             except Exception as e: print(e, repr(e))
         self._readonly = _readonly
+        return None
 
 
     def get_RRi(self, only_sleeptime=False, offset=True, cache=True):
@@ -444,7 +449,7 @@ class Patient(Unisens):
     
     
     @error_handle
-    @profile
+    # @profile
     def get_artefacts(self, only_sleeptime=False, wsize=300, step=30,
                       offset=True, cache=True):
         """
@@ -505,7 +510,7 @@ class Patient(Unisens):
         return art
     
     @error_handle
-    @profile
+    # @profile
     def get_hypno(self, only_sleeptime=False, cache=True):
         
         if cache and hasattr(self, '_cache_hypno'):
@@ -596,7 +601,7 @@ class Patient(Unisens):
         return arousals
     
     @error_handle
-    @profile
+    # @profile
     def get_feat(self, name, only_sleeptime=False, wsize=300, step=30,
                  offset=True, cache=True, only_clean=True):
         """
