@@ -6,14 +6,36 @@ Created on Wed Dec 18 12:46:37 2019
 """
 import os
 from unisens import utils
+import pandas as pd
 import numpy as np
 from tkinter import  Tk
 from unisens.utils import read_csv, write_csv
 from tkinter.filedialog import askopenfilename, askdirectory
 from collections import OrderedDict
 from tkinter import simpledialog
+from joblib import Memory
 import hashlib
 
+_cache = {}
+
+def get_mnc_info():
+    # first try to return cached value
+    try: return _cache['mnc_info']
+    except: pass
+
+    # if doesnt exist, load it
+    import config
+    file = os.path.join(config.folder_mnc, 'cohorts_deid.xlsx')
+
+    df = pd.read_excel(file)
+    mapping = {}
+    for index, row in df.iterrows():
+        ID = row.ID.upper().replace(' ', '_')
+        if ID=='SUB001': ID = 'SUB01' # fix for difference in filename and info dict
+        mapping[ID] = dict(row)
+
+    _cache['mnc_info'] = mapping
+    return mapping.copy()
 
 
 def get_mapping():

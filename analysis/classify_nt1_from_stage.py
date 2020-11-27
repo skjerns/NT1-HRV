@@ -41,41 +41,41 @@ if True:
         hypno = hypno[:180]
 
         # features from hypnogram
-        feats += [functions.starting_sequence(hypno)]
-        feats += functions.count_transitions(hypno)
-        feature_names.extend(['starting_seq']+[f'trans_count_{trans}' for trans in range(15)])
+        # feats += [functions.starting_sequence(hypno)]
+        # feats += functions.count_transitions(hypno)
+        # feature_names.extend(['starting_seq']+[f'trans_count_{trans}' for trans in range(15)])
 
         # feature per sleepstage / block
         for feat_name in cfg.mapping_feats:
             if feat_name not in features.__dict__: continue
             names.append(feat_name)
             data = p.get_feat(feat_name, only_sleeptime=True, wsize=300, step=30, offset=True, cache=False)
-            data = data[:180]
+            data = data[:450]
             # # first per stage
-            feat_mean = [np.nanmean(data[hypno==stage]) if (hypno==stage).any() else np.nan for stage in stages]
+            # feat_mean = [np.nanmean(data[hypno==stage]) if (hypno==stage).any() else np.nan for stage in stages]
             # # feat_median = [np.nanmedian(data[hypno==stage]) if (hypno==stage).any() else np.nan for stage in stages]
             # # feat_min = [np.nanmin(data[hypno==stage]) if (hypno==stage).any() else np.nan for stage in stages]
             # # feat_max = [np.nanmax(data[hypno==stage]) if (hypno==stage).any() else np.nan for stage in stages]
             # # feat_std = [np.nanstd(data[hypno==stage]) if (hypno==stage).any() else np.nan for stage in stages]
 
-            # # feat_quantiles = [[np.nanpercentile(data[hypno==stage], q) if (hypno==stage).any() else np.nan for stage in stages] for q in range(10,100, 10)]
-            # # feat_quantiles = flatten(feat_quantiles)
-            feats +=   feat_mean# + feat_median + feat_min + feat_max + feat_std
+            # feat_quantiles = [[np.nanpercentile(data[hypno==stage], q) if (hypno==stage).any() else np.nan for stage in stages] for q in range(10,100, 10)]
+            # feat_quantiles = flatten(feat_quantiles)
+            # feats +=   feat_mean# + feat_median + feat_min + feat_max + feat_std
 
-            for stage in stages:
-                feature_names.extend([f'{feat_name}_{mod}_stage{stage}' for mod in ['mean']])#, 'median', 'min', 'max', 'std']])
+            # for stage in stages:
+                # feature_names.extend([f'{feat_name}_{mod}_stage{stage}' for mod in ['mean']])#, 'median', 'min', 'max', 'std']])
 
             # then per 45 minute blocks
-            blocks = [[x*90, x*90+90] for x in range(6)]
+            blocks = [[x*90, x*90+90] for x in range(5)]
             feat_mean = [np.nanmean(data[start:end])  for start, end in blocks]
             # feat_median = [np.nanmedian(data[start:end]) for start, end in blocks]
             # feat_min = [np.nanmin(data[start:end]) for start, end in blocks]
-            # feat_max = [np.nanmax(data[start:end]) for start, end in blocks]
-            # feat_std = [np.nanstd(data[start:end]) for start, end in blocks]
-            # # feat_quantiles = [[np.nanpercentile(data[start:end], q)  for start, end in blocks] for q in range(10,100, 10)]
-            # # feat_quantiles = flatten(feat_quantiles)
+            feat_max = [np.nanmax(data[start:end]) for start, end in blocks]
+            feat_std = [np.nanstd(data[start:end]) for start, end in blocks]
+            feat_quantiles = [[np.nanpercentile(data[start:end], q)  for start, end in blocks] for q in range(10,100, 10)]
+            feat_quantiles = flatten(feat_quantiles)
 
-            feats +=   feat_mean# + feat_median + feat_min + feat_max + feat_std
+            feats +=   feat_mean  + feat_max + feat_std + feat_quantiles
 
             for block, _ in blocks:
                 feature_names.extend([f'{feat_name}_{mod}_block{block}' for mod in ['mean']])#, 'median', 'min', 'max', 'std']])
@@ -83,7 +83,9 @@ if True:
         x_train.append(feats)
         y_train.append(p.group=='nt1')
 
-    if len(feature_names) != len(feats): print(f'Names do not match length of feature vector {len(feats)}!={len(feature_names)}')
+    if len(feature_names) != len(feats):
+        print(f'Names do not match length of feature vector {len(feats)}!={len(feature_names)}')
+
     x_train = np.array(x_train)
     # replace nan values with the mean of this value over all other participants
     for i in range(x_train.shape[-1]):

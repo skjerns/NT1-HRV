@@ -8,6 +8,8 @@ from itertools import groupby
 import numpy as np
 import scipy.stats as stats
 import mne
+import numpy as np
+from scipy.interpolate import interp1d
 
 def cohen_d(x,y):
     nx = len(x)
@@ -16,6 +18,27 @@ def cohen_d(x,y):
     mean = np.nanmedian
     d = (mean(x) - mean(y)) / np.sqrt(((nx-1)*np.nanstd(x, ddof=1) ** 2 + (ny-1)*np.nanstd(y, ddof=1) ** 2) / dof)
     return abs(d)
+
+
+
+
+def interpolate_nans(padata, pkind='linear'):
+    """
+    Interpolates data to fill nan values
+    
+    Parameters:
+        padata : nd array 
+            source data with np.NaN values
+        
+    Returns:
+        nd array 
+            resulting data with interpolated values instead of nans
+    """
+    aindexes = np.arange(padata.shape[0])
+    agood_indexes, = np.where(np.isfinite(padata))
+    f = interp1d(agood_indexes, padata[agood_indexes], bounds_error=False,
+                 copy=False, fill_value="extrapolate", kind=pkind)
+    return f(aindexes)
 
 
 def statistical_test(values1, values2):

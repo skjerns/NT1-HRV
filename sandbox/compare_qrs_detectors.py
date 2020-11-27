@@ -36,7 +36,7 @@ def rpeak_xqrs(ecg, fs):
     return res
 
 ss = SleepSet(cfg.folder_unisens)
-p = ss[1]
+p = ss['013_64929']
 ecg = p.get_ecg()
 fs = p.ecg.sampleRate
 
