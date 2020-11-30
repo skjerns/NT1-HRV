@@ -1,13 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 27 15:18:03 2020
-
-@author: Simon
-"""
-
-# -*- coding: utf-8 -*-
-"""
 Created on Fri Dec 13 11:28:49 2019
+
+Generalized ECG viewer that can also plot dots/markers
 
 @author: Simon
 """
@@ -42,6 +37,9 @@ class ECGPlotter():
                   occurence of the marker in seconds
         :param interval: 
         """
+        if len(markers)>4:
+            print('More than 4 markers currently not supported')
+
         self.flipped = False
         self.markers = markers
         self.page = startpage
@@ -75,15 +73,16 @@ class ECGPlotter():
     def draw(self):
         self.fig.canvas.draw()
 
-    def get_marker(self, plot_nr, name, plotdata):
-        markers = self.markers.get(name)
-        sec = (self.page*self.gridsize+plot_nr)*self.interval
-        idx_start = np.searchsorted(markers, sec)
-        idx_stop  = np.searchsorted(markers, sec+self.interval)
-        marker_seconds = markers[idx_start:idx_stop]*self.fs
-        yy = self.data[marker_seconds.round().astype(int)]
-        marker_seconds = marker_seconds-sec*self.fs
-        return marker_seconds, yy
+    def get_marker(self, plot_nr, marker_name, plotdata):
+        """ get the marker height (yy) given for certain seconds"""
+        marker_sec = self.markers.get(marker_name)
+        plotstart_sec = (self.page*self.gridsize+plot_nr)*self.interval
+        idx_start = np.searchsorted(marker_sec, plotstart_sec)
+        idx_stop  = np.searchsorted(marker_sec, plotstart_sec+self.interval)
+        marker_samples = marker_sec[idx_start:idx_stop]*self.fs
+        yy = self.data[marker_samples.round().astype(int)]
+        xx = marker_samples-plotstart_sec*self.fs
+        return xx, yy
 
 
     #%% update
@@ -107,16 +106,16 @@ class ECGPlotter():
                             (page*gridsize+i+1)*interval*fs]
             ax  = self.axs[i]
             ax.clear()
-            ax.set_facecolor((1,1,1,1))
 
             for j, marker_name in enumerate(markers):
-                markerpoints, yy = self.get_marker(j, marker_name, plotdata)
+                xx, yy = self.get_marker(i, marker_name, plotdata)
                 scatter = 0 #markerpoints.max()*0.005*j
                 m = self.styles[j]
                 c = self.colors[j]
-                ax.scatter(markerpoints+scatter, yy, marker=m, color=c, linewidth=1, alpha=0.7)
+                ax.scatter(xx+scatter, yy, marker=m, color=c,
+                           linewidth=1, alpha=0.7)
 
-            self.fig.legend( list(markers))
+            self.fig.legend(list(markers))
             ax.plot(plotdata, linewidth=0.5)
             ax.set_xlim([0, self.interval*self.fs])
             ax.set_xlabel('seconds')
