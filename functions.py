@@ -19,7 +19,24 @@ def cohen_d(x,y):
     d = (mean(x) - mean(y)) / np.sqrt(((nx-1)*np.nanstd(x, ddof=1) ** 2 + (ny-1)*np.nanstd(y, ddof=1) ** 2) / dof)
     return abs(d)
 
-
+def resample(raw, o_sfreq, t_sfreq):
+    """
+    resample a signal using MNE resample functions
+    This automatically is optimized for EEG applying filters etc
+    
+    :param raw:     a 1D data array
+    :param o_sfreq: the original sampling frequency
+    :param t_sfreq: the target sampling frequency
+    :returns: the resampled signal
+    """
+    if o_sfreq==t_sfreq: return raw
+    raw = np.atleast_2d(raw)
+    ch_names=['ch{}'.format(i) for i in range(len(raw))]
+    info = mne.create_info(ch_names=ch_names, sfreq=o_sfreq, ch_types=['eeg'])
+    raw_mne = mne.io.RawArray(raw, info, verbose='ERROR')
+    resampled = raw_mne.resample(t_sfreq, n_jobs=3)
+    new_raw = resampled.get_data().squeeze()
+    return new_raw.astype(raw.dtype, copy=False)
 
 
 def interpolate_nans(padata, pkind='linear'):

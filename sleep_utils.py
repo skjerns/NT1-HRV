@@ -41,9 +41,16 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         content = content.replace('\r', '') # remove windows style \r\n
         
     #conversion dictionary
-    conv_dict = {'WAKE':0, 'WACH':0, 'WK':0,  'N1': 1, 'N2': 2, 'N3': 3, 'N4':3, 'REM': 4,
-                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5, 'ART': 5, 'A':5, 'ARTEFAKT':5, 'MT':5,
-                 'BEWEGUNG':5}
+    conv_dict = {'WAKE':0, 'WACH':0, 'WK':0, 'NWAKE': 0,
+                 'N1': 1, 'NREM1': 1,
+                 'N2': 2, 'NREM2': 2,
+                 'N3': 3, 'NREM3': 3,
+                 'N4':3, 'NREM4': 3,
+                 'REM': 4,
+                 0:0, 1:1, 2:2, 3:3, 4:4, -1:5, 5:5,
+                 'ART': 5, 'A':5, 'ARTEFAKT':5, '8': 5,
+                 'MT':5, 'BEWEGUNG':5, '9':5, '?': 5, ' ': 5, 'NAN': 5,
+                 'UNSCORED': 5}
     
     lines = content.split('\n')
     if mode=='auto':
@@ -59,11 +66,17 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             mode = 'dat'
         elif lines[0].startswith('Signal ID:'):
             mode = 'somnoscreen'
+        elif any(['luna-' in x for x in lines[:5]]):
+            mode = 'luna'
+        elif hypno_file.endswith('.eannot'):
+            mode = 'csv'
         else :
             mode==None
-    
-    # reading file in format as used by koden
+
+    # reading file in format as used by Nihon Koden
+    # files with a datestamp per stage annotation
     if mode=='dat':
+
         if epochlen_infile is not None:
             warnings.warn('epochlen_infile has been supplied, but hypnogram is' 
                           'time based, will be ignored')
@@ -101,9 +114,7 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             _,stage = line.split('; ')
             stage = conv_dict[stage.upper()]
             stages.extend([stage]*epochlen_infile)
-            
-            
-            
+
     # read hypnogram as written by visbrain (time based)
     elif mode=='visbrain':
         if epochlen_infile is not None:
@@ -121,22 +132,21 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
             stages.extend([s]*l)
             prev_t = t
             
-    # read hypnogram as simple CSV file       
+    # read hypnogram as simple CSV file, number based or string based
     elif mode=='csv':
         if exp_seconds and not epochlen_infile:
             epochlen_infile=exp_seconds//len(lines)
             print('[INFO] Assuming csv annotations with one entry per {} seconds'.format(epochlen_infile))
 
         elif epochlen_infile is None: 
-            if len(lines) < 2400: # we assume no recording is longer than 20 hours
+            if len(lines) < 2500: # we assume no recording is longer than 21 hours
                 epochlen_infile = 30
-                print('[INFO] Assuming csv annotations are per epoch')
             else:
                 epochlen_infile = 1
                 print('[INFO] Assuming csv annotations are per second')
-        lines = [[int(line)] for line in lines if len(line)>0]
+        lines = [conv_dict[l.upper()] if isinstance(l, str) else int(l) for l in lines if len(l)>0]
         lines = [[line]*epochlen_infile for line in lines]
-        stages = np.array([conv_dict[l.upper()]if isinstance(l, str) else l for l in np.array(lines).flatten()])
+        stages = np.array(lines).flatten()
     
     # for the Dreams Database 
     # http://www.tcts.fpms.ac.be/~devuyst/Databases/DatabaseSubjects/    
@@ -156,6 +166,28 @@ def read_hypnogram(hypno_file, epochlen = 30, epochlen_infile=None, mode='auto',
         except KeyError as e:
             print('Unknown sleep stage in file')
             raise e
+
+    elif mode=='luna':
+        # hypnograms created by Luna software from sleepdata.org
+        if epochlen_infile is not None:
+            warnings.warn('epochlen_infile has been supplied, but information is in file, will be ignored')
+        import xml.etree.ElementTree as ET
+        root = ET.fromstringlist(lines)
+        # we don't actually properly parse it as it is intended, just
+        # assume that it always contains the same labels
+        instances = root[-1]
+        stages = []
+        for instance in instances:
+            stage_str = instance.attrib['class']
+            try: stage_nr = conv_dict[stage_str.upper()]
+            except KeyError as e:
+                print(f'Unknown sleep stage in file {hypno_file} : {stage_str}')
+                raise e
+            duration = int(instance.find('Duration').text)
+            if duration!=30:
+                raise ValueError(f'Duration!=30, not expected: {duration}')
+            stages.extend([stage_nr]*duration)
+        stages = np.array(stages)
     else:
         raise ValueError('This is not a recognized hypnogram: {}'.format(hypno_file))
         

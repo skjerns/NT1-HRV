@@ -28,8 +28,8 @@ class ECGPlotter():
         plt.close('all')
         return
 
-    def __init__(self, data, fs, markers={}, interval=30,
-                 nrows=3, ncols=3, startpage=0, title=''):
+    def __init__(self, data, fs, markers={}, interval=30, nrows=3, ncols=3,
+                  startpage=0, title='', verbose=True):
         """
         :param data: ECG data or any other continuous data
         :param fs: sample rate of the signal
@@ -48,6 +48,7 @@ class ECGPlotter():
         self.ncols = ncols
         self.gridsize = nrows*ncols
         self.title = title
+        self.verbose = verbose
 
         # load 
         self.data = data
@@ -113,11 +114,12 @@ class ECGPlotter():
                 m = self.styles[j]
                 c = self.colors[j]
                 ax.scatter(xx+scatter, yy, marker=m, color=c,
-                           linewidth=1, alpha=0.7)
+                           linewidth=1, alpha=0.65)
 
-            self.fig.legend(list(markers))
+            if i==0:
+                self.fig.legend(list(markers))
             ax.plot(plotdata, linewidth=0.5)
-            ax.set_xlim([0, self.interval*self.fs])
+            # ax.set_xlim([0, self.interval*self.fs])
             ax.set_xlabel('seconds')
             ax.xaxis.set_major_formatter(formatter)
             seconds = (page*gridsize+i)*interval
@@ -129,7 +131,8 @@ class ECGPlotter():
         title = f'ECGPlotter: {self.title}\n{page}/{self.max_page}'
         title += ' - flipped'*self.flipped
         plt.suptitle(title)
-        print('printing batch {}'.format(title))
+        if self.verbose:
+            print('printing batch {}'.format(title))
 
         self.draw()
         # plt.tight_layout()
@@ -166,7 +169,7 @@ class ECGPlotter():
             page = misc.input_box('Please select new page position', dtype=int,
                                  initialvalue=self.page, minvalue=0,
                                  maxvalue=self.max_page)
-            if page:
+            if page and self.verbose:
                 print('jumping to {}'.format(page))
                 self.page = page
         elif event.key in ('right'):
@@ -175,11 +178,12 @@ class ECGPlotter():
                 self.page -= 1
         elif event.key=='u':
             self.data = -self.data
-            print('flipping u/d')
+            if self.verbose: print('flipping u/d')
             self.flipped = not self.flipped
         else:
-            print(helpstr)
-            print('unknown key {}'.format(event.key))
+            if self.verbose:
+                print(helpstr)
+                print('unknown key {}'.format(event.key))
         if self.page<0:
             self.page=self.max_page
         elif self.page>self.max_page:
@@ -207,7 +211,8 @@ class ECGPlotter():
             self.fig.canvas.restore_region(self.background)
             self.fig.canvas.blit(ax.bbox)
         else:
-            print('unknown button', event.button)
+            if self.verbose:
+                print('unknown button', event.button)
         plt.pause(0.001)
 
 #%% main

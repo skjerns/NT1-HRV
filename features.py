@@ -16,6 +16,7 @@ import hrvanalysis
 import pyhrv
 import nolds
 from joblib.memory import Memory
+from wfdb.processing import xqrs_detect
 import entropy # pip install git+https://github.com/raphaelvallat/entropy.git
 
 # ### caching dir to prevent recomputation of reduntant functions
@@ -28,6 +29,12 @@ import entropy # pip install git+https://github.com/raphaelvallat/entropy.git
 #     memory = Memory(None, verbose=99)
 # ###################################################
 
+def calculate_RRs(ecg, sfreq):
+    """
+    Use a QRS-detector and calculate the RR intervals
+    """
+    ecg = ecg.squeeze()
+    res = xqrs_detect(sig=ecg, fs=sfreq)
 
 def resp_freq(thorax_windows, sfreq, **kwargs):
     """
@@ -731,5 +738,9 @@ def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
     return art
 
     
-#%% main 
-# RR_windows
+#%% main
+if __name__=='__main__':
+    import pyedflib
+    ecg, shead, _ = pyedflib.highlevel.read_edf('Z:/mnc/khc/10782796_p73-nsrr.edf', ch_names='CS_EEG')
+    sfreq = shead[0]['sample_rate']
+    calculate_RRs(ecg[:,:sfreq*240], sfreq)

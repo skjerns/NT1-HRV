@@ -31,10 +31,28 @@ loadmat = memory.cache(mat73.loadmat)
 
 #%% We use memory to massively speed up these computations
 
+def repair_file(edf_file):
+    """
+    some of the SSC corohort files were broken, so we need to fix them
+    manually. It is a rather easy fix in which an NA was written instead of a
+    timestamp. We replace it with a generic date that points to 10:10:10.
+    """
+    print(f'attempting to repair {edf_file}')
+    with open(edf_file, 'rb') as f:
+        line = next(f) # grab first line
+        old = b'NA      '
+        new = b'10.10.10' # padded with spaces to make same length as old
+        line = line.replace(old, new)
+
+    with open(edf_file, 'rb+') as f:
+        f.seek(0) # move file pointer to beginning of file
+        f.write(line)
+
+
 def to_unisens(edf_file, unisens_folder, overwrite=False, skip_exist=False):
 
-    filename = ospath.basename(edf_file)[:-9] # remove "-nsrr.edf" from filename
     dtype = np.int16
+    filename = ospath.basename(edf_file)[:-9] # remove "-nsrr.edf" from filename
     mnc_info = misc.get_mnc_info()
     try:
         attribs = mnc_info[filename.upper()]
@@ -58,8 +76,12 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, skip_exist=False):
     try:
         header = read_edf_header(edf_file)
     except:
-        print(f'cant load {filename}')
-        return
+        repair_file(edf_file)
+        try:
+            header = read_edf_header(edf_file)
+        except  Exception as e:
+            print(f'cant load {filename}, broken edf {e}')
+            return
 
 
     # add metadata for this file
@@ -73,20 +95,21 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, skip_exist=False):
     u.DQ0602 = attribs['DQ0602']
     u.hypocretin = attribs['CSF hypocretin-1']
     u.label = attribs['Label']
+    u.cohort = attribs['Cohort']
 
-
-    if 'CONTROL' in attribs['Diagnosis']:
+    diagnosis = attribs['Diagnosis']
+    if 'CONTROL' in diagnosis:
         group = 'control'
-    elif 'T1' in attribs['Diagnosis']:
+    elif 'T1' in diagnosis:
         group = 'nt1'
-    elif 'OTHER HYPERSOMNIA' in attribs['Diagnosis']:
+    elif 'OTHER HYPERSOMNIA' in diagnosis:
         group = 'hypersomnia'
     else:
         group = attribs['Diagnosis']
         raise AttributeError(f'unkown group: {group} for {filename}')
     u.group = group
 
-    #%% Add ECG channel
+    # %% Add ECG channel
 
     chs = [ch for ch in channels if 'ECG' in ch.upper()]
     if 'cs_ECG' not in chs:
@@ -132,12 +155,18 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, skip_exist=False):
 
     #%% now extract the RR intervals
 
+
+
     #%% add hypnogram, if it is available
     assert len(add_files)!=1, 'Only one hypnogram file? seems weird'
     if len(add_files)==2:
-        hypnograms = [sleep_utils.read_hypnogram(file) for file in add_files]
+        hypnograms = [sleep_utils.read_hypnogram(file, epochlen_infile=30) for file in add_files]
+        try:
+            np.testing.assert_array_almost_equal(hypnograms[0], hypnograms[1], err_msg=f'{add_files}')
+        except:
+            print(f'files not equal: {add_files}')
 
-
+    u.save()
 
 #%% main
 
@@ -151,11 +180,8 @@ if __name__=='__main__':
 
     edf_file = files[0]
 
-    for edf_file in tqdm(files, disable=True):
-        to_unisens(edf_file, unisens_folder)
-
-
-
+    # for edf_file in tqdm(files):
+    #     to_unisens(edf_file, unisens_folder)
 
     input('press enter to check which file/info is missing')
     info = misc.get_mnc_info()
@@ -169,13 +195,17 @@ if __name__=='__main__':
     included = {}
     missing_file = []
     missing_info = []
+    to_extract = []
     for name, full in zip(files, fullfiles):
         if name in info:
             included[name] = info[name].copy()
             if 'CONTROL' in included[name]['Diagnosis']:
                 cnt.append(included[name])
+                to_extract.append(full)
             elif 'T1' in included[name]['Diagnosis']:
                 nt1.append(included[name])
+                to_extract.append(full)
+
             elif 'OTHER HYPERSOMNIA' in included[name]['Diagnosis']:
                 hyp.append(included[name])
             del info[name]

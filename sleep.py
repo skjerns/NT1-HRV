@@ -27,6 +27,7 @@ from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
 from unisens.utils import make_key
 from textwrap import fill
 from joblib import Parallel, delayed
+
 log.basicConfig()
 log.getLogger().setLevel(log.INFO)
 
@@ -535,8 +536,8 @@ class Patient(Unisens):
         return hypno
     
     @error_handle
-    def get_ecg(self, only_sleeptime=False):
-        data = self.get_signal('ECG', offset=True)
+    def get_ecg(self, only_sleeptime=False, offset=True):
+        data = self.get_signal('ECG', offset=offset)
 
         if only_sleeptime:
             sfreq = int(self.ecg.sampleRate)
@@ -732,10 +733,20 @@ class Patient(Unisens):
         for entry in self.feats._entries:
             u.add_entry(entry)
         u.save()
-        
 
     @error_handle
-    def plot(self, channels='eeg', hypnogram=True, axs=None):
+    def plot(self, markers={}, **kwargs):
+        from viewer.viewer import ECGPlotter
+        data = self.ecg.get_data().squeeze()
+        sfreq = self.ecg.sampleRate
+        RRs = self.get_RR(offset=False, cache=False)[0]
+        markers.update({'RRs': RRs})
+        default_kwargs = {'nrows':2, 'ncols':1, 'interval':60}
+        default_kwargs.update(kwargs)
+        ECGPlotter(data, sfreq, markers=markers, verbose=False, **default_kwargs)
+
+    @error_handle
+    def spectogram(self, channels='eeg', hypnogram=True, axs=None):
         with plt.style.context('default'):
             hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
             if isinstance(channels, str): channels = [channels]

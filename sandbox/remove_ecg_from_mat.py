@@ -16,26 +16,25 @@ import argparse
 import time
 
 
-def extract_from_mat(folder=None, overwrite=False):
+def extract_from_mat(file, overwrite=False):
     h5_repack = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'h5repack.exe')
 
-    print('Converting files in ', folder)
-    files = ospath.list_files(folder, exts='hrv.mat')
-    for old_file in tqdm(files):
-        tmp_file = tempfile.TemporaryFile(prefix='remove_ecg_from_mat').name
-        new_file = os.path.splitext(old_file)[0] + '_small.mat'
-        
-        if os.path.exists(new_file) and not overwrite:
-            print(f'{new_file} exists, no overwrite')
-            continue
-        
-        shutil.copy(old_file, tmp_file)
-        with h5py.File(tmp_file, 'r+') as fread:
-            del fread['Res']['CNT']
-            fread.flush()
+    tmp_file = tempfile.TemporaryFile(prefix='remove_ecg_from_mat').name
+    new_file = os.path.splitext(file)[0] + '_small.mat'
+
+
+    if os.path.exists(new_file) and not overwrite:
+        print(f'{new_file} exists, no overwrite')
+        return
     
-        subprocess.run([h5_repack, tmp_file, new_file])
-        os.remove(tmp_file)
+    shutil.copy(file, tmp_file)
+    with h5py.File(tmp_file, 'r+') as fread:
+
+        del fread['Res']['CNT']
+        fread.flush()
+
+    subprocess.run([h5_repack, tmp_file, new_file])
+    os.remove(tmp_file)
 
 
 
@@ -52,6 +51,10 @@ if __name__ == '__main__':
     overwrite = args.overwrite
     if folder is None:
         folder = misc.choose_folder('Choose a folder')
-    extract_from_mat(folder, overwrite)
+
+    files = [x for x in ospath.list_files(folder, exts='.mat') if not x.endswith('small.mat')]
+    print('Converting files in ', folder)
+    for file in tqdm(files):
+        extract_from_mat(file, overwrite)
     print('\nfinished...')
     time.sleep(15)

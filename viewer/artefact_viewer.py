@@ -2,6 +2,9 @@
 """
 Created on Fri Dec 13 11:28:49 2019
 
+
+old version of the viewer specialized in annotations
+
 @author: Simon
 """
 import os
@@ -44,6 +47,7 @@ class ECGPlotter():
         if mat_file is None:
             filename = ospath.basename(edf_file)[:-4]
             folder = ospath.dirname(edf_file)
+            print(mat_file)
             mat_file = ospath.list_files(folder, patterns=f'{filename}*.mat')
             if len(mat_file)>0: mat_file = mat_file[0]
             if not mat_file or not os.path.exists(mat_file): 
@@ -85,6 +89,7 @@ class ECGPlotter():
         self.altered = altered.squeeze()
         self.rrorig = rrorig.squeeze()
         self.trrs = trrs.squeeze()
+        print(trrs[:10])
         self.corr = corr.squeeze()
 
         self.file = edf_file
