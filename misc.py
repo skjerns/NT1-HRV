@@ -14,9 +14,106 @@ from tkinter.filedialog import askopenfilename, askdirectory
 from collections import OrderedDict
 from tkinter import simpledialog
 from joblib import Memory
+from pyedflib import highlevel
 import hashlib
+import warnings
+import inspect
+import datetime
 
 _cache = {}
+
+def extract_ecg(edf_file, copy_folder):
+    filename = os.path.basename(edf_file)
+    new_edf_file = os.path.join(copy_folder, filename)
+    if os.path.exists(new_edf_file): return
+    try:
+        header = highlevel.read_edf_header(edf_file)
+    except:
+        print(f'error in file {edf_file}')
+        return
+    channels = header['channels']
+    try:
+        channels.remove('cs_ECG')
+    except:
+        print(f'warning, {edf_file} has no cs_ECG')
+    ch_names = [x for x in channels if 'ECG' in x.upper()]
+    if len(ch_names)>1:
+        print(f'Warning, these are present: {ch_names}, selecting {ch_names[0]}')
+    ch_name = ch_names[0]
+
+    signals, shead, header = highlevel.read_edf(edf_file, ch_names=[ch_name], digital=True, verbose=False)
+
+    shead[0]['label'] = 'ECG'
+
+
+    assert len(signals)>0, 'signal empty'
+    try:
+        highlevel.write_edf(new_edf_file, signals, shead, header, digital=True)
+    except:
+        shead[0]['digital_min'] = signals.min()
+        shead[0]['digital_max'] = signals.max()
+        highlevel.write_edf(new_edf_file, signals, shead, header, digital=True)
+
+def save_results(results, ss=None, *args, **kwargs):
+    """
+    Saves the current invocing script with results and metainformation
+
+    The data will be dumped to a JSON file, with the datetime as name
+
+    :param results: A dictionary with one metric per key
+    """
+    import config
+    folder = config.folder_reports
+
+    # add information about the sleepset that was used
+    if ss:
+        patients = ', '.join([p.code for p in ss])
+        summary = patients.summary(verbose=False)
+    else:
+        patients = 'N/A'
+        summary = 'N/A'
+
+    # try to retrieve the current state of the sourcecode
+    try:
+        frame = inspect.stack()[1]
+        main = inspect.getmodule(frame[0])
+        code = inspect.getsource(main)
+        file = frame.filename
+        _cache['last_saved_file'] = file
+    except:
+        warnings.warn('Can\'t get source of Python console commands')
+        file = _cache.get('last_saved_file', None)
+        code = '## Code not found. trying to saving the current source ' + \
+               '## state of last saved python file: {file}'
+        if file:
+            with open(file, 'r') as f:
+                code = f.read()
+
+
+    # create the filename.
+    # The filename already contains the most important metric results
+    filename = ''
+    metrics = ['F1', 'precision', 'recall']
+    for kw in metrics:
+        for key in results:
+            if kw.lower() in key.lower():
+                res = np.mean(results[key])
+                filename += f'{kw[:4]} {res:.2f}, '
+
+    today = str(datetime.datetime.now()).replace(':', '.').rsplit('.',1)[0]
+    filename += f'{today}.json'
+
+    obj = pd.Series({'results' : results,
+                     'patients': patients,
+                     'code': ''.join(code),
+                     'summary': summary})
+    obj.to_json(filename)
+
+    return filename
+
+
+
+
 
 def get_mnc_info():
     # first try to return cached value

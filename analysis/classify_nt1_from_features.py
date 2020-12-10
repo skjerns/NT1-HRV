@@ -9,6 +9,7 @@ Detect NT1 using the matrix profile
 import sys, os
 import matplotlib.pyplot as plt
 import numpy as np
+from misc import save_results
 from tqdm import tqdm
 from sleep import SleepSet
 import config as cfg
@@ -29,6 +30,7 @@ flatten = lambda t: [item for sublist in t for item in sublist]
 if True:
     plt.close('all')
     ss = SleepSet(cfg.folder_unisens)
+    ss = ss.filter(lambda x: x.dataset=='mnc')
     # ss = ss.stratify() # only use matched participants
     p = ss[1]
 
@@ -70,6 +72,7 @@ if True:
                        ['recall', 'precision', 'accuracy', 'f1'], n_jobs=16, verbose=100)
     
     print(''.join([f'{key}: {np.mean(values):.3f}\n' for key, values in results.items()]))
+    save_results(results=results, ss=ss)
 
     #%% feature importance analysis
     clf.fit(x_train, y_train)

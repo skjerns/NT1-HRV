@@ -207,10 +207,41 @@ class SleepSet():
     def get_hypnos(self, only_sleeptime=False):
         hypnos = [p.get_hypno(only_sleeptime) for p in self]
         return hypnos
-    
-    def summary(self):
+
+
+    def summary_mnc(self):
+        from prettytable import PrettyTable
+
+        group_names = set([p.group for p in self])
+        cohorts = set([p.get_attrib('cohort', 'other') for p in self])
+
+        filtg = lambda group: self.filter(lambda x:x.group==group)
+
+
+        n_dataset_mnc = [len(filtg(group).filter(lambda x: x.get_attrib('dataset')=='mnc')) for group in group_names]
+        n_dataset_other = [len(filtg(group).filter(lambda x: x.get_attrib('dataset')!='mnc')) for group in group_names]
+
+        table = PrettyTable(['Name', *group_names])
+        table.add_row(['Total ', '','',''])
+
+        table.add_row(['Dataset ', '','',''])
+        table.add_row(['-----MNC', *n_dataset_mnc])
+        table.add_row(['---other', *n_dataset_other])
+
+
+
+        table.add_row(['Cohort  ', '','',''])
+        for cohort in cohorts:
+            n_cohort = [len(filtg(group).filter(lambda x: x.get_attrib('cohort', 'other')==cohort)) for group in group_names]
+            table.add_row([cohort.rjust(len('Cohort  '), '-'), *n_cohort])
+        print(table)
+
+
+
+    def summary(self, verbose=True):
         """print a detailed summary of the items in this set"""
         from prettytable import PrettyTable
+
 
         # a meta function to filter both groups in one call
         filter_both = lambda ss, func: (len(ss.filter(lambda x: func(x) and x.group=='nt1')), \
@@ -265,9 +296,10 @@ class SleepSet():
         t.add_row(['Has Thorax', *n_thorax, f'missing: {n_all-sum(n_thorax)}'])
         t.add_row(['Thorax Hz', n_thorax_nt1, n_thorax_cnt, ''])
         t.add_row(['ECG Hz', n_ecg_nt1, n_ecg_cnt, ''])
+        if verbose:
+            print(t)
+        return t
 
-        print(t)
-     
     def print(self):
         """pretty-print all containing patients in a list"""
         s = '['
@@ -373,6 +405,8 @@ class Patient(Unisens):
         """
         Retrieve the RR peaks and the T_RR, which is their respective positions
         
+        :param offset: whether to padd the RR to 30 second epochs
+
         returns: (T_RR, RR)
         """
         assert isinstance(offset, bool), 'offset must be boolean not int/float'
@@ -652,7 +686,9 @@ class Patient(Unisens):
             feat_func = features.__dict__[name]
             try:
                 # the patient argument is ignored by most functions
-                feat = np.array(feat_func(RR_windows, p=self))
+                feat = feat_func(RR_windows, p=self)
+                feat = np.array(feat)
+                
                 if len(feat)<5:
                     raise Exception(f'Created feature is too small: {len(feat)}')
                 # we need to change the readability of this Patient

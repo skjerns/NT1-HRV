@@ -49,7 +49,7 @@ loadmat = memory.cache(mat73.loadmat)
 def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                skip_exist=False):
     pass
-#%% create unisens
+# %% create unisens
     if tqdm_desc is None:
         tqdm_desc=lambda x: None
     dtype = np.int16
@@ -92,7 +92,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     u.ecg_broken = (code in edfs_ecg_broken) or (u.match in edfs_ecg_broken)
     u.eeg_broken = (code in edfs_eeg_broken) or (u.match in edfs_eeg_broken)
 
-    #%% #### add ECG ##########
+    # %% #### add ECG ##########
     ########################
     tqdm_desc(f'{code}: Reading ECG')
 
@@ -119,7 +119,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         u.duration = len(signals.squeeze())//shead[0]['sample_rate']
         u.epochs_signals = signals.shape[1]//int(u.sampling_frequency)//30  
 
-    #%%#### add EEG ##########
+    # %%#### add EEG ##########
     ##############################
     tqdm_desc(f'{code}: Reading EEG')
     if not 'EEG' in u or overwrite:
@@ -145,7 +145,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EEG.bin', parent=u).set_data(**attrib)
 
-    #%%## add EOG #########
+    # %%## add EOG #########
     #######################
     if not 'EOG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EOG')
@@ -170,7 +170,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                     'pmin': pmin, 'pmax': pmax}
         SignalEntry(id='EOG.bin', parent=u).set_data(**attrib)
  
-    #%%#### add EMG #########
+    # %%#### add EMG #########
     
     if not 'EMG' in u or overwrite:
         tqdm_desc(f'{code}: Reading EMG')
@@ -197,7 +197,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             SignalEntry(id='EMG.bin', parent=u).set_data(**attrib)
             
     #######################################
-    #%%add Thorax #########
+    # %%add Thorax #########
     ######################
     if not 'thorax' in u or overwrite:
         tqdm_desc(f'{code}: Reading Thorax')
@@ -220,7 +220,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
         SignalEntry(id='thorax.bin', parent=u).set_data(**attrib)
         
     #######################################    
-    #%% add Body / Lagesensor #########
+    # %% add Body / Lagesensor #########
     ########################################
     if (not 'body' in  u or overwrite) and 'Body' in all_labels:
         tqdm_desc(f'{code}: Reading Body')
@@ -247,7 +247,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
                         'comment': comment}
             SignalEntry(id='body.bin', parent=u).set_data(**attrib)
     
-    #%% add annotations #######
+    # %% add annotations #######
     ################################
     if not 'annotations' in u or overwrite:
         annotations = header['annotations']
@@ -256,13 +256,13 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             annotations = [[int(a[0]*1000),a[2]]  for a in annotations]
             annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
  
-    #%%#### add rest #######
+    # %%#### add rest #######
     ############################
     for file in add_files:
         # ignore diagnosis files of StanfordStages
         if file.endswith(('diagnosis.txt', 'hypnodensity.txt', 'hypnogram.txt')): #
             pass
-        #%% add arousals
+        # %% add arousals
         elif file.endswith('_arousal.txt'):
             if  'arousals' in u and not overwrite: continue
             lines = misc.read_csv(file, convert_nums=True)
@@ -278,7 +278,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             arousal_event = EventEntry('arousals.csv', parent=u)
             arousal_event.set_data(data, comment='Arousal appearance epoch, name is lengths in seconds',
                                  sampleRate=1/30, contentClass='Arousal', typeLength=1)
-        #%% add hypnogram
+        # %% add hypnogram
         elif file.endswith('txt'):
             if  'hypnogram' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Hypnogram')
@@ -299,7 +299,7 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
             hypno_old_entry = EventEntry(id='hypnogram_old.csv', parent=u)
             hypno_old_entry.set_data(hypno, comment=f'File: {code}\nSleep stages 30s epochs.', 
                                  sampleRate=1/30, contentClass='Stage', typeLength=1)
-        #%% add features and kubios
+        # %% add features and kubios
         elif file.endswith('mat'):     
             if  'feats.pkl' in u and not overwrite: continue
             tqdm_desc(f'{code}: Reading Kubios')

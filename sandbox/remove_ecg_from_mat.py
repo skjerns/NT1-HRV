@@ -21,6 +21,7 @@ def extract_from_mat(file, overwrite=False):
 
     tmp_file = tempfile.TemporaryFile(prefix='remove_ecg_from_mat').name
     new_file = os.path.splitext(file)[0] + '_small.mat'
+    new_file.replace('hrv_', '')
 
 
     if os.path.exists(new_file) and not overwrite:

@@ -29,13 +29,6 @@ import entropy # pip install git+https://github.com/raphaelvallat/entropy.git
 #     memory = Memory(None, verbose=99)
 # ###################################################
 
-def calculate_RRs(ecg, sfreq):
-    """
-    Use a QRS-detector and calculate the RR intervals
-    """
-    ecg = ecg.squeeze()
-    res = xqrs_detect(sig=ecg, fs=sfreq)
-
 def resp_freq(thorax_windows, sfreq, **kwargs):
     """
     calculate the respiratory frequency distribution based on the 
@@ -45,6 +38,26 @@ def resp_freq(thorax_windows, sfreq, **kwargs):
     for windows in thorax_windows:
         pass
     return np.array(feat)
+
+def rrHRV(RR_windows, **kwargs):
+    """
+    A new geometric measure for HRV is introduced.
+    It is based on relative RR intervals, the difference
+    of consecutive RR intervals weighted by their mean.
+    """
+    def euclidian(p, q):
+        return np.sqrt((p[0]-q[0])**2 + (p[1]-q[1])**2)
+
+    feat = []
+    for wRR in RR_windows:
+        rr_i = (2*(wRR[1:]-wRR[:-1])) /  (wRR[1:]+wRR[:-1])
+        return_map = np.vstack([rr_i[:-1], rr_i[1:]]) # (rr[i], rr[i+1])
+        center = np.mean(return_map[:, rr_i[:-1]<=0.2], 1) # center of map with all |rr[i]| < 20%
+        distances = euclidian(return_map, center)
+        rrHRV = np.median(distances)
+        feat.append(rrHRV)
+
+    return rrHRV
 
 
 def dummy(RR_windows, **kwargs):
@@ -170,63 +183,7 @@ def HF_power(RR_windows, **kwargs):
     feat = get_frequency_domain_features(RR_windows)['hf']
     return np.array(feat)
 
-def HFrf_power(RR_windows, p, **kwargs):
-    """HF with respiratory frequency"""
-    signal = p.get_signal('thorax', offset=True)
-    sfreq = p.thorax.sampleRate
-    windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
 
-    freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
-    # trim respiratory to RR_window length.
-    # it can happen that the last time window does not contain any RRs, then
-    # RR_windows is shorter than the expected number of epochs
-    # psd = psd[:len(RR_windows),:] # zip() does this below
-
-    if abs(len(psd)-len(RR_windows))>1:
-        log.warning(f'{p}, len PSD and len RR_windows differ by {abs(len(psd)-len(RR_windows))}')
-        log.warning(f'len windows and len RR_windows is different {len(windows)}!={len(RR_windows)}')
-
-    feat = []
-    for wRR, power in zip(RR_windows, psd):
-        if len(wRR) < 5:
-            feat.append(np.nan)
-            continue
-        hf_lower = freq[np.argmax(power[3:])+3]*0.65
-        hf_upper = freq[np.argmax(power[3:])+3]*1.35
-        hf_band = (hf_lower, hf_upper)
-        mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int),
-                                                         sampling_frequency=10,
-                                                         interpolation_method='cubic',
-                                                         hf_band=hf_band)
-        feat.append(mRR['hf'])
-    # pad that we have same number of features in hypno an feat
-    feat = feat + [np.nan for _ in range(len(RR_windows)-len(feat))]
-    return np.array(feat)
-
-def LF_HFrf(RR_windows, p, **kwargs):
-    """LF/HF_rf ratio with respiratory frequency"""
-    signal = p.get_signal('thorax', offset=True)
-    sfreq = p.thorax.sampleRate
-    windows = extract_windows(signal, sfreq=sfreq, wsize=300, step=30, pad=True)
-    freq, psd = scipy.signal.welch(windows, fs=sfreq, nperseg=sfreq*100)
-    feat = []
-    if abs(len(psd)-len(RR_windows))>1:
-        log.error(f'len PSD and len RR_windows differ by { abs(len(psd)-len(RR_windows))}')
-    for wRR, power in zip(RR_windows, psd):
-        if len(wRR) < 5:
-            feat.append(np.nan)
-            continue
-        hf_lower = freq[np.argmax(power[3:])+3]*0.65
-        hf_upper = freq[np.argmax(power[3:])+3]*1.35
-        hf_band = (hf_lower, hf_upper)
-        mRR = hrvanalysis.get_frequency_domain_features((wRR*1000).astype(int),
-                                                         sampling_frequency=10,
-                                                         interpolation_method='cubic',
-                                                         hf_band=hf_band)
-        feat.append(mRR['lf_hf_ratio'])
-    # pad that we have same number of features in hypno an feat
-    feat = feat + [np.nan for _ in range(len(RR_windows)-len(feat))]
-    return np.array(feat)
 
 
 # 12
@@ -740,7 +697,7 @@ def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
     
 #%% main
 if __name__=='__main__':
-    import pyedflib
-    ecg, shead, _ = pyedflib.highlevel.read_edf('Z:/mnc/khc/10782796_p73-nsrr.edf', ch_names='CS_EEG')
-    sfreq = shead[0]['sample_rate']
-    calculate_RRs(ecg[:,:sfreq*240], sfreq)
+    import sleep
+    p = sleep.Patient('Z:/NT1-HRV-unisens/013_64929')
+    RR_windows = p.get_feat('identity', only_clean=False, cache=False)
+    RR_windows = [x for x in RR_windows]
