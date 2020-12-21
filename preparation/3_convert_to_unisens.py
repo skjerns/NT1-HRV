@@ -82,7 +82,8 @@ def to_unisens(edf_file, unisens_folder, overwrite=False, tqdm_desc= None,
     
     u.channels = str(', '.join(header['channels']))
     u.startsec = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
-        
+    u.use_offset = 1
+
     # if the ECG/EEG is broken, mark it
     edfs_ecg_broken = [p[1] for p in misc.read_csv(cfg.edfs_discard) if p[3]=='1']
     edfs_eeg_broken = [p[1] for p in misc.read_csv(cfg.edfs_discard) if p[4]=='1']

@@ -97,14 +97,13 @@ class SleepSet():
     
     def __repr__(self):
         n_patients = len(self)
-        
-        f_control = lambda x: x.group.lower()=='control'
-        n_control = len(self.filter(f_control))
-        f_nt1 = lambda x: x.group.lower()=='nt1'
-        n_nt1 = len(self.filter(f_nt1))
-
-        return f'SleepSet({n_patients} Patients, {n_control} Control, '\
-               f'{n_nt1} NT1)'
+        groups = set([p.get_attrib('group', 'None') for p in self])
+        counts = []
+        for group in groups:
+            fn = lambda p: p.get_attrib('group')==group
+            count = f'{len(self.filter(fn))} {group}'
+            counts.append(count)
+        return f'SleepSet({n_patients} Patients, ' + ', '.join(counts) + ')'
                
     def __iter__(self):
         """
@@ -365,7 +364,7 @@ class Patient(Unisens):
         if step is None:
             step = config.default_step
         if offset is None:
-            offset = config.default_offset
+            offset = self.get_attrib('use_offset', config.default_offset)
         if names is None:
             names = list(zip(*config.mapping_feats.items()))[0]
         for name in names:
@@ -384,7 +383,9 @@ class Patient(Unisens):
         return None
 
 
-    def get_RRi(self, only_sleeptime=False, offset=True, cache=True):
+    def get_RRi(self, only_sleeptime=False, offset=None, cache=True):
+        if offset is None:
+            offset = bool(self.get_attrib('use_offset', config.default_offset))
         assert isinstance(offset, bool), 'offset must be boolean not int/float'
         if cache and hasattr(self, '_cache_RRi'):
             RRi = self._cache_RRi
@@ -401,7 +402,7 @@ class Patient(Unisens):
 
 
     @error_handle
-    def get_RR(self, only_sleeptime=False, offset=True, cache=True):
+    def get_RR(self, only_sleeptime=False, offset=None, cache=True):
         """
         Retrieve the RR peaks and the T_RR, which is their respective positions
         
@@ -409,7 +410,10 @@ class Patient(Unisens):
 
         returns: (T_RR, RR)
         """
-        assert isinstance(offset, bool), 'offset must be boolean not int/float'
+        if offset is None:
+            offset = self.get_attrib('use_offset', config.default_offset)
+        offset = bool(offset)
+        assert isinstance(offset, bool), f'offset must be boolean not {type(offset)}'
 
         if cache and \
             ((cached:=self.feats.__dict__.get('_cache_RR')) is not None):
@@ -486,12 +490,14 @@ class Patient(Unisens):
     @error_handle
     # @profile
     def get_artefacts(self, only_sleeptime=False, wsize=300, step=30,
-                      offset=True, cache=True):
+                      offset=None, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
         have an artefact.
         """
+        if offset is None:
+            offset = bool(self.get_attrib('use_offset', config.default_offset))
         assert wsize in [30, 300], 'Currently only 30 and 300 are allowed as artefact window sizes, we didnt define other cases yet.'
         if step is None: step = wsize
         
@@ -570,7 +576,9 @@ class Patient(Unisens):
         return hypno
     
     @error_handle
-    def get_ecg(self, only_sleeptime=False, offset=True):
+    def get_ecg(self, only_sleeptime=False, offset=None):
+        if offset is None:
+            offset = bool(self.get_attrib('use_offset', config.default_offset))
         data = self.get_signal('ECG', offset=offset)
 
         if only_sleeptime:
@@ -582,7 +590,7 @@ class Patient(Unisens):
 
     @error_handle
     def get_signal(self, name='eeg', stage=None, only_sleeptime=False,
-                   offset=False):
+                   offset=None):
         """
         get values of a SignalEntry
         
@@ -591,7 +599,8 @@ class Patient(Unisens):
         :param only_sleeptime: only get values after first sleep until last sleep epoch 
         :param offset: only return from full epoch (see drive->preprocessing->offset of hypnogram)
         """
-        
+        if offset is None:
+            offset = bool(self.get_attrib('use_offset', config.default_offset))
         data = self[f'{name}.bin'].get_data().squeeze()
         sfreq = int(self[name].sampleRate)
 
@@ -638,7 +647,7 @@ class Patient(Unisens):
     @error_handle
     # @profile
     def get_feat(self, name, only_sleeptime=False, wsize=300, step=30,
-                 offset=True, cache=True, only_clean=True):
+                 offset=None, cache=True, only_clean=True):
         """
         Returns the given feature with the chosen parameters.
         
@@ -648,6 +657,7 @@ class Patient(Unisens):
         Caching: 
             Features will be kept in memory to reload them quickly.
         """
+        if offset is None: offset = self.get_attrib('use_offset', 1)
         if step is None: step = wsize
         if isinstance(name, int):
             name =  config.mapping_feats[name]
@@ -775,7 +785,8 @@ class Patient(Unisens):
         from viewer.viewer import ECGPlotter
         data = self.ecg.get_data().squeeze()
         sfreq = self.ecg.sampleRate
-        RRs = self.get_RR(offset=False, cache=False)[0]
+        offset = self.get_attrib('use_offset', 0)
+        RRs = self.get_RR(offset=offset, cache=False)[0]
         markers.update({'RRs': RRs})
         default_kwargs = {'nrows':2, 'ncols':1, 'interval':60}
         default_kwargs.update(kwargs)
@@ -835,7 +846,8 @@ class Patient(Unisens):
             axs[-1].xaxis.set_major_formatter(formatter)
             
             if hypnogram:
-                artefacts = self.get_artefacts(offset=True)
+                offset = self.get_attrib('use_offset', 1)
+                artefacts = self.get_artefacts(offset=offset)
                 hypno = self.get_hypno()
                 sleep_utils.plot_hypnogram(hypno, ax=axs[-1])
                 for i, is_art in enumerate(artefacts):

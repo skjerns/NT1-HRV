@@ -45,7 +45,7 @@ def rrHRV(RR_windows, **kwargs):
     It is based on relative RR intervals, the difference
     of consecutive RR intervals weighted by their mean.
     """
-    def euclidian(p, q):
+    def euclidean(p, q):
         return np.sqrt((p[0]-q[0])**2 + (p[1]-q[1])**2)
 
     feat = []
@@ -53,7 +53,7 @@ def rrHRV(RR_windows, **kwargs):
         rr_i = (2*(wRR[1:]-wRR[:-1])) /  (wRR[1:]+wRR[:-1])
         return_map = np.vstack([rr_i[:-1], rr_i[1:]]) # (rr[i], rr[i+1])
         center = np.mean(return_map[:, rr_i[:-1]<=0.2], 1) # center of map with all |rr[i]| < 20%
-        distances = euclidian(return_map, center)
+        distances = euclidean(return_map, center)
         rrHRV = np.median(distances)
         feat.append(rrHRV)
 
@@ -698,6 +698,6 @@ def artefact_detection(T_RR, RR, wsize=30, step=30, expected_nwin=None):
 #%% main
 if __name__=='__main__':
     import sleep
-    p = sleep.Patient('Z:/NT1-HRV-unisens/013_64929')
+    p = sleep.Patient('Z:/NT1-HRV-unisens/000_16462')
     RR_windows = p.get_feat('identity', only_clean=False, cache=False)
     RR_windows = [x for x in RR_windows]

@@ -148,7 +148,7 @@ class TestUtils(unittest.TestCase):
         signal_p2 = lsb*(signal + offset)
                 
         np.testing.assert_allclose(signal_p1, signal_p2)
-
+6
 
 
 class TestPatient(unittest.TestCase):
@@ -241,6 +241,7 @@ class TestPatient(unittest.TestCase):
             p.hypnogram.set_data(hypno_org, sampleRate=1/30, contentClass='Stage', typeLength=1)
 
             hypno = p.get_hypno(cache=False)
+            p.use_offset = 1
             self.assertEqual(len(hypno),len(hypno_org))
             art = p.get_artefacts(cache=False, wsize=30)
             feat = p.get_feat('mean_HR', wsize=30, cache=False)

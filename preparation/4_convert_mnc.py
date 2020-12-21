@@ -71,12 +71,15 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
         return
 
     # try to find mat files
-    mat_files = ospath.list_files(mat_folder, patterns=[filename + '*.mat'])
-    if len(mat_files)==1:
+    mat_files = ospath.list_files(mat_folder, patterns=[filename + '-*.mat'])
+    if len(mat_files)==0:
+        print(f'No matfile found for {filename}')
+        return
+    elif len(mat_files)==1:
         mat_file=mat_files[0]
     else:
-        print(f'No matfile found for {filename}')
-        misc.extract_ecg(edf_file, 'z:/ecg/')
+
+        print(f'too many matching mat files: {mat_files}')
         return
 
     # get the codified version of this file
@@ -117,6 +120,7 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
     u.hypocretin = attribs['CSF hypocretin-1']
     u.label = attribs['Label']
     u.cohort = attribs['Cohort']
+    u.use_offset = 0
 
     diagnosis = attribs['Diagnosis']
     if 'CONTROL' in diagnosis:
@@ -159,13 +163,9 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
             annot_entry.set_data(annotations, sampleRate=1000, typeLength=1, contentClass='Annotation')
 
     # %% add hypnogram, if it is available
-    assert len(add_files)!=1, 'Only one hypnogram file? seems weird'
-    if len(add_files)==2:
+    assert len(add_files)>0, f'No hypno file? seems weird: {add_files}'
+    if len(add_files)>0:
         hypnograms = [sleep_utils.read_hypnogram(file, epochlen_infile=30 if file.endswith('annot') else None) for file in add_files]
-        try:
-            np.testing.assert_array_almost_equal(hypnograms[0], hypnograms[1], err_msg=f'{add_files}')
-        except:
-            print(f'files not equal: {add_files}')
 
         if not 'hypnogram' in u or  overwrite:
             hypno = hypnograms[0]
@@ -209,9 +209,9 @@ if __name__=='__main__':
     # only get files called -nsrr.edf, ignore the others
     files = ospath.list_files(data, exts=['nsrr.edf'], subfolders=True)
 
-    edf_file = files[0]
+    edf_file = files[1]
 
-    Parallel(n_jobs=1)(delayed(to_unisens)(
+    Parallel(n_jobs=10)(delayed(to_unisens)(
         edf_file, unisens_folder=unisens_folder, mat_folder=mat_folder,
         skip_exist=True, overwrite=False) for edf_file in tqdm(files, desc='Converting'))
 
