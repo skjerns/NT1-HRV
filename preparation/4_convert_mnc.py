@@ -112,6 +112,7 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
     u.starttime = header['startdate']
     u.timestampStart = header['startdate'].strftime('%Y-%m-%dT%H:%M:%S')
     u.code = code
+    u.duration = header['Duration']
     u.dataset = 'mnc'
     u.channels = str(', '.join(channels))
     u.startsec = (u.starttime.hour * 60 + u.starttime.minute) * 60 + u.starttime.second
@@ -135,23 +136,23 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
     u.group = group
 
     # %% Add ECG channel
-
-    # add the original ECG channel
-    sig_orig, shead_orig, _ = read_edf(edf_file, ch_names=chs[0], verbose=False, digital=True)
-    assert sig_orig.max()<=32767 and sig_orig.min()>=-32768, 'min/max exceeds int16'
-    pmin, pmax = shead_orig[0]['physical_min'], shead_orig[0]['physical_max']
-    dmin, dmax = shead_orig[0]['digital_min'], shead_orig[0]['digital_max']
-    lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
-    attrib={'data': sig_orig.astype(dtype),
-            'sampleRate': shead_orig[0]['sample_rate'],
-            'ch_names': 'ECG',
-            'lsbValue': lsb,
-            'baseline': offset,
-            'unit': 'mV',
-            'dmin': dmin,'dmax': dmax,
-            'pmin': pmin, 'pmax': pmax}
-    u.sampling_frequency = shead_orig[0]['sample_rate']
-    SignalEntry(id='ECG.bin', parent=u).set_data(**attrib)
+    if not 'ecg' in u or overwrite:
+        # add the original ECG channel
+        sig_orig, shead_orig, _ = read_edf(edf_file, ch_names=chs[0], verbose=False, digital=True)
+        assert sig_orig.max()<=32767 and sig_orig.min()>=-32768, 'min/max exceeds int16'
+        pmin, pmax = shead_orig[0]['physical_min'], shead_orig[0]['physical_max']
+        dmin, dmax = shead_orig[0]['digital_min'], shead_orig[0]['digital_max']
+        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+        attrib={'data': sig_orig.astype(dtype),
+                'sampleRate': shead_orig[0]['sample_rate'],
+                'ch_names': 'ECG',
+                'lsbValue': lsb,
+                'baseline': offset,
+                'unit': 'mV',
+                'dmin': dmin,'dmax': dmax,
+                'pmin': pmin, 'pmax': pmax}
+        u.sampling_frequency = shead_orig[0]['sample_rate']
+        SignalEntry(id='ECG.bin', parent=u).set_data(**attrib)
 
     # %% now extract the RR intervals
 
@@ -164,10 +165,10 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
 
     # %% add hypnogram, if it is available
     assert len(add_files)>0, f'No hypno file? seems weird: {add_files}'
-    if len(add_files)>0:
-        hypnograms = [sleep_utils.read_hypnogram(file, epochlen_infile=30 if file.endswith('annot') else None) for file in add_files]
+    if not 'hypnogram' in u or  overwrite:
+        if len(add_files)>0:
+            hypnograms = [sleep_utils.read_hypnogram(file, epochlen_infile=30 if file.endswith('annot') else None) for file in add_files]
 
-        if not 'hypnogram' in u or  overwrite:
             hypno = hypnograms[0]
             u.epochs_hypno = len(hypno)
             times = np.arange(len(hypno))
@@ -213,7 +214,7 @@ if __name__=='__main__':
 
     Parallel(n_jobs=10)(delayed(to_unisens)(
         edf_file, unisens_folder=unisens_folder, mat_folder=mat_folder,
-        skip_exist=True, overwrite=False) for edf_file in tqdm(files, desc='Converting'))
+        skip_exist=False, overwrite=False) for edf_file in tqdm(files, desc='Converting'))
 
 
     # %% print info

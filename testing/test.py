@@ -124,7 +124,9 @@ class TestFeatures(unittest.TestCase):
         # self.assertGreater(hf, vlf)
         # self.assertGreater(hf, lf)
 
-
+    def test_relRR(self):
+        RR_windows = [np.arange(0,11), np.ones(60)/2, np.arange(-10,11), []]
+        relrr = features.rrHRV(RR_windows)
 
 
 class TestUtils(unittest.TestCase):

@@ -50,14 +50,18 @@ def rrHRV(RR_windows, **kwargs):
 
     feat = []
     for wRR in RR_windows:
-        rr_i = (2*(wRR[1:]-wRR[:-1])) /  (wRR[1:]+wRR[:-1])
-        return_map = np.vstack([rr_i[:-1], rr_i[1:]]) # (rr[i], rr[i+1])
-        center = np.mean(return_map[:, rr_i[:-1]<=0.2], 1) # center of map with all |rr[i]| < 20%
-        distances = euclidean(return_map, center)
-        rrHRV = np.median(distances)
+        if len(wRR)<2:
+            rrHRV = np.nan
+        else:
+            wRR = np.array(wRR)
+            rr_i = (2*(wRR[1:]-wRR[:-1])) /  (wRR[1:]+wRR[:-1])
+            return_map = np.vstack([rr_i[:-1], rr_i[1:]]) # (rr[i], rr[i+1])
+            center = np.mean(return_map[:, rr_i[:-1]<=0.2], 1) # center of map with all |rr[i]| < 20%
+            distances = euclidean(return_map, center)
+            rrHRV = np.median(distances)
         feat.append(rrHRV)
 
-    return rrHRV
+    return np.array(feat)
 
 
 def dummy(RR_windows, **kwargs):

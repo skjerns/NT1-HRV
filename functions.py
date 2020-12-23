@@ -39,23 +39,34 @@ def resample(raw, o_sfreq, t_sfreq):
     return new_raw.astype(raw.dtype, copy=False)
 
 
-def interpolate_nans(padata, pkind='linear'):
+def interpolate_nans(data, pkind='linear'):
     """
     Interpolates data to fill nan values
+    2D-data will be treated as rows of 1D-data
     
     Parameters:
-        padata : nd array 
+        data : nd array 
             source data with np.NaN values
         
     Returns:
         nd array 
             resulting data with interpolated values instead of nans
     """
-    aindexes = np.arange(padata.shape[0])
-    agood_indexes, = np.where(np.isfinite(padata))
-    f = interp1d(agood_indexes, padata[agood_indexes], bounds_error=False,
-                 copy=False, fill_value="extrapolate", kind=pkind)
-    return f(aindexes)
+    assert data.ndim<3
+    data = np.atleast_2d(data)
+    rows_interpolated = []
+    for row in data:
+        aindexes = np.arange(row.shape[0])
+        agood_indeces, = np.where(np.isfinite(row))
+        mean = np.nanmean(row)
+        if np.all(np.isnan(row)):
+            row[:]=0
+        else:
+            f = interp1d(agood_indeces, row[agood_indeces], bounds_error=False,
+                     copy=False, fill_value=mean, kind=pkind)
+        rows_interpolated.append(f(aindexes))
+    interpolated = np.array(rows_interpolated)
+    return interpolated
 
 
 def statistical_test(values1, values2):

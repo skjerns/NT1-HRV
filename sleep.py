@@ -201,7 +201,7 @@ class SleepSet():
         
     def get_feats(self, name):
         feats = [p.get_feat(name) for p in self]
-        return np.hstack(feats)
+        return feats
     
     def get_hypnos(self, only_sleeptime=False):
         hypnos = [p.get_hypno(only_sleeptime) for p in self]
@@ -270,13 +270,16 @@ class SleepSet():
         n_ecg_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_hz_cnt])
 
         # get sampling frequency of thorax
-        thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
-        thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control')]
-        thorax_hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
-        thorax_hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
-        n_thorax_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_nt1])
-        n_thorax_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_cnt])
-
+        try:
+            thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
+            thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control')]
+            thorax_hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
+            thorax_hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
+            n_thorax_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_nt1])
+            n_thorax_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_cnt])
+        except:
+            n_thorax_nt1 = -1
+            n_thorax_cnt = -1
         print()
         t = PrettyTable(['Name', 'NT1', 'Control', 'Comment'])
         t.align['Name'] = 'l'
@@ -793,7 +796,8 @@ class Patient(Unisens):
         ECGPlotter(data, sfreq, markers=markers, verbose=False, **default_kwargs)
 
     @error_handle
-    def spectogram(self, channels='eeg', hypnogram=True, axs=None):
+    def spectogram(self, channels='eeg', hypnogram=True, axs=None, saveas=None,
+                   **kwargs):
         with plt.style.context('default'):
             hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
             if isinstance(channels, str): channels = [channels]
@@ -807,36 +811,22 @@ class Patient(Unisens):
                                         gridspec_kw={'height_ratios':h_ratio}, 
                                         squeeze=False)
             axs = axs.flatten()
-            file = ospath.join(self._folder, '/plots/', f'plot_{"_".join(channels)}.png')
-            
+
             for i, channel in enumerate(channels):
+                ax = axs[i]
                 if channel in self:
                     entry =  self[channel]
                     signal = entry.get_data().squeeze()
-                    if entry.id.endswith('pkl'):
-                        sfreq = entry.sampleRate
-                        axs[i].specgram(signal, Fs=sfreq)
-                        # axs[i].set_ylim(0,1)
-
-                    elif entry.id.endswith('bin'):
-                        signal = signal[0]
-                        sfreq = entry.sampleRate
-                        sleep_utils.specgram_multitaper(signal, int(sfreq), ax=axs[i])
-                        
-                    elif entry.id.endswith('csv'):
-                        sfreq = entry.samplingRate
-                        signal = list(zip(*signal))
-                        axs[i].plot(signal[0], signal[1])
+                    if signal.ndim>1: signal = signal[0]
+                    sfreq = int(entry.sampleRate)
+                    if sfreq < 10:
+                        spec, freqs, _, _ = ax.specgram(signal, Fs=sfreq)
                     else:
-                        raise ValueError(f'Entry {channel} not found')
+                        sleep_utils.specgram_multitaper(signal, sfreq=sfreq, ax=ax, **kwargs)
                 else:
-                    signal = self.get_feat(channel)
-                    smoothed = gaussian_filter1d(signal, sigma=3.5)
-                    sfreq = '1/30'
-                    axs[i].plot(np.arange(len(signal)), signal, linewidth=0.7, alpha=0.6)
-                    axs[i].plot(np.arange(len(signal)), smoothed, c='b')
-                    axs[i].set_xlim([0,len(signal)])
-                axs[i].set_title(channel)
+                    raise ValueError(f'Entry {channel} not found')
+
+                ax.set_title(channel)
                 
             for ax in axs[:-1]:
                 ax.tick_params(axis='x', which='both', bottom=False,     
@@ -857,8 +847,12 @@ class Patient(Unisens):
             plt.pause(0.01)
             plt.tight_layout()
             plt.pause(0.01)
+            file = ospath.join(self._folder, '/plots/', f'plot_{"_".join(channels)}.png')
             os.makedirs(os.path.dirname(file), exist_ok=True)
             plt.savefig(file)
-            
+            if saveas:
+                os.makedirs(os.path.dirname(saveas), exist_ok=True)
+                plt.savefig(saveas, quality=80)
+
 
         return file

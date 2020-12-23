@@ -115,7 +115,7 @@ stimer.start()
 ss = SleepSet(files, readonly=True)
 stimer.stop()
 # ss = ss.filter(lambda x: 'body' in x) # only take patients with body position sensors
-ss = ss.filter(lambda x: x.drug_hrv==0 and x.drug_sleep==0)
+# ss = ss.filter(lambda x: x.drug_hrv==0 and x.drug_sleep==0)
 ss = ss.stratify() # only use matched participants
 p = ss[2]
 
@@ -315,7 +315,7 @@ plotting.distplot_table(table1, '2 Sleep Stage Parameters', ylabel='counts')
     
 #%% Van Meijden Figure 3: Feat Change after transition
 
-feat_names = ['mean_HR', 'LF_power', 'HF_power', 'HFrf_power', 'LF_HF', 'LF_HFrf']
+feat_names = ['mean_HR', 'LF_power', 'HF_power', 'LF_HF']
 post_transitions = {feat:{stage:{} for stage in range(6)} for feat in feat_names}
    
 for name in feat_names:

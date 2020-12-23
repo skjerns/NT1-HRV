@@ -5,6 +5,7 @@ Created on Wed Dec 18 12:46:37 2019
 @author: Simon
 """
 import os
+import ospath
 from unisens import utils
 import pandas as pd
 import numpy as np
@@ -19,6 +20,7 @@ import hashlib
 import warnings
 import inspect
 import datetime
+import json
 
 _cache = {}
 
@@ -54,21 +56,28 @@ def extract_ecg(edf_file, copy_folder):
         shead[0]['digital_max'] = signals.max()
         highlevel.write_edf(new_edf_file, signals, shead, header, digital=True)
 
-def save_results(results, ss=None, *args, **kwargs):
+
+
+def save_results(classification_report, ss=None, clf=None,
+                 subfolder=None , **kwargs):
     """
     Saves the current invocing script with results and metainformation
 
     The data will be dumped to a JSON file, with the datetime as name
 
-    :param results: A dictionary with one metric per key
+    :param classification_report: output from sklearn.classification_report
     """
+    report = classification_report # rename for shorter lines
+
     import config
-    folder = config.folder_reports
+    folder = os.path.join(config.documents, 'results')
+    if subfolder is not None:
+        folder = os.path.join(folder, subfolder)
 
     # add information about the sleepset that was used
     if ss:
         patients = ', '.join([p.code for p in ss])
-        summary = patients.summary(verbose=False)
+        summary = ss.summary(verbose=False)
     else:
         patients = 'N/A'
         summary = 'N/A'
@@ -92,22 +101,43 @@ def save_results(results, ss=None, *args, **kwargs):
 
     # create the filename.
     # The filename already contains the most important metric results
-    filename = ''
-    metrics = ['F1', 'precision', 'recall']
-    for kw in metrics:
-        for key in results:
-            if kw.lower() in key.lower():
-                res = np.mean(results[key])
-                filename += f'{kw[:4]} {res:.2f}, '
+    avg = report["macro avg"]
+    today = str(datetime.datetime.now()).rsplit('.',1)[0]
 
-    today = str(datetime.datetime.now()).replace(':', '.').rsplit('.',1)[0]
-    filename += f'{today}.json'
+    filename =  f'f1 {avg["f1-score"]:.2f}, '
+    filename += f'precision {avg["precision"]:.2f}, '
+    filename += f'recall {avg["recall"]:.2f}, '
+    filename += f'{str(clf)}; '
+    filename += f"{today.replace(':', '.')}.json"
 
-    obj = pd.Series({'results' : results,
+
+    obj = pd.Series({'clf': str(clf),
+                     'date': today,
+                     'report' : report,
                      'patients': patients,
                      'code': ''.join(code),
-                     'summary': summary})
+                     'summary': summary,
+                     **kwargs})
+    filename = os.path.join(folder, filename)
     obj.to_json(filename)
+
+    # now also save in the summary
+    summary_file = os.path.join(folder, '_summary.csv')
+    if not os.path.exists(summary_file):
+        line = 'Date, Class, Script, F1, Precision, Recall, '
+        line += f"{', '.join(['True-' + str(x) for x in report['True'].keys()])}, "
+        line += f"{', '.join(['False-' + str(x) for x in report['False'].keys()])}, "
+        line += "File\n"
+    else:
+        line = ''
+    with open(summary_file, 'a+') as f:
+
+        line += f"{today}, {str(clf)}, {os.path.basename(file).replace(',', '_')}, "
+        line += f"{avg['f1-score']}, {avg['precision']}, {avg['recall']}, "
+        line += f"{', '.join([str(x) for x in report['True'].values()])}, "
+        line += f"{', '.join([str(x) for x in report['False'].values()])}, "
+        line += f"{os.path.basename(filename).replace(',', '_')} "
+        f.write(line)
 
     return filename
 
@@ -117,6 +147,7 @@ def save_results(results, ss=None, *args, **kwargs):
 
 def get_mnc_info():
     # first try to return cached value
+    from xlrd import XLRDError
     try: return _cache['mnc_info']
     except: pass
 
@@ -124,7 +155,11 @@ def get_mnc_info():
     import config
     file = os.path.join(config.folder_mnc, 'cohorts_deid.xlsx')
 
-    df = pd.read_excel(file)
+    try:
+        df = pd.read_excel(file)
+    except XLRDError:
+        raise XLRDError('cant load xlsx, try installing pip install xlrd==1.2.0')
+
     mapping = {}
     for index, row in df.iterrows():
         ID = row.ID.upper().replace(' ', '_')
