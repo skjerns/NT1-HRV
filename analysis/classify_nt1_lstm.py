@@ -34,6 +34,7 @@ rn.seed(0)
 ss = SleepSet(cfg.folder_unisens)
 ss = ss.filter(lambda x: x.duration < 60*60*11) # only less than 14 hours
 ss = ss.filter(lambda x: x.group in ['control', 'nt1']) # only less than 14 hours
+ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.2)
 
 
 #%% Load data
@@ -75,4 +76,4 @@ for idx_train, idx_test in cv.split(data_x, data_y, groups=data_y):
 
 report = classification_report(y_true, y_pred, output_dict=True)
 print(classification_report(y_true, y_pred)) # once more to print
-misc.save_results(report, ss=ss, clf='LSTM')
+misc.save_results(report, name='LSTM', ss=ss, clf=model)

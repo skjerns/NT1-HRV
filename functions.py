@@ -66,7 +66,7 @@ def interpolate_nans(data, pkind='linear'):
                      copy=False, fill_value=mean, kind=pkind)
         rows_interpolated.append(f(aindexes))
     interpolated = np.array(rows_interpolated)
-    return interpolated
+    return interpolated.squeeze()
 
 
 def statistical_test(values1, values2):

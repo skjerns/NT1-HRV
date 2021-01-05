@@ -18,64 +18,80 @@ import functions
 import features
 from scipy.stats import zscore
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score, cross_validate
+from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import classification_report
 from sklearn.feature_selection import RFECV
 # from scipy.signal import convolve
+from scipy.signal import resample
 from scipy.ndimage.filters import convolve
 from scipy import fft
 flatten = lambda t: [item for sublist in t for item in sublist]
-
+np.random.seed(0)
 
 if True:
     plt.close('all')
     ss = SleepSet(cfg.folder_unisens)
-    ss = ss.filter(lambda x: x.dataset=='mnc')
     # ss = ss.stratify() # only use matched participants
+    ss = ss.filter(lambda x: x.duration < 60*60*11) # only less than 11 hours
+    ss = ss.filter(lambda x: x.group in ['control', 'nt1']) # no hypersomnia
+    ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) # remove artefacts >25%
+
     p = ss[1]
+    length = 450
 
     #%% load data
-    x_train = []
-    y_train = []
+    data_x = []
+    data_y = []
 
-    factor = 5
+    factor = 3
 
     for p in tqdm(ss, desc='Loading features'):
         feats = {}
+
         # feature per sleepstage / block
         for feat_name in cfg.mapping_feats:
         # for feat_name in [feat_name]:
             if feat_name not in features.__dict__: continue
-            data = p.get_feat(feat_name, only_sleeptime=True, wsize=300, step=30, offset=True, cache=False)
+            data = p.get_feat(feat_name, only_sleeptime=True, wsize=300, step=30)
             data = functions.interpolate_nans(data)
-            data = data[:900]
-            feat = fft.fft(data)[:50]
-            # real = zscore(convolve(feat.real, np.ones(factor)/factor)[::factor])
-            imag = convolve(feat.imag, np.ones(factor)/factor)[::factor]
-            # feats[f'{feat_name}_real'] = real
-            feats[f'{feat_name}_imag'] = imag
-
-            if feat_name!='mean_HR': continue
+            data = data[:length]
+            feat = 20*np.log10(np.abs(fft.fft(data)[:50])) # freq in db
+            feat = resample(feat, len(feat)//factor, window='hamming')
+            if np.all(np.isnan(feat)):
+                feat = np.zeros_like(feat)
+            feats[feat_name] = feat
 
 
-        x_train.append(np.array([x for x in feats.values()]).ravel())
-        y_train.append(p.group=='nt1')
+        data_x.append(np.array([x for x in feats.values()]).ravel())
+        data_y.append(p.group=='nt1')
 
 
-    x_train = np.array(x_train)
-    y_train = np.array(y_train)
+    data_x = np.array(data_x)
+    data_y = np.array(data_y)
     feature_names = list(feats)
 
     #%% train
     clf = RandomForestClassifier(1000)
-    results = cross_validate(clf, x_train, y_train, cv=10, scoring=
-                       ['recall', 'precision', 'accuracy', 'f1'], n_jobs=16, verbose=100)
-    
-    print(''.join([f'{key}: {np.mean(values):.3f}\n' for key, values in results.items()]))
-    save_results(results=results, ss=ss)
+    cv = StratifiedKFold(shuffle=True)
+    y_pred = []
+    y_true = []
+    for idx_train, idx_test in cv.split(data_x, data_y, groups=data_y):
+        train_x = data_x[idx_train]
+        train_y = data_y[idx_train]
+        test_x = data_x[idx_test]
+        test_y = data_y[idx_test]
+        clf.fit(train_x, train_y)
+        pred = clf.predict(test_x)
+        y_pred.extend(pred)
+        y_true.extend(test_y)
+
+    report = classification_report(y_true, y_pred, output_dict=True)
+    print(classification_report(y_true, y_pred))  # once more for printing
+    name = 'RFC-feat-fft'
+    save_results(report, name, ss=ss, clf=clf)
 
     #%% feature importance analysis
-    clf.fit(x_train, y_train)
+    clf.fit(data_x, data_y)
     
     importances = clf.feature_importances_
     indices = np.argsort(importances)[::-1]

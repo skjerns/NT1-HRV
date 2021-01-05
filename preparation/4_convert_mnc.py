@@ -122,6 +122,8 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
     u.label = attribs['Label']
     u.cohort = attribs['Cohort']
     u.use_offset = 0
+    u.gender = 'unknown'
+    u.match = None
 
     diagnosis = attribs['Diagnosis']
     if 'CONTROL' in diagnosis:

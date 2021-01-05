@@ -58,7 +58,7 @@ def extract_ecg(edf_file, copy_folder):
 
 
 
-def save_results(classification_report, ss=None, clf=None,
+def save_results(classification_report, name, ss=None, clf=None,
                  subfolder=None , **kwargs):
     """
     Saves the current invocing script with results and metainformation
@@ -69,7 +69,9 @@ def save_results(classification_report, ss=None, clf=None,
     """
     report = classification_report # rename for shorter lines
 
+
     import config
+
     folder = os.path.join(config.documents, 'results')
     if subfolder is not None:
         folder = os.path.join(folder, subfolder)
@@ -77,7 +79,7 @@ def save_results(classification_report, ss=None, clf=None,
     # add information about the sleepset that was used
     if ss:
         patients = ', '.join([p.code for p in ss])
-        summary = ss.summary(verbose=False)
+        summary = str(ss.summary(verbose=False))
     else:
         patients = 'N/A'
         summary = 'N/A'
@@ -91,7 +93,7 @@ def save_results(classification_report, ss=None, clf=None,
         _cache['last_saved_file'] = file
     except:
         warnings.warn('Can\'t get source of Python console commands')
-        file = _cache.get('last_saved_file', None)
+        file = _cache.get('last_saved_file', 'unknown')
         code = '## Code not found. trying to saving the current source ' + \
                '## state of last saved python file: {file}'
         if file:
@@ -104,14 +106,15 @@ def save_results(classification_report, ss=None, clf=None,
     avg = report["macro avg"]
     today = str(datetime.datetime.now()).rsplit('.',1)[0]
 
-    filename =  f'f1 {avg["f1-score"]:.2f}, '
-    filename += f'precision {avg["precision"]:.2f}, '
-    filename += f'recall {avg["recall"]:.2f}, '
-    filename += f'{str(clf)}; '
+    filename =  f'f1 {avg["f1-score"]:.2f} - '
+    filename += f'precision {avg["precision"]:.2f} - '
+    filename += f'recall {avg["recall"]:.2f} - '
+    filename += f'{name} - '
     filename += f"{today.replace(':', '.')}.json"
 
 
-    obj = pd.Series({'clf': str(clf),
+    obj = pd.Series({'name':name,
+                     'clf': str(clf),
                      'date': today,
                      'report' : report,
                      'patients': patients,
@@ -123,20 +126,24 @@ def save_results(classification_report, ss=None, clf=None,
 
     # now also save in the summary
     summary_file = os.path.join(folder, '_summary.csv')
+    # check if we need to write a header file
     if not os.path.exists(summary_file):
-        line = 'Date, Class, Script, F1, Precision, Recall, '
+        line = 'sep=,\n' # tell Excel what we are using
+        line += 'Date, Name, Script, F1, Precision, Recall, '
         line += f"{', '.join(['True-' + str(x) for x in report['True'].keys()])}, "
         line += f"{', '.join(['False-' + str(x) for x in report['False'].keys()])}, "
-        line += "File\n"
+        line += "JSON-file\n"
     else:
         line = ''
-    with open(summary_file, 'a+') as f:
 
-        line += f"{today}, {str(clf)}, {os.path.basename(file).replace(',', '_')}, "
+    with open(summary_file, 'a+') as f:
+        jsonname = os.path.basename(filename).replace(',', '_')
+        scriptname = os.path.basename(file).replace(',', '_')
+        line += f"{today}, {name}, {scriptname}, "
         line += f"{avg['f1-score']}, {avg['precision']}, {avg['recall']}, "
         line += f"{', '.join([str(x) for x in report['True'].values()])}, "
         line += f"{', '.join([str(x) for x in report['False'].values()])}, "
-        line += f"{os.path.basename(filename).replace(',', '_')} "
+        line += f"{jsonname} "
         f.write(line)
 
     return filename

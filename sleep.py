@@ -147,7 +147,7 @@ class SleepSet():
         """return the number of patients in this set"""
         return len(self.patients)
     
-    def filter(self, function):
+    def filter(self, function, verbose=True):
         p_true = []
         for p in self.patients:
             try: 
@@ -155,7 +155,8 @@ class SleepSet():
                 if is_true: p_true.append(p)
             except Exception as e:
                 code = p.attrib.get('code', 'unknown')
-                print(f'Can\'t filter {code}: {e}')
+                if verbose:
+                    print(f'Can\'t filter {code}: {e}')
             
         return SleepSet(p_true)
 
@@ -243,8 +244,8 @@ class SleepSet():
 
 
         # a meta function to filter both groups in one call
-        filter_both = lambda ss, func: (len(ss.filter(lambda x: func(x) and x.group=='nt1')), \
-                                       len(ss.filter(lambda x: func(x) and x.group=='control')))
+        filter_both = lambda ss, func: (len(ss.filter(lambda x: func(x) and x.group=='nt1', verbose=False)), \
+                                       len(ss.filter(lambda x: func(x) and x.group=='control', verbose=False)))
 
 
         n_all = len(self)
@@ -262,8 +263,8 @@ class SleepSet():
         n_hypno = filter_both(self,lambda x: len(x.get_hypno())>0)     
 
         # get sampling frequency of ecg
-        ecg_nt1 = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
-        ecg_cnt = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='control')]
+        ecg_nt1 = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='nt1', verbose=False)]
+        ecg_cnt = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='control', verbose=False)]
         ecg_hz_nt1 = list(zip(*[list(y) for y in np.unique(ecg_nt1, return_counts=True)]))
         ecg_hz_cnt = list(zip(*[list(y) for y in np.unique(ecg_cnt, return_counts=True)]))
         n_ecg_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_hz_nt1])
@@ -271,8 +272,8 @@ class SleepSet():
 
         # get sampling frequency of thorax
         try:
-            thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1')]
-            thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control')]
+            thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1', verbose=False)]
+            thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control', verbose=False)]
             thorax_hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
             thorax_hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
             n_thorax_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_nt1])
