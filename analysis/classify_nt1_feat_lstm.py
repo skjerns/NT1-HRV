@@ -19,6 +19,7 @@ from keras.layers.embeddings import Embedding
 from keras.preprocessing import sequence
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import f1_score, classification_report
+from scipy.signal import resample
 from sklearn.utils import shuffle
 from scipy.stats import zscore
 from functions import interpolate_nans
@@ -34,18 +35,21 @@ rn.seed(0)
 ss = SleepSet(cfg.folder_unisens)
 ss = ss.filter(lambda x: x.duration < 60*60*11) # only less than 14 hours
 ss = ss.filter(lambda x: x.group in ['control', 'nt1']) # only less than 14 hours
-ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.2)
+ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) #only take patients with artefact percentage <25%
 
 
 #%% Load data
+length = 2 * 180 # first 3 hours
+downsample = 3 # downsample factor
 
-
-feat_names = ['mean_HR', 'rrHRV', 'SDNN', 'RMSSD', 'RR_range', 'SDSD', 'LF_HF','SD2_SD1' ]
+feat_names = ['mean_HR', 'rrHRV', 'SDNN', 'RMSSD', 'RR_range', 'SDSD', 'LF_HF',
+              'SD2_SD1', 'SampEn', 'pNN50', 'PetrosianFract']
 feats = []
 for name in tqdm(feat_names, desc='Loading features'):
-    feat = np.array([p.get_feat(name, only_sleeptime=True, step=150)[:60] for p in ss])
+    feat = np.array([p.get_feat(name, only_sleeptime=True, wsize=300, step=30)[:length] for p in ss])
     feat = interpolate_nans(feat)
-    feat = zscore(feat)
+    feat = resample(feat, feat.shape[-1]//downsample, axis=1, window='hamming')
+    feat = interpolate_nans(zscore(feat, axis=1))
     feats.append(feat)
 
 data_x = np.stack(feats, axis=2)
@@ -76,4 +80,4 @@ for idx_train, idx_test in cv.split(data_x, data_y, groups=data_y):
 
 report = classification_report(y_true, y_pred, output_dict=True)
 print(classification_report(y_true, y_pred)) # once more to print
-misc.save_results(report, name='LSTM', ss=ss, clf=model)
+misc.save_results(report, name='LSTM-feat', ss=ss, clf=model.summary())

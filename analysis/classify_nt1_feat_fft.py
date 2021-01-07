@@ -71,7 +71,7 @@ if True:
     feature_names = list(feats)
 
     #%% train
-    clf = RandomForestClassifier(1000)
+    clf = RandomForestClassifier(10)
     cv = StratifiedKFold(shuffle=True)
     y_pred = []
     y_true = []
@@ -89,7 +89,7 @@ if True:
     print(classification_report(y_true, y_pred))  # once more for printing
     name = 'RFC-feat-fft'
     save_results(report, name, ss=ss, clf=clf)
-
+    stop
     #%% feature importance analysis
     clf.fit(data_x, data_y)
     
