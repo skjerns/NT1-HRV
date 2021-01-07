@@ -19,11 +19,8 @@ import ospath
 import sleep_utils
 import features
 import misc
-from datetime import datetime
 from tqdm import tqdm
 from joblib import Memory
-import stimer
-import subprocess
 
 # We use memory to massively speed up these computations
 memory = Memory(cfg.folder_cache, verbose=0)

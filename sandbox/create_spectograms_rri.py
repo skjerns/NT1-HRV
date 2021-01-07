@@ -9,6 +9,7 @@ all our record files.
 """
 from sleep import SleepSet
 import sleep_utils
+import numpy as np
 import ospath
 import config as cfg
 import matplotlib.pyplot as plt
@@ -17,10 +18,13 @@ from multiprocessing import Process, Queue
 
 if __name__ == '__main__':  
     ss = SleepSet(cfg.folder_unisens)
-    for p in tqdm(ss[600:]):
-        dataset = p.get_attrib('dataset', '')
-        saveas = ospath.join(cfg.documents, 'plots', p.group, dataset, p.code + '.jpg')
+    ss = ss.filter(lambda x: x.duration < 60*60*11) # only less than 14 hours
+    ss = ss.filter(lambda x: x.group in ['control', 'nt1']) # only less than 14 hours
+    ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) #only take patients with artefact percentage <25%
+
+    for p in tqdm(ss[250:]):
+        dataset = p.get_attrib('dataset', 'none')
+        saveas = ospath.join(cfg.documents, 'plots2', p.group, dataset, p.code + '.jpg')
         if ospath.exists(saveas): continue
-        p.spectogram(channels = ['ecg','RRi'], ufreq=2)
-        # plt.close('all')
-        break
+        p.spectogram(channels = ['ecg', 'RRi'], ufreq=2)
+        plt.close('all')

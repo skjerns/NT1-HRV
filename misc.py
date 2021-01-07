@@ -23,6 +23,14 @@ import datetime
 import json
 
 _cache = {}
+try:
+    stack = inspect.stack()[1:]
+    for frame in stack:
+        if '.py' in frame.filename:
+            _cache['last_saved_file'] = frame.filename
+            break
+except:
+    pass
 
 def extract_ecg(edf_file, copy_folder):
     filename = os.path.basename(edf_file)
@@ -96,7 +104,7 @@ def save_results(classification_report, name, ss=None, clf=None,
         file = _cache.get('last_saved_file', 'unknown')
         code = '## Code not found. trying to saving the current source ' + \
                '## state of last saved python file: {file}'
-        if file:
+        if file and file != 'unknown':
             with open(file, 'r') as f:
                 code = f.read()
 
@@ -143,7 +151,7 @@ def save_results(classification_report, name, ss=None, clf=None,
         line += f"{avg['f1-score']}, {avg['precision']}, {avg['recall']}, "
         line += f"{', '.join([str(x) for x in report['True'].values()])}, "
         line += f"{', '.join([str(x) for x in report['False'].values()])}, "
-        line += f"{jsonname} "
+        line += f"{jsonname} \n"
         f.write(line)
 
     return filename
