@@ -129,6 +129,8 @@ def save_results(classification_report, name, ss=None, clf=None,
                      'code': ''.join(code),
                      'summary': summary,
                      **kwargs})
+
+    input('Done. Press <enter> to save results.\n')
     filename = os.path.join(folder, filename)
     obj.to_json(filename)
 

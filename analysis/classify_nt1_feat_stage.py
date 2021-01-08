@@ -35,7 +35,7 @@ if True:
     ss = ss.filter(lambda x: x.group in ['control', 'nt1'])
     ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25)
     p = ss[1]
-    length = 450
+    length = 2 * 60 * 4 # first four hours
 
     # %% load data
     stages = np.arange(5)

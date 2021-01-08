@@ -35,8 +35,8 @@ if True:
     p = ss[1]
 
     # %% load data
-    length = 2 * 420 # take so many epochs, ~3h
-    block_length = 2 * 60 # 60 minute blocks
+    length = 2 * 60 * 4 # first four hours
+    block_length = 2 * 15 # 60 minute blocks
     blocks = [[x, x+block_length] for x in np.arange(0, length, block_length)]
 
     data_x = []
@@ -102,5 +102,5 @@ if True:
 
     report = classification_report(y_true, y_pred, output_dict=True)
     print(classification_report(y_true, y_pred))  # once more for printing
-    name = 'RFC-feat-blocks'
+    name = f'RFC-feat-blocks-{block_length}'
     misc.save_results(report, name, ss=ss, clf=clf)

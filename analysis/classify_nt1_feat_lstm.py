@@ -7,12 +7,14 @@ A tryout to use LSTMs to classify NT1 from features
 @author: Simon Kern
 """
 import os
+import matplotlib.pyplot as plt
 import random as rn
 import config as cfg
-from sleep import SleepSet
 import numpy as np
+import pandas as pd
 import tensorflow as tf
-from keras.datasets import imdb
+import seaborn as sns
+from sleep import SleepSet
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, LSTM
 from keras.layers.embeddings import Embedding
@@ -39,11 +41,12 @@ ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) #on
 
 
 #%% Load data
-length = 2 * 180 # first 3 hours
-downsample = 3 # downsample factor
+length = 2 * 60 * 3 # first 3 hours
+downsample = 2 # downsample factor
 
-feat_names = ['mean_HR', 'rrHRV', 'SDNN', 'RMSSD', 'RR_range', 'SDSD', 'LF_HF',
-              'SD2_SD1', 'SampEn', 'pNN50', 'PetrosianFract']
+feat_names = ['mean_HR', 'rrHRV', 'SDNN', 'RMSSD', 'RR_range', 'SDSD','LF_power',
+              'HF_power',  'LF_HF', 'SD2_SD1', 'SD1', 'SD2','SampEn',
+              'pNN50', 'PetrosianFract', 'SDSD']
 feats = []
 for name in tqdm(feat_names, desc='Loading features'):
     feat = np.array([p.get_feat(name, only_sleeptime=True, wsize=300, step=30)[:length] for p in ss])
@@ -55,28 +58,51 @@ for name in tqdm(feat_names, desc='Loading features'):
 data_x = np.stack(feats, axis=2)
 data_y = np.array([p.group=='nt1' for p in ss])
 
+#%%
+def get_lstm(n_layers, n_neurons, dropout=None):
+    model = Sequential()
+    for i in range(n_layers):
+        model.add(LSTM(10, return_sequences= i!=n_layers-1))
+        if dropout: model.add(Dropout(dropout))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['Precision', 'Recall'])
+    return model
+
 #%% create the model
 cv = StratifiedKFold(shuffle=True)
 y_pred = []
 y_true = []
+hists = []
+
 for idx_train, idx_test in cv.split(data_x, data_y, groups=data_y):
     train_x = data_x[idx_train]
     train_y = data_y[idx_train]
     test_x = data_x[idx_test]
     test_y = data_y[idx_test]
 
-    model = Sequential()
-    model.add(LSTM(20, return_sequences=True))
-    model.add(Dropout(0.2))
-    model.add(LSTM(20))
-    model.add(Dropout(0.2))
-    model.add(Dense(1, activation='sigmoid'))
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['Precision', 'Recall'])
-    model.fit(train_x, train_y, validation_data=(test_x, test_y), epochs=100, batch_size=32, verbose=2)
+    model = get_lstm(n_layers=2, n_neurons=10, dropout=0.2)
+
+    model.fit(train_x, train_y, validation_data=(test_x, test_y), epochs=50, batch_size=32, verbose=2)
+
+    history = model.history.history
+    hists.append(history)
+
     pred = model.predict_classes(test_x)
     y_pred.extend(pred)
     y_true.extend(test_y)
     print(f'### F1: {f1_score(test_y, pred)}')
+
+
+keys = list(hists[0].keys())
+hists = {key:np.mean([hist[key] for hist in hists], 0) for key in keys}
+_, axs = plt.subplots(2,2)
+for i, metric in enumerate(['loss', 'precision', 'recall']):
+    ax = axs.flatten()[i]
+    ax.plot(hists[metric])
+    ax.plot(hists[f'val_{metric}'])
+    ax.legend([metric, f'val_{metric}'])
+    ax.set_title(metric)
+plt.pause(0.01)
 
 report = classification_report(y_true, y_pred, output_dict=True)
 print(classification_report(y_true, y_pred)) # once more to print

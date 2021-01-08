@@ -25,6 +25,7 @@ from sklearn.feature_selection import RFECV
 from scipy.signal import resample
 from scipy.ndimage.filters import convolve
 from scipy import fft
+from sklearn.utils import class_weight
 flatten = lambda t: [item for sublist in t for item in sublist]
 np.random.seed(0)
 
@@ -37,13 +38,13 @@ if True:
     ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) # remove artefacts >25%
 
     p = ss[1]
-    length = 450
+    length = 2 * 60 * 4 # first four hours
 
     #%% load data
     data_x = []
     data_y = []
 
-    factor = 3
+    factor = 2
 
     for p in tqdm(ss, desc='Loading features'):
         feats = {}
@@ -71,7 +72,7 @@ if True:
     feature_names = list(feats)
 
     #%% train
-    clf = RandomForestClassifier(10)
+    clf = RandomForestClassifier(1000)
     cv = StratifiedKFold(shuffle=True)
     y_pred = []
     y_true = []
@@ -87,7 +88,7 @@ if True:
 
     report = classification_report(y_true, y_pred, output_dict=True)
     print(classification_report(y_true, y_pred))  # once more for printing
-    name = 'RFC-feat-fft'
+    name = f'RFC-feat-fft-{factor}'
     save_results(report, name, ss=ss, clf=clf)
     stop
     #%% feature importance analysis

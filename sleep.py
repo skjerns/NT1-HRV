@@ -14,18 +14,14 @@ import ospath
 import os
 import re
 import time
-import stimer
 import shutil
 import sleep_utils
 import features
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 from boltons.funcutils import wraps
-from scipy.ndimage.morphology import binary_dilation
-from scipy.ndimage.filters import gaussian_filter1d
-from unisens import Unisens, CustomEntry, SignalEntry, EventEntry, ValuesEntry
+from unisens import Unisens, CustomEntry
 from unisens.utils import make_key
-from textwrap import fill
 from joblib import Parallel, delayed
 
 log.basicConfig()
@@ -209,96 +205,62 @@ class SleepSet():
         return hypnos
 
 
-    def summary_mnc(self):
-        from prettytable import PrettyTable
-
-        group_names = set([p.group for p in self])
-        cohorts = set([p.get_attrib('cohort', 'other') for p in self])
-
-        filtg = lambda group: self.filter(lambda x:x.group==group)
-
-
-        n_dataset_mnc = [len(filtg(group).filter(lambda x: x.get_attrib('dataset')=='mnc')) for group in group_names]
-        n_dataset_other = [len(filtg(group).filter(lambda x: x.get_attrib('dataset')!='mnc')) for group in group_names]
-
-        table = PrettyTable(['Name', *group_names])
-        table.add_row(['Total ', '','',''])
-
-        table.add_row(['Dataset ', '','',''])
-        table.add_row(['-----MNC', *n_dataset_mnc])
-        table.add_row(['---other', *n_dataset_other])
-
-
-
-        table.add_row(['Cohort  ', '','',''])
-        for cohort in cohorts:
-            n_cohort = [len(filtg(group).filter(lambda x: x.get_attrib('cohort', 'other')==cohort)) for group in group_names]
-            table.add_row([cohort.rjust(len('Cohort  '), '-'), *n_cohort])
-        print(table)
-
-
-
     def summary(self, verbose=True):
         """print a detailed summary of the items in this set"""
         from prettytable import PrettyTable
 
 
         # a meta function to filter both groups in one call
-        filter_both = lambda ss, func: (len(ss.filter(lambda x: func(x) and x.group=='nt1', verbose=False)), \
-                                       len(ss.filter(lambda x: func(x) and x.group=='control', verbose=False)))
-
+        group_names = set([p.group for p in self])
+        filtg = lambda func: [len(self.filter(lambda x: func(x) and x.group==group, verbose=False)) for group in group_names]
 
         n_all = len(self)
-        n_both = filter_both(self, lambda x: True)
-        n_matched = filter_both(self, lambda x: x.match!='')
-        n_male = filter_both(self, lambda x: x.gender=='male')
-        n_female = filter_both(self, lambda x: x.gender=='female')
+        n_both = filtg(lambda x: True)
+        n_matched = filtg(lambda x: x.match!='')
+        n_male = filtg(lambda x: x.gender=='male')
+        n_female = filtg(lambda x: x.gender=='female')
+        n_no_gender = filtg(lambda x: not hasattr(x, 'gender'))
 
-        n_ecg = filter_both(self,lambda x: 'ECG' in x)
-        n_eeg = filter_both(self,lambda x: 'EEG' in x)
-        # n_emg = filter_both(self,lambda x: 'EMG' in x)
-        n_lage = filter_both(self,lambda x: 'Body' in x.channels)
-        n_thorax = filter_both(self,lambda x: 'thorax' in x)
-        n_feats = filter_both(self,lambda x: 'feats' in x and len(x.feats)>0)
-        n_hypno = filter_both(self,lambda x: len(x.get_hypno())>0)     
+        n_ecg = filtg(lambda x: 'ECG' in x)
+        n_eeg = filtg(lambda x: 'EEG' in x)
+        n_feats = filtg(lambda x: 'feats' in x and len(x.feats)>0)
+        n_hypno = filtg(lambda x: len(x.get_hypno())>0)
 
         # get sampling frequency of ecg
-        ecg_nt1 = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='nt1', verbose=False)]
-        ecg_cnt = [p.ecg.sampleRate for p in self.filter(lambda x: x.group=='control', verbose=False)]
-        ecg_hz_nt1 = list(zip(*[list(y) for y in np.unique(ecg_nt1, return_counts=True)]))
-        ecg_hz_cnt = list(zip(*[list(y) for y in np.unique(ecg_cnt, return_counts=True)]))
-        n_ecg_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_hz_nt1])
-        n_ecg_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_hz_cnt])
+        ecg_hz = []
+        for group in group_names:
+            sfreqs = [p.ecg.sampleRate for p in self.filter(lambda x: x.group==group, verbose=False)]
+            ecg_counts = list(zip(*[list(y) for y in np.unique(sfreqs, return_counts=True)]))
+            n_ecg_hz = '\n'.join([f'{hz} Hz (n={n})' for hz,n in ecg_counts])
+            ecg_hz.append(n_ecg_hz)
 
-        # get sampling frequency of thorax
-        try:
-            thorax_nt1 = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='nt1', verbose=False)]
-            thorax_cnt = [p.thorax.sampleRate for p in self.filter(lambda x: x.group=='control', verbose=False)]
-            thorax_hz_nt1 = list(zip(*[list(y) for y in np.unique(thorax_nt1, return_counts=True)]))
-            thorax_hz_cnt = list(zip(*[list(y) for y in np.unique(thorax_cnt, return_counts=True)]))
-            n_thorax_nt1 = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_nt1])
-            n_thorax_cnt = '\n'.join([f'{hz} Hz (n={n})' for hz,n in thorax_hz_cnt])
-        except:
-            n_thorax_nt1 = -1
-            n_thorax_cnt = -1
-        print()
-        t = PrettyTable(['Name', 'NT1', 'Control', 'Comment'])
+        n_dataset_mnc = filtg(lambda x: x.get_attrib('dataset')=='mnc')
+        n_dataset_other =  filtg(lambda x: x.get_attrib('dataset')!='mnc')
+
+        cohorts = set([p.get_attrib('cohort', 'none') for p in self])
+
+        t = PrettyTable(['Name', *group_names, 'Comment'])
         t.align['Name'] = 'l'
         t.align['Comment'] = 'l'
-
-        t.add_row(['Male', *n_male, ''])
-        t.add_row(['Female', *n_female, ''])
         t.add_row(['Group', *n_both, f'total: {n_all}'])
-        t.add_row(['Matched', *n_matched, f'total: {n_all-sum(n_matched)}'])
+        t.add_row(['Male', *n_male, f'total: {sum(n_male)}'])
+        t.add_row(['Female', *n_female, f'total: {sum(n_female)}'])
+        t.add_row(['No gender', *n_no_gender, f'total: {sum(n_no_gender)}'])
+        t.add_row(['Matched', *n_matched, f'total: {sum(n_matched)}'])
         t.add_row(['Has ECG',*n_ecg, f'missing: {n_all-sum(n_ecg)}'])
         t.add_row(['Has EEG', *n_eeg, f'missing: {n_all-sum(n_eeg)}'])
         t.add_row(['Has feats', *n_feats, f'missing: {n_all-sum(n_feats)}'])   
         t.add_row(['Has hypno', *n_hypno, f'missing: {n_all-sum(n_hypno)}'])
-        # t.add_row(['Has EMG', *n_emg, f'missing: {n_all-sum(n_emg)}'])
-        t.add_row(['Has Body', *n_lage, f'missing: {n_all-sum(n_lage)}'])
-        t.add_row(['Has Thorax', *n_thorax, f'missing: {n_all-sum(n_thorax)}'])
-        t.add_row(['Thorax Hz', n_thorax_nt1, n_thorax_cnt, ''])
-        t.add_row(['ECG Hz', n_ecg_nt1, n_ecg_cnt, ''])
+        t.add_row(['ECG Hz', *ecg_hz, ''])
+        t.add_row(['Dataset', *['' for _ in group_names], ''])
+        t.add_row(['---mnc', *n_dataset_mnc, f'total: {sum(n_dataset_mnc)}'])
+        t.add_row(['---other', *n_dataset_other, f'total: {sum(n_dataset_other)}'])
+        t.add_row(['', *['' for _ in group_names], ''])
+        t.add_row(['Cohort  ', *['' for _ in group_names], ''])
+        for cohort in cohorts:
+            n_cohort = filtg(lambda x: x.get_attrib('cohort', 'other')==cohort)
+            t.add_row([f'---{cohort}', *n_cohort, f'total: {sum(n_cohort)}'])
+
         if verbose:
             print(t)
         return t
