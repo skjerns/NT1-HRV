@@ -349,9 +349,11 @@ class Patient(Unisens):
         return None
 
 
-    def get_RRi(self, only_sleeptime=False, offset=None, cache=True):
+    def get_RRi(self, only_sleeptime=False, offset=None, sleep_onset_offset=None,
+                cache=True):
         if offset is None:
             offset = bool(self.get_attrib('use_offset', config.default_offset))
+        if sleep_onset_offset is None: sleep_onset_offset = 0
         assert isinstance(offset, bool), 'offset must be boolean not int/float'
         if cache and hasattr(self, '_cache_RRi'):
             RRi = self._cache_RRi
@@ -363,12 +365,15 @@ class Patient(Unisens):
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            RRi = RRi[self.sleep_onset*4:self.sleep_offset*4]
+            sleep_onset = self.sleep_onset*4 + sleep_onset_offset*4
+            slee_offset = self.sleep_offset*4
+            RRi = RRi[sleep_onset:slee_offset]
         return RRi
 
 
     @error_handle
-    def get_RR(self, only_sleeptime=False, offset=None, cache=True):
+    def get_RR(self, only_sleeptime=False, offset=None, sleep_onset_offset=None,
+               cache=True):
         """
         Retrieve the RR peaks and the T_RR, which is their respective positions
         
@@ -376,6 +381,7 @@ class Patient(Unisens):
 
         returns: (T_RR, RR)
         """
+        if sleep_onset_offset is None: sleep_onset_offset = 0
         if offset is None:
             offset = self.get_attrib('use_offset', config.default_offset)
         offset = bool(offset)
@@ -440,8 +446,8 @@ class Patient(Unisens):
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            start = np.argmax(T_RR>=self.sleep_onset)
-            stop = np.argmax(T_RR>=self.sleep_offset)
+            start = np.argmax(T_RR >= self.sleep_onset + sleep_onset_offset)
+            stop = np.argmax(T_RR >= self.sleep_offset + sleep_onset_offset)
             if stop==0:
                 stop = len(T_RR)
 
@@ -456,12 +462,13 @@ class Patient(Unisens):
     @error_handle
     # @profile
     def get_artefacts(self, only_sleeptime=False, wsize=300, step=30,
-                      offset=None, cache=True):
+                      offset=None, sleep_onset_offset=None, cache=True):
         """
         As some calculations include surrounding epochs, we need to figure
         out which epochs cant be used because their neighbouring epochs
         have an artefact.
         """
+        if sleep_onset_offset is None: sleep_onset_offset = 0
         if offset is None:
             offset = bool(self.get_attrib('use_offset', config.default_offset))
         assert wsize in [30, 300], 'Currently only 30 and 300 are allowed as artefact window sizes, we didnt define other cases yet.'
@@ -513,13 +520,17 @@ class Patient(Unisens):
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            art = art[self.sleep_onset//step:self.sleep_offset//step]
+            sleep_onset = self.sleep_onset//step + sleep_onset_offset//step
+            sleep_offset =  self.sleep_offset//step
+            art = art[sleep_onset:sleep_offset]
         return art
     
     @error_handle
     # @profile
-    def get_hypno(self, only_sleeptime=False, cache=True):
-        
+    def get_hypno(self, only_sleeptime=False, sleep_onset_offset=None,
+                  cache=True):
+        if sleep_onset_offset is None: sleep_onset_offset = 0
+
         if cache and hasattr(self, '_cache_hypno'):
             hypno = self._cache_hypno
         else:
@@ -538,11 +549,16 @@ class Patient(Unisens):
         self.sleep_onset = np.argmax(np.logical_and(hypno>0 , hypno<5))*30
         self.sleep_offset = len(hypno)*30-np.argmax(np.logical_and(hypno>0 , hypno<5)[::-1])*30
         if only_sleeptime:
-            hypno = hypno[self.sleep_onset//30:self.sleep_offset//30]
+            sleep_onset = self.sleep_onset//30 + sleep_onset_offset//30
+            sleep_offset =  self.sleep_offset//30
+            hypno = hypno[sleep_onset:sleep_offset]
         return hypno
     
     @error_handle
-    def get_ecg(self, only_sleeptime=False, offset=None):
+    def get_ecg(self, only_sleeptime=False, offset=None,
+                sleep_onset_offset=None):
+        if sleep_onset_offset is None: sleep_onset_offset = 0
+
         if offset is None:
             offset = bool(self.get_attrib('use_offset', config.default_offset))
         data = self.get_signal('ECG', offset=offset)
@@ -550,13 +566,15 @@ class Patient(Unisens):
         if only_sleeptime:
             sfreq = int(self.ecg.sampleRate)
             if not hasattr(self, 'sleep_onset'): self.get_hypno()
-            data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
+            sleep_onset = self.sleep_onset//sfreq + sleep_onset_offset//sfreq
+            sleep_offset =  self.sleep_offset//sfreq
+            data = data[sleep_onset:sleep_offset]
         return data
 
 
     @error_handle
     def get_signal(self, name='eeg', stage=None, only_sleeptime=False,
-                   offset=None):
+                   offset=None, sleep_onset_offset=None):
         """
         get values of a SignalEntry
         
@@ -565,8 +583,12 @@ class Patient(Unisens):
         :param only_sleeptime: only get values after first sleep until last sleep epoch 
         :param offset: only return from full epoch (see drive->preprocessing->offset of hypnogram)
         """
+        if sleep_onset_offset is None: sleep_onset_offset = 0
+
         if offset is None:
             offset = bool(self.get_attrib('use_offset', config.default_offset))
+        if sleep_onset_offset is None:
+            sleep_onset_offset = 0
         data = self[f'{name}.bin'].get_data().squeeze()
         sfreq = int(self[name].sampleRate)
 
@@ -584,8 +606,10 @@ class Patient(Unisens):
         data = data[:sfreq*n_epochs*30]
 
         if only_sleeptime:
-            data = data[self.sleep_onset*sfreq:self.sleep_offset*sfreq]
-            
+            sleep_onset = self.sleep_onset//sfreq + sleep_onset_offset//sfreq
+            sleep_offset =  self.sleep_offset//sfreq
+            data = data[sleep_onset:sleep_offset]
+
         if stage is not None: 
             hypno = self.get_hypno(only_sleeptime=only_sleeptime)
             mask = np.repeat(hypno, sfreq*30)==stage
@@ -613,7 +637,8 @@ class Patient(Unisens):
     @error_handle
     # @profile
     def get_feat(self, name, only_sleeptime=False, wsize=300, step=30,
-                 offset=None, cache=True, only_clean=True):
+                 offset=None, cache=True, only_clean=True,
+                 sleep_onset_offset=None):
         """
         Returns the given feature with the chosen parameters.
         
@@ -623,6 +648,8 @@ class Patient(Unisens):
         Caching: 
             Features will be kept in memory to reload them quickly.
         """
+        if sleep_onset_offset is None: sleep_onset_offset = 0
+
         if offset is None: offset = self.get_attrib('use_offset', 1)
         if step is None: step = wsize
         if isinstance(name, int):
@@ -697,7 +724,9 @@ class Patient(Unisens):
 
         if only_sleeptime:
             if not hasattr(self, 'sleep_onset'): self.get_hypno(cache=cache)
-            feat = feat[self.sleep_onset//step:self.sleep_offset//step]
+            sleep_onset = self.sleep_onset//step + sleep_onset_offset//step
+            sleep_offset =  self.sleep_offset//step
+            feat = feat[sleep_onset:sleep_offset]
         return feat
 
 

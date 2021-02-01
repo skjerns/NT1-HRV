@@ -17,10 +17,7 @@ import config as cfg
 import functions
 import features
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score, cross_validate
-from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import classification_report
-from sklearn.feature_selection import RFECV
 np.random.seed(0)
 
 def flatten(t): return [item for sublist in t for item in sublist]
@@ -103,4 +100,5 @@ if True:
     report = classification_report(y_true, y_pred, output_dict=True)
     print(classification_report(y_true, y_pred))  # once more for printing
     name = f'RFC-feat-blocks-{block_length}'
-    misc.save_results(report, name, ss=ss, clf=clf)
+    params = f'{length=}, {block_length=}, {names=}'
+    misc.save_results(report, name, params=params, ss=ss, clf=clf)

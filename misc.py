@@ -66,7 +66,7 @@ def extract_ecg(edf_file, copy_folder):
 
 
 
-def save_results(classification_report, name, ss=None, clf=None,
+def save_results(classification_report, name, params=None, ss=None, clf=None,
                  subfolder=None , **kwargs):
     """
     Saves the current invocing script with results and metainformation
@@ -139,7 +139,7 @@ def save_results(classification_report, name, ss=None, clf=None,
     # check if we need to write a header file
     if not os.path.exists(summary_file):
         line = 'sep=,\n' # tell Excel what we are using
-        line += 'Date, Name, Script, F1, Precision, Recall, '
+        line += 'Date, Name, Params, Script, F1, Precision, Recall, '
         line += f"{', '.join(['True-' + str(x) for x in report['True'].keys()])}, "
         line += f"{', '.join(['False-' + str(x) for x in report['False'].keys()])}, "
         line += "JSON-file\n"

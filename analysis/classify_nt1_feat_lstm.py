@@ -69,7 +69,7 @@ def get_lstm(n_layers, n_neurons, dropout=None):
     return model
 
 #%% create the model
-cv = StratifiedKFold(shuffle=True)
+cv = StratifiedKFold(3, shuffle=True)
 y_pred = []
 y_true = []
 hists = []
@@ -80,9 +80,9 @@ for idx_train, idx_test in cv.split(data_x, data_y, groups=data_y):
     test_x = data_x[idx_test]
     test_y = data_y[idx_test]
 
-    model = get_lstm(n_layers=2, n_neurons=10, dropout=0.2)
+    model = get_lstm(n_layers=2, n_neurons=20, dropout=0.2)
 
-    model.fit(train_x, train_y, validation_data=(test_x, test_y), epochs=50, batch_size=32, verbose=2)
+    model.fit(train_x, train_y, validation_data=(test_x, test_y), epochs=100, batch_size=32, verbose=2)
 
     history = model.history.history
     hists.append(history)
@@ -102,6 +102,7 @@ for i, metric in enumerate(['loss', 'precision', 'recall']):
     ax.plot(hists[f'val_{metric}'])
     ax.legend([metric, f'val_{metric}'])
     ax.set_title(metric)
+plt.show()
 plt.pause(0.01)
 
 report = classification_report(y_true, y_pred, output_dict=True)

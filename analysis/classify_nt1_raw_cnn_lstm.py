@@ -61,7 +61,7 @@ ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) #on
 
 #%% Load data
 min_sfreq = min([p.ecg.sampleRate for p in ss])
-length = 60 * 90 # load first 1.5 hours of recording
+length = 60 * 60 * 3 # load first 1.5 hours of recording
 blocksize = min_sfreq * 60 # 1 minute blocks
 n_blocks = length//60
 
