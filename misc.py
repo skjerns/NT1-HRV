@@ -6,6 +6,12 @@ Created on Wed Dec 18 12:46:37 2019
 """
 import os
 import ospath
+import hashlib
+import warnings
+import inspect
+import datetime
+import json
+import seaborn as sns
 from unisens import utils
 import pandas as pd
 import numpy as np
@@ -16,11 +22,10 @@ from collections import OrderedDict
 from tkinter import simpledialog
 from joblib import Memory
 from pyedflib import highlevel
-import hashlib
-import warnings
-import inspect
-import datetime
-import json
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve, auc
+import matplotlib.pyplot as plt
+
+
 
 _cache = {}
 try:
@@ -65,8 +70,39 @@ def extract_ecg(edf_file, copy_folder):
         highlevel.write_edf(new_edf_file, signals, shead, header, digital=True)
 
 
+def save_roc(filename, y_true, y_prob, title_add=''):
 
-def save_results(classification_report, name, params=None, ss=None, clf=None,
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+    for i in range(2):
+        fpr[i], tpr[i], _ = roc_curve(y_true, y_prob)
+        roc_auc[i] = auc(fpr[i], tpr[i])
+    
+    plt.figure()
+    plt.plot(fpr[1], tpr[1])
+    plt.plot([0, 1], [0, 1], color='grey', linestyle='--', alpha=0.5)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'ROC, area under curve: {roc_auc[1]:.3f}\n'+title_add)
+    plt.legend(['ROC curve'],loc="lower right")
+    plt.savefig(filename)
+
+def save_dist(filename, y_true, y_prob, title_add=''):
+    plt.figure()
+    nt1 = y_prob[y_true.astype(bool)]
+    cnt = y_prob[~y_true.astype(bool)]
+    sns.distplot(nt1, bins=25, rug=True, label='NT1')
+    sns.distplot(cnt, bins=25, rug=True, label='Controls')
+    plt.xlabel('Predicted probability for NT1')
+    plt.legend()
+    plt.title('Distribution of probabilities\n'+title_add)
+    plt.savefig(filename)
+
+
+def save_results(y_true, y_prob , name, params=None, ss=None, clf=None,
                  subfolder=None , **kwargs):
     """
     Saves the current invocing script with results and metainformation
@@ -75,8 +111,11 @@ def save_results(classification_report, name, params=None, ss=None, clf=None,
 
     :param classification_report: output from sklearn.classification_report
     """
-    report = classification_report # rename for shorter lines
-
+    y_true = np.array(y_true)
+    y_prob = np.array(y_prob)
+    y_pred = y_prob.argmax(1)
+    report = classification_report(y_true, y_pred, output_dict=True)
+    print(classification_report(y_true, y_pred))
 
     import config
 
@@ -114,16 +153,13 @@ def save_results(classification_report, name, params=None, ss=None, clf=None,
     avg = report["macro avg"]
     today = str(datetime.datetime.now()).rsplit('.',1)[0]
 
-    filename =  f'f1 {avg["f1-score"]:.2f} - '
-    filename += f'precision {avg["precision"]:.2f} - '
-    filename += f'recall {avg["recall"]:.2f} - '
-    filename += f'{name} - '
-    filename += f"{today.replace(':', '.')}.json"
-
+    filename = f"{today.replace(':', '.')} - {name}.json"
 
     obj = pd.Series({'name':name,
                      'clf': str(clf),
                      'date': today,
+                     'y_true': y_true,
+                     'y_pred': y_prob,
                      'report' : report,
                      'patients': patients,
                      'code': ''.join(code),
@@ -131,8 +167,13 @@ def save_results(classification_report, name, params=None, ss=None, clf=None,
                      **kwargs})
 
     input('Done. Press <enter> to save results.\n')
-    filename = os.path.join(folder, filename)
-    obj.to_json(filename)
+    obj.to_json(os.path.join(folder, filename))
+
+
+    save_roc(os.path.join(folder, 'roc_' + filename[:-4]), y_true, y_prob[:,1],
+             title_add = name)
+    save_dist(os.path.join(folder, 'dist_' + filename[:-4]), y_true, y_prob[:,1],
+              title_add = name)
 
     # now also save in the summary
     summary_file = os.path.join(folder, '_summary.csv')
@@ -147,7 +188,7 @@ def save_results(classification_report, name, params=None, ss=None, clf=None,
         line = ''
 
     with open(summary_file, 'a+') as f:
-        jsonname = os.path.basename(filename).replace(',', '_')
+        jsonname = filename.replace(',', '_')
         scriptname = os.path.basename(file).replace(',', '_')
         line += f"{today}, {name}, {scriptname}, "
         line += f"{avg['f1-score']}, {avg['precision']}, {avg['recall']}, "
@@ -155,6 +196,7 @@ def save_results(classification_report, name, params=None, ss=None, clf=None,
         line += f"{', '.join([str(x) for x in report['False'].values()])}, "
         line += f"{jsonname} \n"
         f.write(line)
+
 
     return filename
 
@@ -179,7 +221,7 @@ def get_mnc_info():
 
     mapping = {}
     for index, row in df.iterrows():
-        ID = row.ID.upper().replace(' ', '_')
+        ID = str(row.ID).upper().replace(' ', '_')
         if ID=='SUB001': ID = 'SUB01' # fix for difference in filename and info dict
         mapping[ID] = dict(row)
 
@@ -191,7 +233,11 @@ def get_mapping():
     import config
     """gets the mapping dictionary for codes and names"""
     csv = os.path.join(config.documents, 'mapping_all.csv')
+    csv_mnc = os.path.join(config.documents, 'mapping_mnc.csv')
+
     mappings = utils.read_csv(csv)
+    mappings_mnc = utils.read_csv(csv_mnc)
+    mappings.extend(mappings_mnc)
     mappings.extend([x[::-1] for x in mappings]) # also backwards
     return dict(mappings)
 

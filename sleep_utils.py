@@ -490,7 +490,7 @@ def change_polarity(edf_file, channels, new_file=None):
     
     
 def specgram_multitaper(data, sfreq, sperseg=30, perc_overlap=1/3,
-                        lfreq=0, ufreq=40, show_plot=True, ax=None):
+                        lfreq=0, ufreq=40, show_plot=True, title='', ax=None):
     """
     Display EEG spectogram using a multitaper from 0-30 Hz
 
@@ -544,6 +544,7 @@ def specgram_multitaper(data, sfreq, sperseg=30, perc_overlap=1/3,
         ax.set_yticklabels(np.arange(ufreq, lfreq-1, -2))
         ax.set_xlabel('Time after onset')
         ax.set_ylabel('Frequency')
+        ax.set_title(title)
         warnings.filterwarnings("ignore", message='This figure includes Axes that are not compatible')
         plt.tight_layout()
     return mesh

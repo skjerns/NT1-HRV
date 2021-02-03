@@ -671,7 +671,8 @@ class Patient(Unisens):
             feat = self.feats.__dict__[cache_name]
             
         # if not cached, but already computed, load computed version
-        elif self.feats.__dict__.get(feat_id) is not None:
+        elif self.feats.__dict__.get(feat_id) is not None and \
+            os.path.isfile(self.feats.__dict__.get(feat_id)._filename):
             log.debug(f'Loading saved {feat_name}.npy')
             feat = self.feats.__dict__[feat_id].get_data()
             
@@ -788,7 +789,7 @@ class Patient(Unisens):
         ECGPlotter(data, sfreq, markers=markers, verbose=False, **default_kwargs)
 
     @error_handle
-    def spectogram(self, channels='eeg', hypnogram=True, axs=None, saveas=None,
+    def spectogram(self, channels='eeg', hypnogram=True, fig=None, saveas=None,
                    **kwargs):
         with plt.style.context('default'):
             hypnogram = hypnogram * ('hypnogram' in self or 'hypnogram_old.csv' in self)
@@ -798,10 +799,9 @@ class Patient(Unisens):
             
             h_ratio = [*[0.75/n_chs]*n_chs,0.25] if hypnogram else [((0.75/n_chs)*n_chs)]
             
-            if axs is None:
-                fig, axs = plt.subplots(plots, 1, 
-                                        gridspec_kw={'height_ratios':h_ratio}, 
-                                        squeeze=False)
+            if fig is None:
+                fig = plt.figure()
+            axs = fig.subplots(plots, 1, gridspec_kw={'height_ratios':h_ratio}, squeeze=False)
             axs = axs.flatten()
 
             for i, channel in enumerate(channels):
@@ -831,7 +831,8 @@ class Patient(Unisens):
                 offset = self.get_attrib('use_offset', 1)
                 artefacts = self.get_artefacts(offset=offset)
                 hypno = self.get_hypno()
-                sleep_utils.plot_hypnogram(hypno, ax=axs[-1])
+                labeldict = {0: 'Wake', 4:'REM', 1:'S1', 2:'S2', 3:'SWS', 5:'Artefact'}
+                sleep_utils.plot_hypnogram(hypno, ax=axs[-1], labeldict=labeldict)
                 for i, is_art in enumerate(artefacts):
                     plt.plot([i*30,(i+1)*30],[0.2, 0.2],c='red', 
                              alpha=0.75*is_art, linewidth=1)
@@ -841,10 +842,9 @@ class Patient(Unisens):
             plt.pause(0.01)
             file = ospath.join(self._folder, '/plots/', f'plot_{"_".join(channels)}.png')
             os.makedirs(os.path.dirname(file), exist_ok=True)
-            plt.savefig(file)
+            if saveas is not False: plt.savefig(file)
             if saveas:
                 os.makedirs(os.path.dirname(saveas), exist_ok=True)
-                plt.savefig(saveas, quality=80)
+                plt.savefig(saveas)
 
-
-        return file
+        return fig, axs

@@ -98,7 +98,7 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
             print(f'cant load {filename}, broken edf {e}')
             return
     channels = header['channels']
-
+    chs_eeg = [ch for ch in channels if 'EEG' in ch.upper()]
     chs = [ch for ch in channels if 'ECG' in ch.upper()]
     if 'cs_ECG' in chs and len(chs)>1:
         chs.remove('cs_ECG')
@@ -153,6 +153,23 @@ def to_unisens(edf_file, unisens_folder, mat_folder, overwrite=False, skip_exist
         u.sampling_frequency = shead_orig[0]['sample_rate']
         SignalEntry(id='ECG.bin', parent=u).set_data(**attrib)
 
+    if (not 'eeg' in u or overwrite) and len(chs_eeg)>0:
+        # add the original ECG channel
+        sig_orig, shead_orig, _ = read_edf(edf_file, ch_names=chs_eeg[0], verbose=False, digital=True)
+        assert sig_orig.max()<=32767 and sig_orig.min()>=-32768, 'min/max exceeds int16'
+        pmin, pmax = shead_orig[0]['physical_min'], shead_orig[0]['physical_max']
+        dmin, dmax = shead_orig[0]['digital_min'], shead_orig[0]['digital_max']
+        lsb, offset = sleep_utils.minmax2lsb(dmin, dmax, pmin, pmax)
+        attrib={'data': sig_orig.astype(dtype),
+                'sampleRate': shead_orig[0]['sample_rate'],
+                'ch_names': 'EEG',
+                'lsbValue': lsb,
+                'baseline': offset,
+                'unit': 'mV',
+                'dmin': dmin,'dmax': dmax,
+                'pmin': pmin, 'pmax': pmax}
+        u.sampling_frequency = shead_orig[0]['sample_rate']
+        SignalEntry(id='EEG.bin', parent=u).set_data(**attrib)
     # %% now extract the RR intervals
 
     if not 'annotations' in u or overwrite:

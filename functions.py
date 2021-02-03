@@ -61,8 +61,8 @@ def interpolate_nans(data, pkind='linear'):
         mean = np.nanmean(row)
         if np.all(np.isnan(row)):
             row[:]=0
-        else:
-            f = interp1d(agood_indeces, row[agood_indeces], bounds_error=False,
+
+        f = interp1d(agood_indeces, row[agood_indeces], bounds_error=False,
                      copy=False, fill_value=mean, kind=pkind)
         rows_interpolated.append(f(aindexes))
     interpolated = np.array(rows_interpolated)

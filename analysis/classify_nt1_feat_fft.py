@@ -6,26 +6,20 @@ Detect NT1 using the matrix profile
 
 @author: Simon Kern
 """
-import sys, os
 import matplotlib.pyplot as plt
 import numpy as np
-from misc import save_results
+import misc
 from tqdm import tqdm
 from sleep import SleepSet
 import config as cfg
-import pandas as pd
 import functions
 import features
-from scipy.stats import zscore
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score, StratifiedKFold
-from sklearn.metrics import classification_report
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.feature_selection import RFECV
 # from scipy.signal import convolve
 from scipy.signal import resample
-from scipy.ndimage.filters import convolve
 from scipy import fft
-from sklearn.utils import class_weight
 flatten = lambda t: [item for sublist in t for item in sublist]
 np.random.seed(0)
 
@@ -39,12 +33,11 @@ if True:
 
     p = ss[1]
     length = 2 * 60 * 4 # first four hours
-
+    factor = 1
+    name = f'RFC-feat-fft-downsample{factor}'
     #%% load data
     data_x = []
     data_y = []
-
-    factor = 2
 
     for p in tqdm(ss, desc='Loading features'):
         feats = {}
@@ -72,24 +65,12 @@ if True:
     feature_names = list(feats)
 
     #%% train
-    clf = RandomForestClassifier(1000)
-    cv = StratifiedKFold(shuffle=True)
-    y_pred = []
-    y_true = []
-    for idx_train, idx_test in cv.split(data_x, data_y, groups=data_y):
-        train_x = data_x[idx_train]
-        train_y = data_y[idx_train]
-        test_x = data_x[idx_test]
-        test_y = data_y[idx_test]
-        clf.fit(train_x, train_y)
-        pred = clf.predict(test_x)
-        y_pred.extend(pred)
-        y_true.extend(test_y)
+    clf = RandomForestClassifier(2000, n_jobs=4)
+    cv = StratifiedKFold(n_splits = 20, shuffle=True)
+    
+    y_pred = cross_val_predict(clf, data_x, data_y, cv=cv, method='predict_proba', n_jobs=5, verbose=10)
 
-    report = classification_report(y_true, y_pred, output_dict=True)
-    print(classification_report(y_true, y_pred))  # once more for printing
-    name = f'RFC-feat-fft-{factor}'
-    save_results(report, name, ss=ss, clf=clf)
+    misc.save_results(data_y, y_pred, name, ss=ss, clf=clf)
     stop
     #%% feature importance analysis
     clf.fit(data_x, data_y)
