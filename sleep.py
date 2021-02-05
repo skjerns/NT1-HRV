@@ -196,8 +196,17 @@ class SleepSet():
         return new_set
     
         
-    def get_feats(self, name):
-        feats = [p.get_feat(name) for p in self]
+    def get_feats(self, name, only_sleeptime=False, wsize=300, step=30,
+                   offset=None, cache=True, only_clean=True,
+                   sleep_onset_offset=None):
+        feats = [p.get_feat(name,
+                            only_sleeptime=only_sleeptime,
+                            wsize=wsize,
+                            step=step,
+                            offset=offset,
+                            cache=cache,
+                            only_clean=only_clean,
+                            sleep_onset_offset=sleep_onset_offset) for p in self]
         return feats
     
     def get_hypnos(self, only_sleeptime=False):
@@ -314,6 +323,26 @@ class Patient(Unisens):
         if isinstance(folder, Patient): return None
         if not 'autosave' in kwargs: kwargs['autosave'] = False
         super().__init__(folder, convert_nums=True, *args, **kwargs)
+
+    @property
+    def sleep_onset(self):
+        if not hasattr(self, '_sleep_onset'):
+            self.get_hypno()
+        return self._sleep_onset
+
+    @sleep_onset.setter
+    def sleep_onset(self, value):
+        self._sleep_onset = value
+
+    @property
+    def sleep_offset(self):
+        if not hasattr(self, '_sleep_offset'):
+            self.get_hypno()
+        return self._sleep_offset
+
+    @sleep_offset.setter
+    def sleep_offset(self, value):
+        self._sleep_offset = value
 
     @error_handle
     def compute_features(self, names=None, wsize=None, step=None, offset=None,

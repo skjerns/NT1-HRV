@@ -52,7 +52,7 @@ for name in tqdm(feat_names, desc='Loading features'):
     feat = np.array([p.get_feat(name, only_sleeptime=True, wsize=300, step=30)[:length] for p in ss])
     feat = interpolate_nans(feat)
     feat = resample(feat, feat.shape[-1]//downsample, axis=1, window='hamming')
-    feat = interpolate_nans(zscore(feat, axis=1))
+    # feat = interpolate_nans(zscore(feat, axis=1))
     feats.append(feat)
 
 data_x = np.stack(feats, axis=2)

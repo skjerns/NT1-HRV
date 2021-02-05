@@ -185,6 +185,7 @@ mapping_feats = {1:  'mean_HR',
                  97: 'detrend_fluctuation', # detrended fluctuation
                  98: 'HFrf_power',          # HF power corrected by respiratory frequency
                  99: 'LF_HFrf',             # LF/HF corrected by respiratory frequency
+                 100: 'rrHRV'               # relative RR https://ieeexplore.ieee.org/document/7410984
 
                  }
 

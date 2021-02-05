@@ -29,11 +29,11 @@ if True:
     # ss = ss.stratify() # only use matched participants
     ss = ss.filter(lambda x: x.duration < 60*60*11) # only less than 11 hours
     ss = ss.filter(lambda x: x.group in ['control', 'nt1']) # no hypersomnia
-    ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True))<0.25) # remove artefacts >25%
+    ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True)[:length])<0.25) # remove artefacts >25%
 
     p = ss[1]
-    length = 2 * 60 * 4 # first four hours
-    factor = 1
+    length = int(2 * 60 * 3.5) # first four hours
+    factor = 3
     name = f'RFC-feat-fft-downsample{factor}'
     #%% load data
     data_x = []
