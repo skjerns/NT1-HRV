@@ -6,7 +6,7 @@ Detect NT1 when a scoring is available
 
 @author: Simon Kern
 """
-import sys
+import sys; sys.path.append('..')
 import os
 import misc
 import pandas as pd
@@ -14,8 +14,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
+from natsort import natsort_key
 from sleep import SleepSet
 import config as cfg
+import misc
 import functions
 import features
 from joblib.parallel import Parallel, delayed
@@ -25,7 +27,7 @@ from sklearn.model_selection import KFold, StratifiedKFold, cross_val_predict
 from sklearn.metrics import classification_report
 from sklearn.feature_selection import RFECV
 np.random.seed(0)
-
+misc.low_priority()
 def flatten(t): return [item for sublist in t for item in sublist]
 
 #%%
@@ -38,7 +40,8 @@ ss = ss.filter(lambda x: x.duration < 60*60*11)  # only less than 14 hours
 ss = ss.filter(lambda x: x.group in ['control', 'nt1'])
 ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True)[:length])<0.25)
 p = ss[1]
-name = 'RFC-feat-stages'
+
+name = f'RFC-feat-stages-n{len(ss)}'
 # %% load data
 stages = np.arange(5)
 
@@ -48,7 +51,7 @@ def extract(p):
     feats = []
     hypno = hypno[:length]
 
-    # feature per sleepstage / block
+    # feature per sleepstage
     for feat_name in cfg.mapping_feats:
         if feat_name not in features.__dict__:
             continue
@@ -72,6 +75,7 @@ def extract(p):
                 feature_names[_name] = {'stage':stage, 'type': feat_name}
 
     return feats, feature_names
+
 res = Parallel(16)(delayed(extract)(p) for p in tqdm(ss, desc='extracting features'))
 
 feature_names = res[0][1]
@@ -95,9 +99,9 @@ cv = StratifiedKFold(n_splits = 20, shuffle=True)
 
 y_pred = cross_val_predict(clf, data_x, data_y, cv=cv, method='predict_proba', n_jobs=4, verbose=10)
 
-misc.save_results(data_y, y_pred, name, ss=ss, clf=clf)
+misc.save_results(data_y, y_pred, name, ss=ss, clf=clf, subfolder=name)
 
-stop
+
 # %% feat select
 selector = RFECV(clf, cv=5, n_jobs=-1, verbose=100, step=1, scoring='f1')
 selector.fit(data_x, data_y)
@@ -107,29 +111,59 @@ print(f'These were the {selector.n_features_} features that were deemed importan
 print([feature_names[i] for i in np.nonzero(selector.support_)[0]])
 
 #%% feature importances
+stages = ['Wake', 'S1', 'S2', 'SWS', 'REM', 'Art']
+d = dict(enumerate(stages))
+
 clf = RandomForestClassifier(2000, n_jobs=-1)
 # create feature importances
 clf.fit(data_x, data_y)
 ranking = clf.feature_importances_
 
-type_importances = np.zeros(len(feature_types))
-stage_importances = np.zeros(len(stages))
-for val, name in zip(ranking, feature_names):
-    stage = feature_names[name]['stage']
-    ftype = feature_names[name]['type']
-    stage_importances[stage] += val
-    type_importances[feature_types.index(ftype)] += val
+df_importances = pd.DataFrame()
+for val, feat in zip(ranking, feature_names):
+    stage = feature_names[feat]['stage']
+    ftype = feature_names[feat]['type']
+    df_tmp = pd.DataFrame({'Feature Name': ftype,
+                           'Stage': d[stage],
+                           'Relative Importance': val}, index=[0])
+    df_importances = pd.concat([df_importances, df_tmp], ignore_index=True)
 
-df = pd.DataFrame({'Feature Name':feature_types, 'Relative Importance':type_importances}).sort_values('Relative Importance', ascending=False)
-plot = sns.barplot(data=df, y='Feature Name', x='Relative Importance', orient='h')
-plt.title('Relative feature importance over all timeframes')
-# for item in plot.get_xticklabels():
-    # item.set_rotation(-90)
+#%%
+os.makedirs(f'{cfg.documents}/results/{name}/', exist_ok=True)
+
+# plot importance across features
+order = df_importances.groupby('Feature Name').mean().sort_values(['Relative Importance'], ascending=False).index
+plt.figure(figsize=[14,10])
+sns.barplot(data=df_importances, y='Feature Name', x='Relative Importance', order=order, orient='h')
+plt.title(f'Relative feature importance over all stages\n{ss=}')
+plt.pause(0.1)
 plt.tight_layout()
-plt.figure()
-df = pd.DataFrame({'Sleep Stage':['W', 'S1', 'S2', 'SWS', 'REM'], 'Relative Importance':stage_importances})
-plot = sns.barplot(data=df, x='Sleep Stage', y='Relative Importance')
-plt.title('importance of sleep stages for prediction')
-# for item in plot.get_xticklabels():
-    # item.set_rotation(-90)
+plt.savefig(f'{cfg.documents}/results/{name}/importance_stages_across.png')
+
+# plot importance across stages
+plt.figure(figsize=[14,10])
+sns.barplot(data=df_importances, x='Stage', y='Relative Importance')
+plt.title(f'Relative importance of stages\n{ss=}')
+plt.pause(0.1)
 plt.tight_layout()
+plt.savefig(f'{cfg.documents}/results/{name}/feature_importance_stages.png')
+
+# plot importance across all
+fig, axs = plt.subplots(2, 3)
+axs = axs.flatten()
+
+for i, (stage, df_stage) in enumerate(df_importances.groupby('Stage', sort=False)):
+    ax = axs[i]
+    sns.barplot(data=df_stage, x='Feature Name', y='Relative Importance',
+                order=order, orient='v', ax=ax)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+    ax.set_title(f'Relative feature importance within Stage {i}: {stage}')
+
+misc.normalize_lims(axs[:len(df_importances.groupby('Stage'))])
+fig.suptitle(f'Feature importances within different stages\n{ss=}')
+plt.pause(0.1)
+fig.tight_layout()
+fig.savefig(f'{cfg.documents}/results/{name}/feature_importance_stages_within.png')
+
+
+#%% last but not least make a table with all results

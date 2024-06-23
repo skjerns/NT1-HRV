@@ -11,13 +11,14 @@ sys.path.append("..") # append to get access to upper level modules
 from tqdm import tqdm
 import config as cfg# here user specific configuration is saved
 import ospath
-import sleep_utils
+import sleep_utilsx
 import shutil
 import pandas as pd
 import misc
 from misc import codify
 from joblib import delayed, Parallel
 import tempfile
+from pyedflib import highlevel
 
 #######################
 # Settings for datasets
@@ -28,7 +29,7 @@ datasets = cfg.datasets   # contains a dictionary with a mapping of datasetname:
 documents = cfg.documents # contains the path to the nt1-hrv-documents folder in the dropbox
 
 #######################
-# Settings for Channel 
+# Settings for Channel
 # Renaming
 #######################
 ch_mapping = cfg.mapping_channels
@@ -41,7 +42,7 @@ def anonymize_and_streamline(old_file, target_folder):
     This function loads the edfs of a folder and
     1. removes their birthdate and patient name
     2. renames the channels to standardized channel names
-    3. saves the files in another folder with a non-identifyable 
+    3. saves the files in another folder with a non-identifyable
     4. verifies that the new files have the same content as the old
     """
     # load the two csvs with the edfs that we dont process and where the ECG is upside down
@@ -57,27 +58,27 @@ def anonymize_and_streamline(old_file, target_folder):
     old_name = ospath.splitext(ospath.basename(old_file))[0]
     # new name is the codified version without extension e.g '123_45678'
     new_name = codify(old_name)
-    
-    # use a temporary file to write and then move it, 
+
+    # use a temporary file to write and then move it,
     # this avoids half-written files that cannot be read later
     tmp_name = tempfile.TemporaryFile(prefix='anonymize').name
 
     if old_name in pre_coding_discard:
         print('EDF is marked as corrupt and will be discarded')
         return
-    
+
     # this is where the anonymized file will be stored
     new_file = ospath.join(target_folder, new_name + '.edf')
 
 
-    if ospath.exists(new_file): 
+    if ospath.exists(new_file):
         print ('New file extists already {}'.format(new_file))
 
     else:
         # anonymize
         print ('Writing {} from {}'.format(new_file, old_name))
         assert ospath.isfile(old_file), f'{old_file} does not exist'
-        signals, signal_headers, header = sleep_utils.read_edf(old_file, 
+        signals, signal_headers, header = highlevel.read_edf(old_file,
                                                                digital=True,
                                                                verbose=False)
         # remove patient info
@@ -93,25 +94,25 @@ def anonymize_and_streamline(old_file, target_folder):
             if ch in ch_mapping:
                 ch = ch_mapping[ch]
                 shead['label'] = ch
-                
+
         # Invert the ECG channel if necessary
         if old_name in to_invert:
             for i,sig in enumerate(signals):
                 label = signal_headers[i]['label'].lower()
                 if label == cfg.ecg_channel.lower():
                     signals[i] = -sig
-        
+
         # we write to tmp to prevent that corrupted files are not left
         print ('Writing tmp for {}'.format(new_file))
-        sleep_utils.write_edf(tmp_name, signals, signal_headers, header, 
+        sleep_utilsx.write_edf(tmp_name, signals, signal_headers, header,
                               digital=True, correct=True)
-        
+
         # verify that contents for both files match exactly
         print ('Verifying tmp for {}'.format(new_file))
         # embarrasing hack, as dmin/dmax dont in this files after inverting
-        if not old_name=='B0036': 
-            sleep_utils.compare_edf(old_file, tmp_name, verbose=False)
-        
+        if not old_name=='B0036':
+            highlevel.compare_edf(old_file, tmp_name, verbose=False)
+
         # now we move the tmp file to its new location.
         shutil.move(tmp_name, new_file)
 
@@ -119,9 +120,9 @@ def anonymize_and_streamline(old_file, target_folder):
     old_dir = ospath.dirname(old_file)
     pattern = old_name.replace('_m', '').replace('_w', '') # remove gender from weitere nt1 patients
     add_files = ospath.list_files(old_dir, patterns=[f'{pattern}*txt', f'{pattern}*dat', f'{pattern}*mat'])
-    for add_file in add_files: 
+    for add_file in add_files:
         # e.g. .mat or .npy etc etc
-        new_add_file = ospath.join(target_folder, 
+        new_add_file = ospath.join(target_folder,
                                    ospath.basename(add_file.replace(pattern, new_name)))
         if ospath.exists(new_add_file):continue
         # hypnograms will be copied to .hypno
@@ -140,28 +141,22 @@ def anonymize_and_streamline(old_file, target_folder):
 #%% Main
 if __name__ == '__main__':
     print('running in parallel. if you don\'t see output, start with python.exe')
-    
+
     # first get all edfs in all dataset folders
     files = [];  # cheeky workaround for not functioning list comprehension .extend
     _ = [files.extend(ospath.list_files(folder, exts='edf', subfolders=True)) for folder in datasets.values()]
-    
-    
+
+
     results = Parallel(n_jobs=4, backend='loky')(delayed(
-              anonymize_and_streamline)(file, target_folder=target_folder) for file in tqdm(files, desc='processing edfs'))
-    
+              anonymize_and_streamline)(file, target_folder=target_folder) for file in tqdm(files[::-1], desc='processing edfs'))
+
     # remove discarded files
     results = [res for res in results if not res is None]
-    
+
     # check for hash collision
     assert len(set(list(zip(*results))[1]))==len(list(zip(*results))[1]),\
          'ERROR: Hash collision! Check thoroughly.'
-    
+
     csv_file = ospath.join(documents, 'mapping_all.csv')
     df = pd.DataFrame(results)
     df.to_csv(csv_file, header=None, index=False, sep=';')
-
-        
-        
-        
-        
-    

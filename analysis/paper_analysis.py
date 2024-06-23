@@ -108,7 +108,6 @@ from itertools import permutations
 
 
 plt.close('all')
-
 stimer.start('All calculations')
 files = ospath.list_folders(cfg.folder_unisens)
 stimer.start()

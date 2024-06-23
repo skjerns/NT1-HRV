@@ -5,11 +5,11 @@ Created on Mon Mar  4 10:05:48 2019
 This modiule can be used to store machine/user-defined variables.
 
 As this file is hosted on GitHub:
-    
+
 DO NOT STORE PRIVACY SENSITIVE INFORMATION IN THIS FILE
 
 All privacy
-    
+
 @author: skjerns
 """
 import json
@@ -32,7 +32,7 @@ def get_dropbox_location():
 
     with open(str(json_path)) as f:
         j = json.load(f)
-    
+
     personal_dbox_path = Path(j['personal']['path'])
     return personal_dbox_path
 
@@ -45,9 +45,10 @@ host     = platform.node().lower()    # the name of this computer
 system   = platform.system().lower()  # linux, windows or mac.
 home = os.path.expanduser('~')
 
-dropbox = get_dropbox_location()
+dropbox = os.path.expanduser('~/Nextcloud/Projects/Archive/')
+
 if dropbox:
-    documents = ospath.join(dropbox, 'nt1-hrv-documents')
+    documents = ospath.join(dropbox, 'nt1-hrv-documents-2024')
     matching = ospath.join(documents, 'matching.csv')
     edfs_invert = ospath.join(documents, 'edfs_invert.csv')
     edfs_discard = ospath.join(documents, 'edfs_discard.csv')
@@ -56,17 +57,21 @@ if dropbox:
 
 if username == 'nd269' and host=='ess-donatra':
     USER_VAR = 'test123'
-    
+
 elif username == 'simon' and host=='desktop-simon':
     USER_VAR = 'test456'
-    
+
+elif username == 'simon' and host=='kubuntu':
+    USER_VAR = 'test456'
+elif username == 'simon' and host=='laptop-simon':
+    USER_VAR = 'test456'
 else:
     print('Username {} on host {} with {} has no configuration.\n'.format(username,host,system) + \
     'please set user specific information in config.py')
 
 
-    
-try: 
+
+try:
     sys.path.append(documents)
     from user_variables import *
 except Exception as e:
@@ -101,9 +106,9 @@ num2stage = {0:'WAKE', 1:'S1', 2:'S2', 3:'SWS', 4:'REM', 5:'Artefact'}
 
 
 # Mapping from numers to body position for somnoscreen
-mapping_body = {1: 'face down', 
-                2: 'upright', 
-                3: 'left', 
+mapping_body = {1: 'face down',
+                2: 'upright',
+                3: 'left',
                 4: 'right',
                 5: 'upside down',
                 6: 'face up'}
@@ -141,8 +146,8 @@ mapping_feats = {1:  'mean_HR',
                  42: 'PDFA',                # PDFA non-overlapping segments of 64 heart beats
                  43: 'mean_abs_diff_HR',
                  44: 'mean_abs_diff_RR',
-                 45: 'mean_abs_diff_detr_HR', 
-                 46: 'mean_abs_diff_detr_RR', 
+                 45: 'mean_abs_diff_detr_HR',
+                 46: 'mean_abs_diff_detr_RR',
                  # 47-51: RR percentiles
                  **dict(zip(range(47,52), [f'RR_{i}_perc' for i in (10,25,50,75,90)])),
                  # 52-56: HR percentiles
@@ -156,14 +161,14 @@ mapping_feats = {1:  'mean_HR',
                  69: 'ECG_4th_power',       # fouth power of ECG
                  70: 'ECG_curve_length',
                  71: 'nonlinear_energy',
-                 72: 'hjorth_mobility', 
+                 72: 'hjorth_mobility',
                  73: 'ECG_complexity',
                  74: 'ECG_peak_pow_psd',
                  75: 'ECG_peak_freq_psd',
                  76: 'ECG_peak_mean_psd',
                  77: 'ECG_peak_media_psd',
                  78: 'spectral_entropy',    # of ECG
-                 79: 'hurst_exponent', 
+                 79: 'hurst_exponent',
                  80: 'short_phase_coord',   # short phase coordination
                  81: 'long_phase_coord',     # long phase coordination
 

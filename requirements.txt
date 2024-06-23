@@ -1,0 +1,14 @@
+wfdb
+pyhrv
+hrv-analysis
+astropy==5.3.4
+scipy
+numpy
+pyunisens
+tqdm
+matplotlib
+pandas
+seaborn
+joblib
+scikit-learn
+antropy

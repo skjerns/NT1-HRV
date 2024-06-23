@@ -38,8 +38,36 @@ except:
     pass
 
 
+def low_priority():
+    """ Set the priority of the process to below-normal."""
+
+    import sys
+    try:
+        sys.getwindowsversion()
+    except AttributeError:
+        isWindows = False
+    else:
+        isWindows = True
+
+    if isWindows:
+        # Based on:
+        #   "Recipe 496767: Set Process Priority In Windows" on ActiveState
+        #   http://code.activestate.com/recipes/496767/
+        import win32api,win32process,win32con
+
+        pid = win32api.GetCurrentProcessId()
+        handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, True, pid)
+        win32process.SetPriorityClass(handle, win32process.BELOW_NORMAL_PRIORITY_CLASS)
+    else:
+        import os
+
+        os.nice(1)
+
+
+
+
 def plot_stacked_bar(data, series_labels, category_labels=None,
-                     show_values=False, value_format="{}", y_label=None, 
+                     show_values=False, value_format="{}", y_label=None,
                      colors=None, grid=True, reverse=False):
     """Plots a stacked bar chart with the data and labels provided.
 
@@ -50,7 +78,7 @@ def plot_stacked_bar(data, series_labels, category_labels=None,
                        the legend)
     category_labels -- list of category labels (these appear
                        on the x-axis)
-    show_values     -- If True then numeric value labels will 
+    show_values     -- If True then numeric value labels will
                        be shown on each bar
     value_format    -- Format string for numeric value labels
                        (default is "{}")
@@ -76,7 +104,7 @@ def plot_stacked_bar(data, series_labels, category_labels=None,
 
     for i, row_data in enumerate(data):
         color = colors[i] if colors is not None else None
-        axes.append(plt.bar(ind, row_data, bottom=cum_size, 
+        axes.append(plt.bar(ind, row_data, bottom=cum_size,
                             label=series_labels[i], color=color))
         cum_size += row_data
 
@@ -95,8 +123,8 @@ def plot_stacked_bar(data, series_labels, category_labels=None,
         for axis in axes:
             for bar in axis:
                 w, h = bar.get_width(), bar.get_height()
-                plt.text(bar.get_x() + w/2, bar.get_y() + h/2, 
-                         value_format.format(h), ha="center", 
+                plt.text(bar.get_x() + w/2, bar.get_y() + h/2,
+                         value_format.format(h), ha="center",
                          va="center")
 
 def extract_ecg(edf_file, copy_folder):
@@ -140,7 +168,7 @@ def save_roc(filename, y_true, y_prob, title_add=''):
     for i in range(2):
         fpr[i], tpr[i], _ = roc_curve(y_true, y_prob)
         roc_auc[i] = auc(fpr[i], tpr[i])
-    
+
     plt.figure()
     plt.plot(fpr[1], tpr[1])
     plt.plot([0, 1], [0, 1], color='grey', linestyle='--', alpha=0.5)
@@ -164,7 +192,7 @@ def save_dist(filename, y_true, y_prob, title_add=''):
     plt.savefig(filename)
 
 
-def save_results(y_true, y_prob , name, params=None, ss=None, clf=None,
+def save_results(y_true, y_prob, name, params=None, ss=None, clf=None,
                  subfolder=None , **kwargs):
     """
     Saves the current invocing script with results and metainformation
@@ -228,13 +256,13 @@ def save_results(y_true, y_prob , name, params=None, ss=None, clf=None,
                      'summary': summary,
                      **kwargs})
 
-    input('Done. Press <enter> to save results.\n')
+    # input('Done. Press <enter> to save results.\n')
     obj.to_json(os.path.join(folder, filename))
 
 
-    save_roc(os.path.join(folder, 'roc_' + filename[:-4]), y_true, y_prob[:,1],
+    save_roc(os.path.join(folder, filename[:-4] + '_roc.png'), y_true, y_prob[:,1],
              title_add = name)
-    save_dist(os.path.join(folder, 'dist_' + filename[:-4]), y_true, y_prob[:,1],
+    save_dist(os.path.join(folder, filename[:-4] + '_dist.png'), y_true, y_prob[:,1],
               title_add = name)
 
     # now also save in the summary
@@ -295,16 +323,16 @@ def get_mapping():
     import config
     """gets the mapping dictionary for codes and names"""
     csv = os.path.join(config.documents, 'mapping_all.csv')
-    csv_mnc = os.path.join(config.documents, 'mapping_mnc.csv')
+    # csv_mnc = os.path.join(config.documents, 'mapping_mnc.csv')
 
     mappings = utils.read_csv(csv)
-    mappings_mnc = utils.read_csv(csv_mnc)
-    mappings.extend(mappings_mnc)
+    # mappings_mnc = utils.read_csv(csv_mnc)
+    # mappings.extend(mappings_mnc)
     mappings.extend([x[::-1] for x in mappings]) # also backwards
     return dict(mappings)
 
 def get_matching():
-    import config 
+    import config
     csv = os.path.join(config.documents, 'matching.csv')
     matching = utils.read_csv(csv, convert_nums=True)
     matching = [[code1, code2] for nt1,code1,_,_,cnt,code2,_,_,diff in matching if diff<99]
@@ -319,26 +347,26 @@ def get_attribs():
     mappings = get_mapping()
     matching = get_matching()
     pre_coding_discard = [line[0] for line in read_csv(config.edfs_discard) if line[2]=='1']
-    
-    
+
+
     control = utils.read_csv(config.controls_csv)
     nt1 = utils.read_csv(config.patients_csv)
-    
+
     control = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'control', 'drug_hrv':c[3], 'drug_sleep':c[4]}] for c in control]
     nt1 = [[c[0], {'gender':c[1].lower(), 'age':int(c[2]),'group':'nt1', 'drug_hrv':c[3], 'drug_sleep':c[4]}] for c in nt1]
-    
-    
-    
+
+
+
     all_subjects = control + nt1
     all_subjects = dict([[mappings[x[0]],x[1]] for x in all_subjects if x[0] not in pre_coding_discard]) # convert to codified version
-    
+
     # reverse mapping as well
     for c in all_subjects: all_subjects[c].update({'match':matching.get(c,'')})
     return dict(all_subjects)
 
 
 
-def codify(filename): 
+def codify(filename):
     """
     given a filename, will create a equal distributed
     hashed file number back to de-identify this filename
@@ -367,7 +395,7 @@ def fig2data(fig):
     w, h = fig.canvas.get_width_height()
     buf = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8 )
     buf = buf.reshape([h, w, 3])
-    
+
     # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
     buf = np.roll(buf, 3, axis = 2 )
     return buf
@@ -377,7 +405,7 @@ def fig2data(fig):
 def choose_file(default_dir=None, exts='txt', title='Choose file'):
     """
     Open a file chooser dialoge with tkinter.
-    
+
     :param default_dir: Where to open the dir, if set to None, will start at wdir
     :param exts: A string or list of strings with extensions etc: 'txt' or ['txt','csv']
     :returns: the chosen file
@@ -401,7 +429,7 @@ def choose_file(default_dir=None, exts='txt', title='Choose file'):
 def choose_folder(default_dir=None, exts='txt', title='Choose file'):
     """
     Open a file chooser dialoge with tkinter.
-    
+
     :param default_dir: Where to open the dir, if set to None, will start at wdir
     :param exts: A string or list of strings with extensions etc: 'txt' or ['txt','csv']
     :returns: the chosen file
@@ -419,13 +447,13 @@ def choose_folder(default_dir=None, exts='txt', title='Choose file'):
         print("No folder chosen")
     else:
         return name
-    
-    
+
+
 def input_box(message='Please type your input', title='Input', dtype=str,
               initialvalue = None, **kwargs):
     """
     Opens an input box.
-    
+
     :param message: The message that is displayed at the prompt
     :param title: The title of the dialoge
     :param dtype: The dtype that is expected: [int, str, float]
@@ -433,7 +461,7 @@ def input_box(message='Please type your input', title='Input', dtype=str,
     :param kwargs: kwargs of the SimpleDialog class (eg minvalue, maxvalue)
 
     :returns: the given input of the user
-    """    
+    """
     root = Tk()
     ws = root.winfo_screenwidth() # width of the screen
     hs = root.winfo_screenheight() # height of the screen
@@ -455,31 +483,129 @@ def input_box(message='Please type your input', title='Input', dtype=str,
         dialoge = simpledialog.askfloat
     else:
         raise ValueError('Unknown dtype: {}'.format(dtype))
-        
+
     value = dialoge(title, message, initialvalue=initialvalue, parent=root,
-                    **kwargs)     
+                    **kwargs)
     root.update()
     root.destroy()
     return value
 
 
+def make_fig(
+    n_axs=30,
+    bottom_plots=2,
+    no_ticks=False,
+    suptitle="",
+    xlabel="Lag in ms",
+    ylabel="Sequenceness",
+    figsize=None,
+    despine=True,
+):
+    """
+    helper function to create a grid space with RxC rows and a
+    large row with two axis on the bottom
+
+    returns: fig, axs(size=(rows*columns)), ax_left_bottom, ax_right_bottom
+    """
+
+    COL_MULT = 10  # to accomodate also too large axis
+    # some heuristic for finding optimal rows and columns
+    for columns in [2, 4, 6, 8]:
+        rows = np.ceil(n_axs / columns).astype(int)
+        if columns >= rows:
+            break
+    assert columns * rows >= n_axs
+
+    if isinstance(bottom_plots, int):
+        bottom_plots = [1 for _ in range(bottom_plots)]
+    n_bottom = len(bottom_plots)
+    COL_MULT = 1
+    if n_bottom > 0:
+        for COL_MULT in range(1, 12):
+            if (columns * COL_MULT) % n_bottom == 0:
+                break
+        if not (columns * COL_MULT) % n_bottom == 0:
+            warnings.warn(
+                f"{columns} cols cannot be evenly divided by {bottom_plots} bottom plots"
+            )
+    fig = plt.figure(dpi=75, constrained_layout=True, figsize=figsize)
+    # assuming maximum 30 participants
+    gs = fig.add_gridspec(
+        (rows + 2 * (n_bottom > 0)), columns * COL_MULT
+    )  # two more for larger summary plots
+    axs = []
+
+    # first the individual plot axis for each participant
+    for x in range(rows):
+        for y in range(columns):
+            ax = fig.add_subplot(gs[x, y * COL_MULT : (y + 1) * COL_MULT])
+            if no_ticks:
+                ax.set_xticks([])
+                ax.set_yticks([])
+            axs.append(ax)
+
+    fig.suptitle(suptitle)
+
+    if len(bottom_plots) == 0:
+        return fig, axs
+
+    # second the two graphs with all data combined/meaned
+    axs_bottom = []
+    step = np.ceil(columns * COL_MULT // n_bottom).astype(int)
+    for b, i in enumerate(range(0, columns * COL_MULT, step)):
+        if bottom_plots[b] == 0:
+            continue  # do not draw* this plot
+        ax_bottom = fig.add_subplot(gs[rows:, i : (i + step)])
+        if xlabel:
+            ax_bottom.set_xlabel(xlabel)
+        if ylabel:
+            ax_bottom.set_ylabel(ylabel)
+        if i > 0 and no_ticks:  # remove yticks on righter plots
+            ax_bottom.set_yticks([])
+        axs_bottom.append(ax_bottom)
+    if despine:
+        sns.despine(fig)
+    return fig, axs, *axs_bottom
+
+
+def normalize_lims(axs, which='both'):
+    """for all axes in axs: set function to min/max of all axs
+
+
+    Parameters
+    ----------
+    axs : list
+        list of axes to normalize.
+    which : string, optional
+        Which axis to normalize. Can be 'x', 'y', 'xy' oder 'both'.
+
+    """
+    if which=='both':
+        which='xy'
+    for w in which:
+        ylims = [getattr(ax, f'get_{w}lim')() for ax in axs]
+        ymin = min([x[0] for x in ylims])
+        ymax = max([x[1] for x in ylims])
+        for ax in axs:
+            getattr(ax, f'set_{w}lim')([ymin, ymax])
+
 class AttrDict(OrderedDict):
     """
-    A dictionary that is ordered and can be accessed 
+    A dictionary that is ordered and can be accessed
     by both dict[elem] and by dict.elem
     """
 
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
-        
-        
-        
+
+
+
     # def __setattr__(self, item, value):
     #     return self.__setitem__( item, value)
     # def __getitem__(self, item, value):
     #     return self.__item__(item, value)
-    
+
     # def __setitem__(self, item, value):
     #     print(4444444444)
     #     allowed = ''.join([str(chr(char)) for char in range(97,123)])
@@ -498,5 +624,3 @@ class AttrDict(OrderedDict):
     #         item += '_'
     #     print(item, value)
     #     OrderedDict.__setitem__(self, item, value)
-    
-    
