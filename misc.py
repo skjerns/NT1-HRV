@@ -159,6 +159,10 @@ def extract_ecg(edf_file, copy_folder):
         shead[0]['digital_max'] = signals.max()
         highlevel.write_edf(new_edf_file, signals, shead, header, digital=True)
 
+def get_auc(y_true, y_prob):
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
+    return auc(fpr, tpr)
+
 
 def save_roc(filename, y_true, y_prob, title_add=''):
 
@@ -184,8 +188,8 @@ def save_dist(filename, y_true, y_prob, title_add=''):
     plt.figure()
     nt1 = y_prob[y_true.astype(bool)]
     cnt = y_prob[~y_true.astype(bool)]
-    sns.distplot(nt1, bins=25, rug=True, label='NT1')
-    sns.distplot(cnt, bins=25, rug=True, label='Controls')
+    sns.histplot(nt1, bins=25, kde=True, label='NT1')
+    sns.histplot(cnt, bins=25, kde=True, label='Controls')
     plt.xlabel('Predicted probability for NT1')
     plt.legend()
     plt.title('Distribution of probabilities\n'+title_add)
@@ -209,9 +213,11 @@ def save_results(y_true, y_prob, name, params=None, ss=None, clf=None,
 
     import config
 
-    folder = os.path.join(config.documents, 'results')
+    base_folder = os.path.join(config.documents, 'results')
     if subfolder is not None:
-        folder = os.path.join(folder, subfolder)
+        folder = os.path.join(base_folder, subfolder)
+    else:
+        folder = base_folder
 
     # add information about the sleepset that was used
     if ss:
@@ -266,7 +272,7 @@ def save_results(y_true, y_prob, name, params=None, ss=None, clf=None,
               title_add = name)
 
     # now also save in the summary
-    summary_file = os.path.join(folder, '_summary.csv')
+    summary_file = os.path.join(base_folder, '_summary.csv')
     # check if we need to write a header file
     if not os.path.exists(summary_file):
         line = 'sep=,\n' # tell Excel what we are using

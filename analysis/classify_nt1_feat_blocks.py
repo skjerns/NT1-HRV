@@ -26,7 +26,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, LeaveOneOut, cross_val_predict
-from misc import auc
+from misc import get_auc
 
 np.random.seed(0)
 flatten = lambda t: [item for sublist in t for item in sublist]
@@ -48,7 +48,6 @@ ss = ss.filter(lambda x: np.mean(x.get_artefacts(only_sleeptime=True)[:length])<
 p = ss[1]
 
 
-name = f'RFC-feat-blocks-{block_length}min-n{len(ss)}-no-offset'
 
 # %% load data
 data_x = []
@@ -110,7 +109,10 @@ cv = StratifiedKFold(n_splits = 20, shuffle=True)
 
 y_pred = cross_val_predict(clf, data_x, data_y, cv=cv, method='predict_proba', n_jobs=5, verbose=10)
 
+auc = get_auc(data_y, y_pred[:,1])
+name = f'auc{auc:.2f}-RFC-blocks-{block_length}min-n{len(ss)}-no-offset'
 params = f'{length=}, {block_length=}, {feature_types=}'
+os.makedirs(f'{cfg.documents}/results/{name}/', exist_ok=True)
 misc.save_results(data_y, y_pred, name, params=params, ss=ss, clf=clf, subfolder=name)
 
 #%% feature importances
@@ -132,9 +134,7 @@ for val, feat in zip(ranking, feature_names):
 
 df_importances = df_importances.sort_values(['Relative Importance'], ascending=False)
 
-
 #%%
-os.makedirs(f'{cfg.documents}/results/{name}/', exist_ok=True)
 # plot importance across features
 order = df_importances.groupby('Feature Name').mean().sort_values(['Relative Importance'], ascending=False).index
 plt.figure(figsize=[14,10])

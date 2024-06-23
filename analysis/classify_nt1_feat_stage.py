@@ -25,6 +25,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score, cross_validate
 from sklearn.model_selection import KFold, StratifiedKFold, cross_val_predict
 from sklearn.metrics import classification_report
+from misc import get_auc
 from sklearn.feature_selection import RFECV
 np.random.seed(0)
 misc.low_priority()
@@ -99,16 +100,17 @@ cv = StratifiedKFold(n_splits = 20, shuffle=True)
 
 y_pred = cross_val_predict(clf, data_x, data_y, cv=cv, method='predict_proba', n_jobs=4, verbose=10)
 
+auc = get_auc(data_y, y_pred[:,1])
+name = f'auc{auc:.2f}-RFC-stages-n{len(ss)}'
+os.makedirs(f'{cfg.documents}/results/{name}/', exist_ok=True)
 misc.save_results(data_y, y_pred, name, ss=ss, clf=clf, subfolder=name)
-
-
 # %% feat select
-selector = RFECV(clf, cv=5, n_jobs=-1, verbose=100, step=1, scoring='f1')
-selector.fit(data_x, data_y)
-selector.grid_scores_
+# selector = RFECV(clf, cv=5, n_jobs=-1, verbose=100, step=1, scoring='f1')
+# selector.fit(data_x, data_y)
+# selector.grid_scores_
 
-print(f'These were the {selector.n_features_} features that were deemed important')
-print([feature_names[i] for i in np.nonzero(selector.support_)[0]])
+# print(f'These were the {selector.n_features_} features that were deemed important')
+# print([feature_names[i] for i in np.nonzero(selector.support_)[0]])
 
 #%% feature importances
 stages = ['Wake', 'S1', 'S2', 'SWS', 'REM', 'Art']
@@ -129,7 +131,6 @@ for val, feat in zip(ranking, feature_names):
     df_importances = pd.concat([df_importances, df_tmp], ignore_index=True)
 
 #%%
-os.makedirs(f'{cfg.documents}/results/{name}/', exist_ok=True)
 
 # plot importance across features
 order = df_importances.groupby('Feature Name').mean().sort_values(['Relative Importance'], ascending=False).index
